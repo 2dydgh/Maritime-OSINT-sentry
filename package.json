@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "ais-proxy": "node backend/ais_proxy.js"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
+  }
+}

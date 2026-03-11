@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <title>OVERWATCH 4D | Strategic Dashboard</title>
+    <!-- Use version 1.114 of Cesium -->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <!-- satellite.js for real-time client-side satellite orbit propagation -->
+    <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+
+    <!-- Modern Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(16, 23, 41, 0.75);
+            --panel-border: rgba(56, 189, 248, 0.2);
+            --accent-cyan: #38bdf8;
+            --accent-red: #f43f5e;
+            --accent-green: #10b981;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+        }
+
+        #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Glassmorphism UI Base */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        /* Top Navigation Header */
+        header {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            height: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 25px;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+        }
+
+        .pulse-dot {
+            width: 10px;
+            height: 10px;
+            background-color: var(--accent-red);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-red);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(244, 63, 94, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(244, 63, 94, 0);
+            }
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 30px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .stat-value {
+            color: var(--accent-cyan);
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .stat-label {
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        /* Left Sidebar: OSINT Feed */
+        #feedPanel {
+            position: absolute;
+            top: 100px;
+            left: 20px;
+            width: 350px;
+            bottom: 180px;
+            /* Leave room for timeline and animation container */
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            transition: transform 0.3s ease;
+        }
+
+        #feedPanel h2 {
+            margin: 0 0 15px 0;
+            font-size: 1.1rem;
+            color: var(--accent-cyan);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .feed-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        /* Custom Scrollbar */
+        .feed-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .feed-list::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+        }
+
+        .feed-list::-webkit-scrollbar-thumb {
+            background: var(--accent-cyan);
+            border-radius: 3px;
+        }
+
+        .feed-card {
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 3px solid var(--accent-cyan);
+            padding: 15px;
+            margin-bottom: 12px;
+            border-radius: 0 8px 8px 0;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .feed-card:hover {
+            background: rgba(56, 189, 248, 0.1);
+            transform: translateX(5px);
+        }
+
+        .feed-card.explosion {
+            border-left-color: var(--accent-red);
+        }
+
+        .feed-card.unknown_movement {
+            border-left-color: var(--accent-green);
+        }
+
+        .feed-meta {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+        }
+
+        .feed-title {
+            font-size: 0.9rem;
+            line-height: 1.4;
+            margin: 0;
+        }
+
+        /* Loading Overlay Overlayed */
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            color: var(--accent-cyan);
+            font-weight: 600;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* Cesium UI Overrides */
+        .cesium-viewer-timelineContainer {
+            z-index: 10;
+            bottom: 25px !important;
+            left: 580px !important;
+            right: 20px !important;
+            width: auto !important;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--panel-border);
+        }
+
+        .cesium-viewer-animationContainer {
+            z-index: 10;
+            bottom: 20px !important;
+            left: 390px !important;
+        }
+
+        .cesium-widget-credits {
+            display: none !important;
+        }
+
+        /* Hide credits for cleaner UI */
+        /* Ship Filter Panel */
+        #shipFilterPanel {
+            position: absolute;
+            top: 100px;
+            right: 20px;
+            width: 220px;
+            padding: 15px;
+            z-index: 10;
+        }
+
+        #shipFilterPanel h3 {
+            margin: 0 0 12px 0;
+            font-size: 0.95rem;
+            color: var(--accent-cyan);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .filter-item label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .filter-item input[type="checkbox"] {
+            accent-color: var(--accent-cyan);
+        }
+
+        .filter-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        .color-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .color-cargo {
+            background-color: #10b981;
+        }
+
+        .color-tanker {
+            background-color: #f97316;
+        }
+
+        .color-passenger {
+            background-color: #0ea5e9;
+            /* Sky blue */
+        }
+
+        .color-fishing {
+            background-color: #eab308;
+        }
+
+        .color-military {
+            background-color: #ef4444;
+        }
+
+        .color-tug {
+            background-color: #a855f7;
+        }
+
+        .color-other {
+            background-color: #6b7280;
+        }
+
+        #shipStats {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--panel-border);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        /* Cesium 기본 팝업(InfoBox) 위치 및 디자인 덮어쓰기 */
+        .cesium-infoBox {
+            top: 100px !important;
+            right: 285px !important;
+            /* 필터 패널(220px) 너비만큼 왼쪽으로 밀기 */
+            background: var(--panel-bg) !important;
+            backdrop-filter: blur(12px) !important;
+            border: 1px solid var(--panel-border) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5) !important;
+            overflow: hidden;
+        }
+
+        /* 팝업창 상단 타이틀 바 디자인 */
+        .cesium-infoBox-title {
+            background: rgba(16, 23, 41, 0.9) !important;
+            color: #38bdf8 !important;
+            border-bottom: 1px solid var(--panel-border) !important;
+            font-family: 'Inter', sans-serif !important;
+            font-size: 0.9rem !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.05em !important;
+        }
+
+        /* 팝업창 카메라/닫기 버튼 공통 색상 */
+        .cesium-button {
+            color: var(--text-dim) !important;
+            fill: var(--text-dim) !important;
+        }
+
+        .cesium-button:hover {
+            color: #38bdf8 !important;
+            fill: #38bdf8 !important;
+        }
+
+        /* 특정 카메라 아이콘 버튼 색상 지정 */
+        .cesium-infoBox-camera {
+            color: #38bdf8 !important;
+            fill: #38bdf8 !important;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Background 3D Globe -->
+    <div id="cesiumContainer"></div>
+
+    <!-- Top Header -->
+    <header class="glass-panel">
+        <div class="header-brand">
+            <div class="pulse-dot"></div>
+            OVERWATCH 4D
+            <span style="color: var(--text-dim); font-weight: 300; font-size: 0.9rem;">| STRATEGIC OSINT
+                DASHBOARD</span>
+        </div>
+        <div class="header-stats">
+            <div class="stat-item">
+                <span class="stat-value" id="stat-events">0</span>
+                <span class="stat-label">Active Events</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="stat-assets">7</span>
+                <span class="stat-label">Tracked Assets</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="stat-time">SYS_TIME</span>
+                <span class="stat-label">UTC CLOCK</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Left Feed Panel -->
+    <div id="feedPanel" class="glass-panel">
+        <h2>
+            <span><i class="fa-solid fa-tower-broadcast" style="margin-right: 8px;"></i> LIVE FEED</span>
+            <i class="fa-solid fa-filter" style="color: var(--text-dim); cursor: pointer; font-size: 0.9rem;"></i>
+        </h2>
+        <div class="feed-list" id="eventFeed">
+            <!-- Feed cards will be injected here by JS -->
+            <div
+                style="text-align: center; color: var(--text-dim); font-style: italic; margin-top: 20px; font-size: 0.9rem;">
+                Awaiting intelligence data...
+            </div>
+        </div>
+    </div>
+
+    <div id="shipFilterPanel" class="glass-panel">
+        <h3><i class="fa-solid fa-ship"></i> SHIP FILTERS</h3>
+        <div class="filter-item">
+            <label><input type="checkbox" id="filter-cargo" checked><span class="color-dot color-cargo"></span>
+                Cargo</label>
+            <span class="filter-count" id="count-cargo">0</span>
+        </div>
+        <div class="filter-item">
+            <label><input type="checkbox" id="filter-tanker" checked><span class="color-dot color-tanker"></span>
+                Tanker</label>
+            <span class="filter-count" id="count-tanker">0</span>
+        </div>
+        <div class="filter-item">
+            <label><input type="checkbox" id="filter-passenger" checked><span class="color-dot color-passenger"></span>
+                Passenger</label>
+            <span class="filter-count" id="count-passenger">0</span>
+        </div>
+        <div class="filter-item">
+            <label><input type="checkbox" id="filter-fishing" checked><span class="color-dot color-fishing"></span>
+                Fishing</label>
+            <span class="filter-count" id="count-fishing">0</span>
+        </div>
+        <div class="filter-item">
+            <label><input type="checkbox" id="filter-military" checked><span class="color-dot color-military"></span>
+                Military</label>
+            <span class="filter-count" id="count-military">0</span>
+        </div>
+        <div class="filter-item">
+            <label><input type="checkbox" id="filter-tug" checked><span class="color-dot color-tug"></span> Tug</label>
+            <span class="filter-count" id="count-tug">0</span>
+        </div>
+        <div class="filter-item">
+            <label><input type="checkbox" id="filter-other" checked><span class="color-dot color-other"></span>
+                Other</label>
+            <span class="filter-count" id="count-other">0</span>
+        </div>
+        <!-- Weather Layers -->
+        <hr style="border: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 15px 0;">
+        <h3><i class="fa-solid fa-cloud-showers-heavy"></i> WEATHER LAYERS</h3>
+        <div class="filter-item">
+            <label><input type="checkbox" id="layer-clouds"><span class="color-dot"
+                    style="background-color: #3b82f6;"></span> Global Precipitation Radar</label>
+        </div>
+
+        <!-- Satellite Layer -->
+        <hr style="border: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 15px 0;">
+        <h3><i class="fa-solid fa-satellite"></i> SATELLITES</h3>
+        <div class="filter-item">
+            <label><input type="checkbox" id="layer-sats"><span class="color-dot"
+                    style="background-color: #a78bfa;"></span> Intel Satellites</label>
+        </div>
+        <div id="satStats"
+            style="margin-top:8px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-dim);">
+            Total: <span id="total-sats">0</span> tracked
+        </div>
+
+        <div id="shipStats">
+            <div>Total: <span id="total-ships">0</span> vessels</div>
+            <div>Updated: <span id="last-update">--:--:--</span> UTC</div>
+        </div>
+    </div>
+
+    <!-- Centered Loader -->
+    <div id="loading" class="glass-panel">
+        <i class="fa-solid fa-circle-notch fa-spin"></i> INITIALIZING SYSTEM
+    </div>
+    <script>
+        Cesium.Ion.defaultAccessToken = '';
+
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            animation: true,
+            timeline: true,
+            infoBox: true,
+            baseLayerPicker: false,
+            geocoder: false,
+            homeButton: false,
+            sceneModePicker: false,
+            navigationHelpButton: false,
+            fullscreenButton: false,
+            // 해양 지형과 수심이 강조된 해상 지도 (Esri Ocean)
+            baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+                url: 'https://services.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+                credit: '© Esri, GEBCO, NOAA, National Geographic, DeLorme, HERE, Geonames.org',
+                minimumLevel: 0,
+                maximumLevel: 13
+            }))
+        });
+
+        // ── Globe appearance: tactical dark style ─────────────────────────────
+        const scene = viewer.scene;
+        const globe = viewer.scene.globe;
+
+        // Enable real-time sun lighting (day/night terminator)
+        globe.enableLighting = true;
+
+        // Sync Cesium clock to real wall-clock time so lighting is accurate
+        const now = Cesium.JulianDate.now();
+        viewer.clock.currentTime = now;
+        viewer.clock.shouldAnimate = false; // Don't advance the simulation clock
+        // Keep updating Cesium's internal time with real wall-clock every second
+        setInterval(() => {
+            viewer.clock.currentTime = Cesium.JulianDate.now();
+        }, 1000);
+
+        // Deep space atmosphere — more dramatic blue-violet glow
+        scene.skyAtmosphere.hueShift = -0.05;      // slight blue shift
+        scene.skyAtmosphere.saturationShift = 0.3;  // more vivid
+        scene.skyAtmosphere.brightnessShift = -0.1; // slightly dimmer
+
+        // Deep black ocean for unlit areas
+        globe.baseColor = Cesium.Color.fromCssColorString('#0a0c14');
+
+        // Minimal ambient light at night to keep dark side visible
+        globe.dynamicAtmosphereLighting = true;
+        globe.dynamicAtmosphereLightingFromSun = true;
+
+        // Remove the Cesium default credit banner (keeps UI clean)
+        viewer.cesiumWidget.creditContainer.style.display = 'none';
+        // ── End globe style ───────────────────────────────────────────────────
+
+        // Default view
+        viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(53.0, 24.0, 3000000.0)
+        });
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('stat-time').textContent = now.toISOString().substring(11, 19) + " Z";
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        const SHIP_COLORS = {
+            cargo: '#10b981',      // Cesium.Color.fromCssColorString('#10b981')
+            tanker: '#f97316',
+            passenger: '#0ea5e9',  // Sky blue
+            fishing: '#eab308',
+            military: '#ef4444',
+            tug: '#a855f7',
+            other: '#6b7280'
+        };
+
+        // Helper function to generate colored SVG ship icon
+        function getShipIcon(colorHex) {
+            const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='${colorHex}' d='M12 2L4 20l8-4 8 4 8-18z'/></svg>`;
+            return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+        }
+
+        const shipDataSources = {};
+        const SHIP_TYPES = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
+
+        SHIP_TYPES.forEach(async (type) => {
+            const ds = new Cesium.CustomDataSource(`Ships - ${type}`);
+            shipDataSources[type] = ds;
+            await viewer.dataSources.add(ds);
+        });
+
+        SHIP_TYPES.forEach(type => {
+            const checkbox = document.getElementById(`filter-${type}`);
+            if (checkbox) {
+                checkbox.addEventListener('change', () => {
+                    if (shipDataSources[type]) {
+                        shipDataSources[type].show = checkbox.checked;
+                    }
+                });
+            }
+        });
+
+        // Weather Imagery Layers
+        let cloudLayer = null;
+        let weatherProvider = null;
+
+        // Fetch latest Rainviewer data and initialize provider asynchronously
+        fetch('https://api.rainviewer.com/public/weather-maps.json')
+            .then(res => res.json())
+            .then(data => {
+                const pastFrames = data.radar.past;
+                if (pastFrames && pastFrames.length > 0) {
+                    const latestTimestamp = pastFrames[pastFrames.length - 1].time;
+                    weatherProvider = new Cesium.UrlTemplateImageryProvider({
+                        url: `https://tilecache.rainviewer.com/v2/radar/${latestTimestamp}/256/{z}/{x}/{y}/2/1_1.png`,
+                        maximumLevel: 6 // Prevent "zoom level not supported" errors by stopping requests past level 6
+                    });
+                    cloudLayer = viewer.imageryLayers.addImageryProvider(weatherProvider);
+                    cloudLayer.alpha = 0.6; // Slightly transparent
+                    cloudLayer.show = document.getElementById('layer-clouds').checked;
+                }
+            })
+            .catch(err => console.error("Error loading Rainviewer data:", err));
+
+        // Weather Checkbox Logic
+        document.getElementById('layer-clouds').addEventListener('change', (e) => {
+            if (cloudLayer) {
+                cloudLayer.show = e.target.checked;
+                // Move layer to front when toggled on to ensure it is always visible over the base map
+                if (e.target.checked) viewer.imageryLayers.raiseToTop(cloudLayer);
+            }
+        });
+
+        // ── Satellite Layer ──────────────────────────────────────────────────
+        const SAT_COLORS = {
+            military_recon: '#ef4444', // Red
+            military_sar: '#f97316', // Orange
+            sar: '#f97316', // Orange
+            sigint: '#eab308', // Yellow
+            navigation: '#10b981', // Green
+            early_warning: '#a855f7', // Purple
+            space_station: '#3b82f6', // Blue
+            commercial_imaging: '#94a3b8', // Grey-blue
+        };
+
+        function getSatIcon(colorHex) {
+            const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='3' fill='${colorHex}'/><line x1='12' y1='2' x2='12' y2='6' stroke='${colorHex}' stroke-width='2'/><line x1='12' y1='18' x2='12' y2='22' stroke='${colorHex}' stroke-width='2'/><line x1='2' y1='12' x2='6' y2='12' stroke='${colorHex}' stroke-width='2'/><line x1='18' y1='12' x2='22' y2='12' stroke='${colorHex}' stroke-width='2'/></svg>`;
+            return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+        }
+
+        const satDataSource = new Cesium.CustomDataSource('Satellites');
+        viewer.dataSources.add(satDataSource);
+        satDataSource.show = false;
+
+        document.getElementById('layer-sats').addEventListener('change', (e) => {
+            satDataSource.show = e.target.checked;
+        });
+
+        // In-memory TLE cache: { id -> {satrec, meta} }
+        // Populated from API (every 30min), positions re-propagated every 5s locally
+        let _satRecCache = {};
+        let _satLastApiFetch = 0;
+        const SAT_API_INTERVAL_MS = 30 * 60 * 1000; // re-fetch TLE data every 30 min
+
+        async function _refreshSatTleCache() {
+            try {
+                const response = await fetch('/api/v1/satellites');
+                if (!response.ok) return;
+                const sats = await response.json();
+                const newCache = {};
+                const hasSatelliteJs = typeof satellite !== 'undefined';
+
+                sats.forEach(sat => {
+                    const satId = String(sat.id);
+                    let satrec = null;
+                    if (hasSatelliteJs && sat.tle && sat.tle.length === 2) {
+                        try {
+                            satrec = satellite.twoline2satrec(sat.tle[0], sat.tle[1]);
+                        } catch (e) { /* skip */ }
+                    }
+                    newCache[satId] = { satrec, sat };
+                });
+                _satRecCache = newCache;
+                _satLastApiFetch = Date.now();
+                document.getElementById('total-sats').textContent = sats.length;
+            } catch (err) {
+                console.error('Error fetching satellite TLE data:', err);
+            }
+        }
+
+        function _propagateSatPositions() {
+            const hasSatelliteJs = typeof satellite !== 'undefined';
+            const now = new Date();
+
+            Object.entries(_satRecCache).forEach(([satId, { satrec, sat }]) => {
+                let lat, lng, altKm;
+
+                if (hasSatelliteJs && satrec) {
+                    // Real-time client-side propagation via satellite.js
+                    try {
+                        const posVel = satellite.propagate(satrec, now);
+                        if (!posVel.position) return;
+                        const gmst = satellite.gstime(now);
+                        const geodetic = satellite.eciToGeodetic(posVel.position, gmst);
+                        lat = satellite.degreesLat(geodetic.latitude);
+                        lng = satellite.degreesLong(geodetic.longitude);
+                        altKm = geodetic.height;
+                    } catch (e) {
+                        // Fall back to last known API position
+                        lat = sat.lat; lng = sat.lng; altKm = sat.alt_km || 0;
+                    }
+                } else {
+                    // satellite.js unavailable; use last known position from API
+                    lat = sat.lat; lng = sat.lng; altKm = sat.alt_km || 0;
+                }
+
+                const color = SAT_COLORS[sat.mission] || '#94a3b8';
+                const position = Cesium.Cartesian3.fromDegrees(lng, lat, altKm * 1000);
+
+                let entity = satDataSource.entities.getById(satId);
+                if (!entity) {
+                    satDataSource.entities.add({
+                        id: satId,
+                        name: sat.name,
+                        description: `
+                            <table class="cesium-infoBox-defaultTable"><tbody>
+                                <tr><th>Name</th><td>${sat.name}</td></tr>
+                                <tr><th>NORAD ID</th><td>${sat.id}</td></tr>
+                                <tr><th>Country</th><td>${sat.country || 'UNKNOWN'}</td></tr>
+                                <tr><th>Mission</th><td>${sat.sat_type || sat.mission || '-'}</td></tr>
+                                <tr><th>Altitude</th><td>${Math.round(altKm)} km</td></tr>
+                                <tr><th>Speed</th><td>${sat.speed_knots} kts</td></tr>
+                                ${sat.wiki ? `<tr><th>Info</th><td><a href="${sat.wiki}" target="_blank">Wikipedia</a></td></tr>` : ''}
+                            </tbody></table>
+                        `,
+                        position: new Cesium.CallbackProperty(() =>
+                            satDataSource.entities.getById(satId)?._currentPosition || position
+                            , false),
+                        billboard: {
+                            image: getSatIcon(color),
+                            width: 18,
+                            height: 18,
+                            scaleByDistance: new Cesium.NearFarScalar(1.5e7, 1.5, 8.0e7, 0.5),
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY
+                        },
+                        label: {
+                            text: sat.name,
+                            font: '10px JetBrains Mono, monospace',
+                            fillColor: Cesium.Color.fromCssColorString(color),
+                            outlineColor: Cesium.Color.BLACK,
+                            outlineWidth: 2,
+                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                            pixelOffset: new Cesium.Cartesian2(0, -20),
+                            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2e7),
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY
+                        }
+                    });
+                }
+                // Update position directly on entity
+                const e = satDataSource.entities.getById(satId);
+                if (e) e.position = position;
+            });
+
+            // Remove entities not in cache anymore
+            const cacheIds = new Set(Object.keys(_satRecCache));
+            satDataSource.entities.values
+                .filter(e => !cacheIds.has(e.id))
+                .forEach(e => satDataSource.entities.remove(e));
+        }
+
+        // Initial TLE load
+        _refreshSatTleCache().then(() => _propagateSatPositions());
+
+        // Refresh TLE data from API every 30 minutes
+        setInterval(async () => {
+            await _refreshSatTleCache();
+        }, SAT_API_INTERVAL_MS);
+
+        // Re-propagate positions every 5 seconds (local calculation, no API call)
+        setInterval(_propagateSatPositions, 5000);
+        // ── End Satellite Layer ───────────────────────────────────────────────
+
+
+        function updateShipsLayer(ships) {
+            const byType = {};
+            SHIP_TYPES.forEach(t => byType[t] = []);
+
+            ships.forEach(ship => {
+                const type = ship.type || 'other';
+                if (byType[type]) byType[type].push(ship);
+                else byType['other'].push(ship);
+            });
+
+            // Get current camera bounding box (Viewport Culling)
+            const cameraRect = viewer.camera.computeViewRectangle();
+            let west = -Math.PI;
+            let east = Math.PI;
+            let south = -Math.PI / 2;
+            let north = Math.PI / 2;
+
+            if (cameraRect) {
+                // Add a small buffer around the view
+                const buffer = 0.5; // degrees
+                west = Cesium.Math.toDegrees(cameraRect.west) - buffer;
+                east = Cesium.Math.toDegrees(cameraRect.east) + buffer;
+                south = Cesium.Math.toDegrees(cameraRect.south) - buffer;
+                north = Cesium.Math.toDegrees(cameraRect.north) + buffer;
+            }
+
+            // Limit the max number of ships we show at once per type to prevent massive lag while maintaining fairness
+            const MAX_SHIPS_PER_TYPE = 400;
+
+            SHIP_TYPES.forEach(type => {
+                const ds = shipDataSources[type];
+                if (!ds) return;
+
+                const typeShips = byType[type];
+                const existingIds = new Set();
+                let typeRenderedCount = 0;
+
+                typeShips.forEach(ship => {
+                    // Culling: Check if ship is within camera bounds
+                    if (typeRenderedCount >= MAX_SHIPS_PER_TYPE) return;
+                    if (ship.lng < west || ship.lng > east || ship.lat < south || ship.lat > north) return;
+
+                    typeRenderedCount++;
+                    existingIds.add(ship.mmsi);
+                    let entity = ds.entities.getById(ship.mmsi);
+                    const position = Cesium.Cartesian3.fromDegrees(ship.lng, ship.lat);
+
+                    if (!entity) {
+                        // We only build description when clicked to save memory/CPU
+                        const desc = new Cesium.CallbackProperty(() => {
+                            return `
+                            <table class="cesium-infoBox-defaultTable">
+                                <tbody>
+                                    <tr><th>Name</th><td>${ship.name}</td></tr>
+                                    <tr><th>MMSI</th><td>${ship.mmsi}</td></tr>
+                                    <tr><th>Type</th><td>${ship.type}</td></tr>
+                                    <tr><th>Speed</th><td>${ship.speed || ship.sog || 0} knots</td></tr>
+                                    <tr><th>Heading</th><td>${ship.heading}°</td></tr>
+                                </tbody>
+                            </table>
+                            `;
+                        }, false);
+
+                        ds.entities.add({
+                            id: ship.mmsi,
+                            name: ship.name,
+                            description: desc,
+                            position: position,
+                            billboard: {
+                                image: getShipIcon(SHIP_COLORS[type]),
+                                width: 14,
+                                height: 16,
+                                rotation: new Cesium.CallbackProperty(() => {
+                                    return Cesium.Math.toRadians(-(ship.heading || 0));
+                                }, false)
+                            }
+                        });
+                    } else {
+                        // Directly update position
+                        entity.position = position;
+                    }
+                });
+
+                ds.entities.values.forEach(entity => {
+                    // Only remove ships that are no longer in our WebSocket update 
+                    // (existingIds contains ALL ships in this type from the WebSocket payload, regardless of culling)
+                    let stillExists = false;
+                    for (let i = 0; i < typeShips.length; i++) {
+                        if (typeShips[i].mmsi === entity.id) {
+                            stillExists = true;
+                            // Update visibility based on culling bounds
+                            const ship = typeShips[i];
+                            const inBounds = (ship.lng >= west && ship.lng <= east && ship.lat >= south && ship.lat <= north);
+                            entity.show = inBounds;
+                            break;
+                        }
+                    }
+                    if (!stillExists) {
+                        ds.entities.remove(entity);
+                    }
+                });
+
+                const countEl = document.getElementById(`count-${type}`);
+                if (countEl) countEl.textContent = typeShips.length.toLocaleString();
+            });
+        }
+
+        let ws;
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            // Use window.location.host instead of default ws:// so it works in both dev (localhost) and prod
+            const wsUrl = `${protocol}//${window.location.host}/api/v1/ws/ships`;
+
+            console.log("Connecting to WebSocket:", wsUrl);
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log("WebSocket connected!");
+                const loadingEl = document.getElementById('loading');
+                if (loadingEl && loadingEl.innerHTML.includes('INITIALIZING')) {
+                    loadingEl.style.display = 'none';
+                }
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "ships_update") {
+                        updateShipsLayer(data.ships || []);
+
+                        document.getElementById('total-ships').textContent = (data.total_tracked || data.ship_count || 0).toLocaleString();
+                        document.getElementById('stat-assets').textContent = data.total_tracked || data.ship_count || 0;
+
+                        if (data.timestamp) {
+                            const updated = new Date(data.timestamp);
+                            document.getElementById('last-update').textContent = updated.toISOString().substring(11, 19);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error parsing WebSocket message:", error);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error("WebSocket error:", error);
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket closed. Reconnecting in 5 seconds...");
+                setTimeout(initWebSocket, 5000);
+            };
+        }
+
+        async function fetchData() {
+            document.getElementById('loading').style.display = 'flex';
+            try {
+                const restrictedAreas = await Cesium.GeoJsonDataSource.load('/api/v1/restricted-areas', {
+                    stroke: Cesium.Color.RED,
+                    fill: Cesium.Color.RED.withAlpha(0.3),
+                    strokeWidth: 3
+                });
+                await viewer.dataSources.add(restrictedAreas);
+
+                const eventsResponse = await fetch('/api/v1/events');
+                const eventsJson = await eventsResponse.json();
+                const features = eventsJson.features || [];
+                document.getElementById('stat-events').textContent = features.length;
+
+                // Events are shown on map as markers (no feed cards — feed is now AIS alerts only)
+                const eventsSrc = await Cesium.GeoJsonDataSource.load(eventsJson, {
+                    markerSymbol: 'cross',
+                    markerColor: Cesium.Color.fromCssColorString('#38bdf8'),
+                    markerSize: 40
+                });
+                await viewer.dataSources.add(eventsSrc);
+
+
+                // ---------------------------------------------------------------
+                // Live Feed — AIS Anomaly Alert Polling
+                // Polls /api/v1/alerts every 30s and prepends new cards to feedPanel
+                // ---------------------------------------------------------------
+                const seenAlertIds = new Set();
+
+                function alertIcon(type) {
+                    if (type === 'speeding')    return { icon: 'fa-gauge-high',         color: '#ef4444', label: 'SPEEDING' };
+                    if (type === 'signal_lost') return { icon: 'fa-satellite-dish',      color: '#f97316', label: 'SIGNAL LOST' };
+                    if (type === 'dest_change') return { icon: 'fa-right-left',          color: '#a78bfa', label: 'DEST CHANGE' };
+                    return                              { icon: 'fa-triangle-exclamation', color: '#facc15', label: 'ALERT' };
+                }
+
+                async function fetchAndRenderAlerts() {
+                    try {
+                        const resp = await fetch('/api/v1/alerts?limit=50');
+                        if (!resp.ok) return;
+                        const alerts = await resp.json();
+                        if (!alerts || alerts.length === 0) return;
+
+                        const feedContainer = document.getElementById('eventFeed');
+
+                        // Remove placeholder if present
+                        const placeholder = feedContainer.querySelector('div[style]');
+                        if (placeholder) placeholder.remove();
+
+                        let newCount = 0;
+                        // Prepend newest alerts that we haven't shown yet
+                        for (const alert of alerts) {
+                            if (seenAlertIds.has(alert.id)) continue;
+                            seenAlertIds.add(alert.id);
+                            newCount++;
+
+                            const { icon, color, label } = alertIcon(alert.type);
+                            const timeStr = new Date(alert.ts).toISOString().substring(11, 19) + 'Z';
+                            const severity = alert.severity || 'medium';
+                            const borderColor = severity === 'high' ? '#ef4444' : severity === 'medium' ? '#f97316' : '#a78bfa';
+
+                            const card = document.createElement('div');
+                            card.className = 'feed-card';
+                            card.style.cssText = `border-left: 3px solid ${borderColor}; animation: feedCardIn 0.4s ease;`;
+                            card.innerHTML = `
+                                <div class="feed-meta" style="display:flex;justify-content:space-between;align-items:center;">
+                                    <span style="color:${color};font-weight:700;font-size:0.7rem;letter-spacing:0.08em;">
+                                        <i class="fa-solid ${icon}" style="margin-right:5px;"></i>${label}
+                                    </span>
+                                    <span style="color:var(--text-dim);font-size:0.7rem;"><i class="fa-solid fa-clock" style="margin-right:3px;"></i>${timeStr}</span>
+                                </div>
+                                <h3 class="feed-title" style="margin:6px 0 4px;font-size:0.85rem;">${alert.name || 'UNKNOWN VESSEL'}</h3>
+                                <div style="color:var(--text-dim);font-size:0.75rem;line-height:1.5;">
+                                    ${alert.message || ''}
+                                    ${alert.country ? `<span style="margin-left:6px;opacity:0.7;">🏴 ${alert.country}</span>` : ''}
+                                </div>
+                            `;
+
+                            // Click to fly to vessel location and select the entity
+                            if (alert.lat && alert.lng) {
+                                card.style.cursor = 'pointer';
+                                card.addEventListener('click', () => {
+                                    // Try to find the entity in any of the ship data sources
+                                    let foundEntity = null;
+                                    const mmsiStr = alert.mmsi.toString();
+                                    for (const type in shipDataSources) {
+                                        const ds = shipDataSources[type];
+                                        const entity = ds.entities.getById(mmsiStr);
+                                        if (entity) {
+                                            foundEntity = entity;
+                                            break;
+                                        }
+                                    }
+
+                                    if (foundEntity) {
+                                        viewer.selectedEntity = foundEntity;
+                                        viewer.camera.flyTo({
+                                            destination: Cesium.Cartesian3.fromDegrees(alert.lng, alert.lat, 50000.0),
+                                            duration: 1.5
+                                        });
+                                    } else {
+                                        viewer.camera.flyTo({
+                                            destination: Cesium.Cartesian3.fromDegrees(alert.lng, alert.lat, 150000.0),
+                                            duration: 1.8
+                                        });
+                                    }
+                                });
+                            }
+
+                            // Prepend so newest is on top
+                            feedContainer.insertBefore(card, feedContainer.firstChild);
+                        }
+
+                        // Keep feed from growing too large (max 80 cards)
+                        const allCards = feedContainer.querySelectorAll('.feed-card');
+                        if (allCards.length > 80) {
+                            for (let i = 80; i < allCards.length; i++) allCards[i].remove();
+                        }
+                    } catch (e) {
+                        console.warn('Alert fetch failed:', e);
+                    }
+                }
+
+                // Initial fetch + polling every 30s
+                fetchAndRenderAlerts();
+                setInterval(fetchAndRenderAlerts, 30000);
+
+
+                // Restore websocket for real-time data
+                initWebSocket();
+
+            } catch (error) {
+                console.error("Error fetching map data:", error);
+                document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> SYSTEM ERROR';
+            } finally {
+                if (document.getElementById('loading').innerHTML.includes('INITIALIZING')) {
+                    document.getElementById('loading').style.display = 'none';
+                }
+            }
+        }
+
+        fetchData();
+
+        // ── Sentinel-2 Right-click Imagery Search ─────────────────────────────
+        document.body.insertAdjacentHTML('beforeend', `
+            
+            <div id="sentinelMenu" style="
+                display:none; position:fixed; z-index:9999;
+                background:rgba(10,14,27,0.96); border:1px solid rgba(99,102,241,0.4);
+                border-radius:8px; padding:6px 0; min-width:210px;
+                backdrop-filter:blur(12px); box-shadow:0 8px 32px rgba(0,0,0,0.6);
+                font-family:'JetBrains Mono',monospace;">
+                <div id="sentinelMenuBtn" style="
+                    padding:10px 16px; cursor:pointer; color:#a5b4fc; font-size:0.78rem;
+                    display:flex; align-items:center; gap:8px;"
+                    onmouseover="this.style.background='rgba(99,102,241,0.15)'"
+                    onmouseout="this.style.background='transparent'">
+                    <i class="fa-solid fa-satellite-dish"></i>&nbsp;위성 영상 검색 (Sentinel-2)
+                </div>
+                <div style="padding:4px 16px 8px; color:rgba(165,180,252,0.45); font-size:0.68rem;">
+                    <span id="sentinelMenuCoords">--</span>
+                </div>
+            </div>
+
+            <div id="sentinelCard" style="
+                display:none; position:fixed; z-index:9998; 
+                top:400px; bottom:60px; right:285px;
+                background:var(--panel-bg); border:1px solid var(--panel-border);
+                border-radius:12px; width:360px; max-width:92vw;
+                flex-direction:column;
+                backdrop-filter:blur(12px); box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+                <div style="padding:14px 18px; border-bottom:1px solid var(--panel-border);
+                    display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+                    <span style="color:#38bdf8; font-family:'Inter', sans-serif; font-size:0.9rem; font-weight:600; letter-spacing:0.05em;">
+                        <i class="fa-solid fa-satellite-dish" style="color:#38bdf8;"></i>&nbsp; SENTINEL-2 IMAGERY
+                    </span>
+                    <button onclick="document.getElementById('sentinelCard').style.display='none'"
+                        style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;transition:color 0.2s;"
+                        onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-dim)'">&#x2715;</button>
+                </div>
+                <div id="sentinelCardBody" class="feed-list" style="padding:18px; overflow-y:auto; flex-grow:1; max-height:none;"></div>
+            </div>
+        `);
+
+        let _sentinelLat = null, _sentinelLng = null;
+
+        viewer.cesiumWidget.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const cart = viewer.camera.pickEllipsoid(
+                new Cesium.Cartesian2(e.offsetX, e.offsetY),
+                viewer.scene.globe.ellipsoid
+            );
+            if (!cart) return;
+            const carto = Cesium.Cartographic.fromCartesian(cart);
+            _sentinelLat = +(Cesium.Math.toDegrees(carto.latitude).toFixed(4));
+            _sentinelLng = +(Cesium.Math.toDegrees(carto.longitude).toFixed(4));
+            const menu = document.getElementById('sentinelMenu');
+            document.getElementById('sentinelMenuCoords').textContent = _sentinelLat + '\u00b0, ' + _sentinelLng + '\u00b0';
+            menu.style.display = 'block';
+            menu.style.left = Math.min(e.clientX, window.innerWidth - 230) + 'px';
+            menu.style.top = Math.min(e.clientY, window.innerHeight - 100) + 'px';
+        });
+
+        document.addEventListener('click', () => {
+            document.getElementById('sentinelMenu').style.display = 'none';
+        });
+
+        document.getElementById('sentinelMenuBtn').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            document.getElementById('sentinelMenu').style.display = 'none';
+            const card = document.getElementById('sentinelCard');
+            const body = document.getElementById('sentinelCardBody');
+
+            // Show as flex so the column layout works for scrolling
+            card.style.display = 'flex';
+            body.innerHTML = '<div style="text-align:center;color:#6b7280;font-family:\'JetBrains Mono\',monospace;font-size:0.75rem;padding:30px 0;"><i class="fa-solid fa-circle-notch fa-spin"></i>&nbsp;Searching Sentinel-2...</div>';
+
+            try {
+                const res = await fetch('/api/v1/sentinel?lat=' + _sentinelLat + '&lng=' + _sentinelLng);
+                const data = await res.json();
+
+                if (!data.found) {
+                    body.innerHTML = '<div style="text-align:center;color:#ef4444;font-size:0.75rem;padding:30px;">' + (data.message || data.error || 'No result') + '</div>';
+                    return;
+                }
+
+                const dt = data.datetime ? new Date(data.datetime).toLocaleDateString('ko-KR') : '-';
+                const cc = data.cloud_cover !== null ? data.cloud_cover + '%' : '-';
+                const ccColor = parseFloat(data.cloud_cover) < 15 ? '#10b981' : parseFloat(data.cloud_cover) < 30 ? '#eab308' : '#ef4444';
+                const href = data.fullres_url ? 'href="' + data.fullres_url + '" target="_blank"' : '';
+
+                body.innerHTML =
+                    (data.thumbnail_url ? '<a ' + href + '><img src="' + data.thumbnail_url + '" style="width:100%;border-radius:8px;border:1px solid rgba(99,102,241,0.3);display:block;margin-bottom:14px;"></a>' : '') +
+                    '<table style="width:100%;font-family:\'JetBrains Mono\',monospace;font-size:0.75rem;border-collapse:separate; border-spacing:0 8px;">' +
+                    '<tr><td style="color:var(--text-dim);">📅 촬영일</td><td style="color:#e2e8f0;text-align:right;">' + dt + '</td></tr>' +
+                    '<tr><td style="color:var(--text-dim);">☁️ 구름량</td><td style="color:' + ccColor + ';text-align:right;">' + cc + '</td></tr>' +
+                    '<tr><td style="color:var(--text-dim);">🛰️ 플랫폼</td><td style="color:#e2e8f0;text-align:right;">' + (data.platform || 'Sentinel-2') + '</td></tr>' +
+                    '<tr><td style="color:var(--text-dim);">📍 좌표</td><td style="color:#e2e8f0;text-align:right;">' + _sentinelLat + '\u00b0<br>' + _sentinelLng + '\u00b0</td></tr>' +
+                    '</table>' +
+                    (href ? '<a ' + href + ' style="display:block;margin-top:20px;text-align:center;color:var(--primary-color);font-family:\'Inter\',sans-serif;font-size:0.8rem;text-decoration:none;border:1px solid var(--panel-border);border-radius:6px;padding:10px;background:rgba(99,102,241,0.1);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(99,102,241,0.2)\'" onmouseout="this.style.background=\'rgba(99,102,241,0.1)\'"><i class="fa-solid fa-expand"></i> 전체 화질로 뷰어 열기</a>' : '');
+            } catch (err) {
+                body.innerHTML = '<div style="text-align:center;color:#ef4444;font-size:0.75rem;padding:20px;">Error: ' + err.message + '</div>';
+            }
+        });
+        // ── End Sentinel-2 ────────────────────────────────────────────────────
+    </script>
+</body>
+
+</html>

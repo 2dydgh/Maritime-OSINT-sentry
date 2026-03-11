@@ -1,0 +1,18 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Database
+DB_USER = os.getenv("DB_USER", "db_user")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "db_password")
+DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "osint_4d")
+
+# AIS
+AIS_API_KEY = os.getenv("AIS_API_KEY", "")
+
+# App
+PORT = int(os.getenv("PORT", 8001))
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
