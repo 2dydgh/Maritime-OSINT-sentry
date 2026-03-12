@@ -2,7 +2,7 @@
 
 A high-performance, real-time maritime surveillance and intelligence dashboard. This platform integrates live AIS vessel streams, orbital satellite propagation, and automated anomaly detection into a tactical 4D geospatial interface.
 
-<!-- ![Main Interface](static/screenshot_placeholder.png) *(Note: Add your actual dashboard screenshot here)* -->
+![Main Interface](static/osint.gif)
 
 ## 🚀 Key Features
 
