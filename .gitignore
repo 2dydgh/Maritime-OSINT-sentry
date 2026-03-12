@@ -29,6 +29,6 @@ uvicorn_modular.log
 !package.json
 !package-lock.json
 
-# Large Media
-static/osint.gif
+
+# Large Media (excluded if > 100MB)
 
