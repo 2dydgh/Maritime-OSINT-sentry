@@ -394,12 +394,18 @@
             display: none;
         }
 
+        #nearbyVesselsSection::-webkit-scrollbar { width: 6px; }
+        #nearbyVesselsSection::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1); border-radius: 3px; }
+        #nearbyVesselsSection::-webkit-scrollbar-thumb { background: var(--accent-cyan); border-radius: 3px; }
+
         #nearbyVesselsSection .section-title {
+            font-family: 'Inter', sans-serif;
             font-size: 0.7rem;
             font-weight: 600;
             color: var(--accent-cyan);
-            letter-spacing: 0.08em;
+            letter-spacing: 0.05em;
             margin-bottom: 6px;
+            text-transform: uppercase;
         }
 
         .nearby-row {
