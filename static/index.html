@@ -913,12 +913,96 @@
             destination: Cesium.Cartesian3.fromDegrees(53.0, 24.0, 3000000.0)
         });
 
+        // ── Time Control Bar Logic ───────────────────────────────────────────
+        const SPEED_STEPS = [1, 10, 60, 300, 600];
+        let currentSpeedIndex = 2; // default 60x
+        let _lastPlayingState = null;
+        let _lastReverseState = null;
+
         function updateClock() {
+            if (timeMode !== 'live') return; // guard: don't overwrite history time display
             const now = new Date();
-            document.getElementById('stat-time').textContent = now.toISOString().substring(11, 19) + " Z";
+            document.getElementById('tcb-time-display').textContent = now.toISOString().substring(11, 19) + " Z";
         }
         setInterval(updateClock, 1000);
         updateClock();
+
+        function updatePlaybackUI() {
+            const playing = viewer.clock.shouldAnimate;
+            const isReverse = viewer.clock.multiplier < 0;
+
+            // Skip DOM updates if state hasn't changed (called on every tick)
+            if (playing === _lastPlayingState && isReverse === _lastReverseState) return;
+            _lastPlayingState = playing;
+            _lastReverseState = isReverse;
+
+            const icon = document.getElementById('tcb-playpause-icon');
+            icon.className = playing ? 'fa-solid fa-pause' : 'fa-solid fa-play';
+
+            const reverseBtn = document.getElementById('tcb-reverse');
+            if (isReverse) {
+                reverseBtn.classList.add('active-reverse');
+            } else {
+                reverseBtn.classList.remove('active-reverse');
+            }
+
+            const speed = Math.abs(viewer.clock.multiplier);
+            document.getElementById('tcb-speed').textContent = speed + 'x';
+        }
+
+        function forceUpdatePlaybackUI() {
+            _lastPlayingState = null;
+            _lastReverseState = null;
+            updatePlaybackUI();
+        }
+
+        function enablePlaybackButtons(enabled) {
+            const btns = ['tcb-reverse', 'tcb-playpause', 'tcb-ff'];
+            btns.forEach(id => {
+                const btn = document.getElementById(id);
+                if (enabled) {
+                    btn.disabled = false;
+                    btn.classList.add('enabled');
+                } else {
+                    btn.disabled = true;
+                    btn.classList.remove('enabled', 'active-reverse');
+                }
+            });
+            if (enabled) {
+                document.getElementById('tcb-speed').classList.add('active');
+            } else {
+                document.getElementById('tcb-speed').classList.remove('active');
+                document.getElementById('tcb-speed').textContent = '1x';
+            }
+        }
+
+        // Play/Pause
+        document.getElementById('tcb-playpause').addEventListener('click', () => {
+            viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
+            forceUpdatePlaybackUI();
+        });
+
+        // Reverse toggle
+        document.getElementById('tcb-reverse').addEventListener('click', () => {
+            const m = viewer.clock.multiplier;
+            viewer.clock.multiplier = m < 0 ? Math.abs(m) : -Math.abs(m);
+            if (!viewer.clock.shouldAnimate) {
+                viewer.clock.shouldAnimate = true;
+            }
+            forceUpdatePlaybackUI();
+        });
+
+        // Fast Forward — cycle speed steps
+        document.getElementById('tcb-ff').addEventListener('click', () => {
+            currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_STEPS.length;
+            const sign = viewer.clock.multiplier < 0 ? -1 : 1;
+            viewer.clock.multiplier = sign * SPEED_STEPS[currentSpeedIndex];
+            if (!viewer.clock.shouldAnimate) {
+                viewer.clock.shouldAnimate = true;
+            }
+            forceUpdatePlaybackUI();
+        });
+        // ── End Time Control Bar Logic ───────────────────────────────────────
 
         // ── Satellite Colors & Icon (needed by Time Travel Mode) ─────────────
         const SAT_COLORS = {
@@ -1225,9 +1309,10 @@
 
         // Set time mode (live or history)
         async function setTimeMode(mode) {
-            const btnLive = document.getElementById('btn-live');
-            const btnHistory = document.getElementById('btn-history');
-            const indicator = document.getElementById('historyIndicator');
+            const btnLive = document.getElementById('tcb-btn-live');
+            const btnHistory = document.getElementById('tcb-btn-history');
+            const controlBar = document.getElementById('timeControlBar');
+            const timeDisplay = document.getElementById('tcb-time-display');
 
             if (mode === 'live') {
                 timeMode = 'live';
@@ -1235,7 +1320,11 @@
                 // Update UI
                 btnLive.classList.add('active');
                 btnHistory.classList.remove('active');
-                indicator.classList.remove('visible');
+                controlBar.classList.remove('history-active');
+                timeDisplay.classList.remove('history');
+
+                // Disable playback buttons in live mode
+                enablePlaybackButtons(false);
 
                 // Stop animation and reset to live time
                 viewer.clock.shouldAnimate = false;
@@ -1272,7 +1361,14 @@
                 // Update UI
                 btnLive.classList.remove('active');
                 btnHistory.classList.add('active');
-                indicator.classList.add('visible');
+                controlBar.classList.add('history-active');
+                timeDisplay.classList.add('history');
+
+                // Enable playback buttons
+                enablePlaybackButtons(true);
+
+                // Reset speed to 60x
+                currentSpeedIndex = 2;
 
                 // Stop live clock sync
                 if (liveClockIntervalId) {
@@ -1300,9 +1396,10 @@
                     // Enable animation for smooth playback
                     viewer.clock.shouldAnimate = true;
                     viewer.clock.multiplier = 60; // 60x speed (1 min/sec)
+                    forceUpdatePlaybackUI();
                 } else {
                     // No history data available — return to LIVE after brief message
-                    document.getElementById('historyTimeDisplay').textContent = 'No history data — returning to LIVE';
+                    timeDisplay.textContent = 'No history data — returning to LIVE';
                     setTimeout(() => setTimeMode('live'), 2000);
                 }
 
@@ -1314,11 +1411,14 @@
         viewer.clock.onTick.addEventListener((clock) => {
             if (timeMode !== 'history') return;
 
-            // Update time display
+            // Update time display in control bar
             const jsDate = Cesium.JulianDate.toDate(clock.currentTime);
             const displayTime = jsDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-            document.getElementById('historyTimeDisplay').textContent = displayTime;
+            document.getElementById('tcb-time-display').textContent = displayTime;
             document.getElementById('last-update').textContent = displayTime.substring(11, 19);
+
+            // Sync play/pause icon state
+            updatePlaybackUI();
 
             // Window boundary detection: reload when current time exceeds 70% of window
             if (!currentWindowStart || !currentWindowEnd || isLoadingWindow) return;
@@ -1374,8 +1474,8 @@
         });
 
         // Setup mode toggle button listeners
-        document.getElementById('btn-live').addEventListener('click', () => setTimeMode('live'));
-        document.getElementById('btn-history').addEventListener('click', () => setTimeMode('history'));
+        document.getElementById('tcb-btn-live').addEventListener('click', () => setTimeMode('live'));
+        document.getElementById('tcb-btn-history').addEventListener('click', () => setTimeMode('history'));
 
         // Initialize: Start live clock sync
         liveClockIntervalId = setInterval(() => {
