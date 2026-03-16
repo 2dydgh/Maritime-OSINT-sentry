@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>OVERWATCH 4D | Strategic Dashboard</title>
+    <title>Maritime OSINT Sentry | Strategic Dashboard</title>
     <!-- Use version 1.114 of Cesium -->
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
@@ -139,11 +139,18 @@
             left: 20px;
             width: 350px;
             bottom: 180px;
-            /* Leave room for timeline and animation container */
             display: flex;
             flex-direction: column;
             padding: 20px;
             transition: transform 0.3s ease;
+        }
+
+        #feedPanel.collapsed {
+            bottom: auto !important;
+        }
+
+        #feedPanel.collapsed .feed-list {
+            display: none;
         }
 
         #feedPanel h2 {
@@ -153,6 +160,24 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+
+        #feedPanel.collapsed h2 {
+            margin-bottom: 0;
+        }
+
+        .collapse-btn {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: color 0.2s;
+            padding: 2px 6px;
+        }
+
+        .collapse-btn:hover {
+            color: #38bdf8;
         }
 
         .feed-list {
@@ -272,6 +297,14 @@
             gap: 8px;
         }
 
+        #shipFilterPanel.collapsed .filter-content {
+            display: none;
+        }
+
+        #shipFilterPanel.collapsed h3 {
+            margin-bottom: 0;
+        }
+
         .filter-item {
             display: flex;
             justify-content: space-between;
@@ -343,45 +376,157 @@
             color: var(--text-dim);
         }
 
-        /* Cesium 기본 팝업(InfoBox) 위치 및 디자인 덮어쓰기 */
-        .cesium-infoBox {
-            top: 100px !important;
-            right: 285px !important;
-            /* 필터 패널(220px) 너비만큼 왼쪽으로 밀기 */
-            background: var(--panel-bg) !important;
-            backdrop-filter: blur(12px) !important;
-            border: 1px solid var(--panel-border) !important;
-            border-radius: 12px !important;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5) !important;
+        /* Ship Info Panel positioning */
+        #shipInfoPanel {
+            top: 100px;
+            right: 285px;
+            width: 320px;
+            max-height: 520px;
+            z-index: 9997;
+        }
+
+        /* Nearby Vessels proximity list */
+        #nearbyVesselsSection {
+            border-top: 1px solid var(--panel-border);
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 8px 12px;
+            display: none;
+        }
+
+        #nearbyVesselsSection .section-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--accent-cyan);
+            letter-spacing: 0.08em;
+            margin-bottom: 6px;
+        }
+
+        .nearby-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            transition: background 0.15s;
+            border-radius: 4px;
+            padding: 4px 6px;
+        }
+
+        .nearby-row:hover {
+            background: rgba(56, 189, 248, 0.1);
+        }
+
+        .nearby-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .nearby-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text-main);
+        }
+
+        .nearby-dist {
+            color: var(--text-dim);
+            flex-shrink: 0;
+        }
+
+        /* Sentinel-2 Panel positioning */
+        #sentinelCard {
+            top: 400px;
+            right: 285px;
+            width: 360px;
+            max-width: 92vw;
+            max-height: 400px;
+            z-index: 9998;
+        }
+
+        /* Shared draggable panel styles */
+        .drag-panel {
+            display: none;
+            position: fixed;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            flex-direction: column;
             overflow: hidden;
         }
 
-        /* 팝업창 상단 타이틀 바 디자인 */
-        .cesium-infoBox-title {
-            background: rgba(16, 23, 41, 0.9) !important;
-            color: #38bdf8 !important;
-            border-bottom: 1px solid var(--panel-border) !important;
-            font-family: 'Inter', sans-serif !important;
-            font-size: 0.9rem !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.05em !important;
+        .drag-panel-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: grab;
+            user-select: none;
+            flex-shrink: 0;
         }
 
-        /* 팝업창 카메라/닫기 버튼 공통 색상 */
-        .cesium-button {
-            color: var(--text-dim) !important;
-            fill: var(--text-dim) !important;
+        .drag-panel-header .title {
+            color: #38bdf8;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .cesium-button:hover {
-            color: #38bdf8 !important;
-            fill: #38bdf8 !important;
+        .drag-panel-header .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 1rem;
+            transition: color 0.2s;
+            flex-shrink: 0;
+            margin-left: 8px;
         }
 
-        /* 특정 카메라 아이콘 버튼 색상 지정 */
-        .cesium-infoBox-camera {
-            color: #38bdf8 !important;
-            fill: #38bdf8 !important;
+        .drag-panel-header .close-btn:hover {
+            color: #fff;
+        }
+
+        .drag-panel-body {
+            padding: 14px 16px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        .drag-panel-body::-webkit-scrollbar { width: 6px; }
+        .drag-panel-body::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1); border-radius: 3px; }
+        .drag-panel-body::-webkit-scrollbar-thumb { background: var(--accent-cyan); border-radius: 3px; }
+
+        .drag-panel-body table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+        }
+
+        .drag-panel-body th {
+            color: var(--text-dim);
+            text-align: left;
+            padding-right: 12px;
+            white-space: nowrap;
+            font-weight: 400;
+        }
+
+        .drag-panel-body td {
+            color: #e2e8f0;
+            text-align: right;
         }
 
         /* Mode Toggle Buttons */
@@ -459,8 +604,8 @@
     <header class="glass-panel">
         <div class="header-brand">
             <div class="pulse-dot"></div>
-            OVERWATCH 4D
-            <span style="color: var(--text-dim); font-weight: 300; font-size: 0.9rem;">| STRATEGIC OSINT
+            MARITIME OSINT SENTRY
+            <span style="color: var(--text-dim); font-weight: 300; font-size: 0.9rem;">| STRATEGIC
                 DASHBOARD</span>
         </div>
         <div class="header-stats">
@@ -498,7 +643,9 @@
     <div id="feedPanel" class="glass-panel">
         <h2>
             <span><i class="fa-solid fa-tower-broadcast" style="margin-right: 8px;"></i> LIVE FEED</span>
-            <i class="fa-solid fa-filter" style="color: var(--text-dim); cursor: pointer; font-size: 0.9rem;"></i>
+            <button class="collapse-btn" onclick="this.closest('#feedPanel').classList.toggle('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-down'); this.querySelector('i').classList.toggle('fa-chevron-up');">
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
         </h2>
         <div class="feed-list" id="eventFeed">
             <!-- Feed cards will be injected here by JS -->
@@ -510,7 +657,13 @@
     </div>
 
     <div id="shipFilterPanel" class="glass-panel">
-        <h3><i class="fa-solid fa-ship"></i> SHIP FILTERS</h3>
+        <h3>
+            <span><i class="fa-solid fa-ship"></i> SHIP FILTERS</span>
+            <button class="collapse-btn" style="margin-left:auto;" onclick="this.closest('#shipFilterPanel').classList.toggle('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-down'); this.querySelector('i').classList.toggle('fa-chevron-up');">
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </h3>
+        <div class="filter-content">
         <div class="filter-item">
             <label><input type="checkbox" id="filter-cargo" checked><span class="color-dot color-cargo"></span>
                 Cargo</label>
@@ -569,6 +722,20 @@
             <div>Total: <span id="total-ships">0</span> vessels</div>
             <div>Updated: <span id="last-update">--:--:--</span> UTC</div>
         </div>
+        </div><!-- /filter-content -->
+    </div>
+
+    <!-- Custom Ship Info Panel -->
+    <div id="shipInfoPanel" class="drag-panel">
+        <div id="shipInfoHeader" class="drag-panel-header">
+            <span class="title" id="shipInfoTitle">—</span>
+            <button class="close-btn" id="shipInfoClose">&#x2715;</button>
+        </div>
+        <div id="shipInfoBody" class="drag-panel-body"></div>
+        <div id="nearbyVesselsSection">
+            <div class="section-title">NEARBY VESSELS</div>
+            <div id="nearbyVesselsList"></div>
+        </div>
     </div>
 
     <!-- Centered Loader -->
@@ -581,7 +748,7 @@
         const viewer = new Cesium.Viewer('cesiumContainer', {
             animation: true,
             timeline: true,
-            infoBox: true,
+            infoBox: false,
             baseLayerPicker: false,
             geocoder: false,
             homeButton: false,
@@ -1010,6 +1177,7 @@
 
             } else if (mode === 'history') {
                 timeMode = 'history';
+                clearProximity();
 
                 // Update UI
                 btnLive.classList.remove('active');
@@ -1336,9 +1504,205 @@
         // ── End Satellite Layer ───────────────────────────────────────────────
 
 
+        // Live ship data lookup — CallbackProperty reads from here for always-fresh InfoBox
+        const shipDataMap = {};
+
+        // ── Vessel Proximity Distance ────────────────────────────────────────
+        const PROXIMITY_RADIUS_NM = 10;
+        const PROXIMITY_MAX_COUNT = 10;
+        const PROXIMITY_THROTTLE_MS = 2000;
+        let selectedProximityMmsi = null;  // stores raw MMSI value (same type as shipDataMap keys)
+        let lastProximityUpdate = 0;
+        let proximityMissCount = 0; // consecutive WS updates where selected vessel is absent
+        let latestWsShipsMmsis = new Set(); // tracks MMSIs from latest WebSocket payload
+
+        const proximityDataSource = new Cesium.CustomDataSource('Proximity');
+        viewer.dataSources.add(proximityDataSource);
+
+        /**
+         * Haversine distance between two points in decimal degrees.
+         * Returns distance in nautical miles.
+         */
+        function haversineNm(lat1, lon1, lat2, lon2) {
+            const R = 3440.065; // Earth radius in nautical miles
+            const toRad = Math.PI / 180;
+            const dLat = (lat2 - lat1) * toRad;
+            const dLon = (lon2 - lon1) * toRad;
+            const a = Math.sin(dLat / 2) ** 2 +
+                      Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
+                      Math.sin(dLon / 2) ** 2;
+            return 2 * R * Math.asin(Math.sqrt(a));
+        }
+
+        /**
+         * Find nearby vessels within radius, sorted by distance, max count.
+         * Only includes vessels present in the latest WebSocket payload (not stale).
+         */
+        function findNearbyVessels(mmsi, radiusNm, maxCount) {
+            const selected = shipDataMap[mmsi];
+            if (!selected) return [];
+
+            const results = [];
+            for (const [key, vessel] of Object.entries(shipDataMap)) {
+                if (key == mmsi) continue; // == for loose type comparison (number/string)
+                if (!latestWsShipsMmsis.has(vessel.mmsi)) continue; // use vessel's own mmsi for Set lookup
+
+                const dist = haversineNm(selected.lat, selected.lng, vessel.lat, vessel.lng);
+                if (dist <= radiusNm) {
+                    results.push({
+                        mmsi: vessel.mmsi,
+                        name: vessel.name || 'UNKNOWN',
+                        distance: dist,
+                        lat: vessel.lat,
+                        lng: vessel.lng
+                    });
+                }
+            }
+
+            results.sort((a, b) => a.distance - b.distance);
+            return results.slice(0, maxCount);
+        }
+
+        function proximityColor(distNm) {
+            if (distNm < 2) return { css: '#ef4444', cesium: Cesium.Color.fromCssColorString('#ef4444') };
+            if (distNm < 5) return { css: '#eab308', cesium: Cesium.Color.fromCssColorString('#eab308') };
+            return { css: '#10b981', cesium: Cesium.Color.fromCssColorString('#10b981') };
+        }
+
+        function renderProximityLines(selectedMmsi, nearbyVessels) {
+            proximityDataSource.entities.removeAll();
+            const selected = shipDataMap[selectedMmsi];
+            if (!selected || nearbyVessels.length === 0) return;
+
+            const closestMmsi = nearbyVessels[0].mmsi;
+
+            nearbyVessels.forEach(nv => {
+                const color = proximityColor(nv.distance);
+                const isClosest = nv.mmsi === closestMmsi;
+
+                // Polyline
+                proximityDataSource.entities.add({
+                    id: `prox-line-${nv.mmsi}`,
+                    polyline: {
+                        positions: new Cesium.CallbackProperty(() => {
+                            const sel = shipDataMap[selectedMmsi];
+                            const tgt = shipDataMap[nv.mmsi];
+                            if (!sel || !tgt) return [];
+                            return Cesium.Cartesian3.fromDegreesArray([
+                                sel.lng, sel.lat, tgt.lng, tgt.lat
+                            ]);
+                        }, false),
+                        width: isClosest ? 3 : 2,
+                        material: isClosest
+                            ? new Cesium.PolylineGlowMaterialProperty({
+                                color: new Cesium.CallbackProperty(() => {
+                                    const alpha = 0.4 + 0.6 * Math.abs(Math.sin(Date.now() / 500));
+                                    return color.cesium.withAlpha(alpha);
+                                }, false),
+                                glowPower: 0.3
+                            })
+                            : new Cesium.ColorMaterialProperty(color.cesium.withAlpha(0.6)),
+                        clampToGround: false
+                    }
+                });
+
+                // Label at midpoint
+                proximityDataSource.entities.add({
+                    id: `prox-label-${nv.mmsi}`,
+                    position: new Cesium.CallbackProperty(() => {
+                        const sel = shipDataMap[selectedMmsi];
+                        const tgt = shipDataMap[nv.mmsi];
+                        if (!sel || !tgt) return Cesium.Cartesian3.fromDegrees(0, 0);
+                        return Cesium.Cartesian3.fromDegrees(
+                            (sel.lng + tgt.lng) / 2,
+                            (sel.lat + tgt.lat) / 2
+                        );
+                    }, false),
+                    label: {
+                        text: new Cesium.CallbackProperty(() => {
+                            const sel = shipDataMap[selectedMmsi];
+                            const tgt = shipDataMap[nv.mmsi];
+                            if (!sel || !tgt) return '';
+                            const d = haversineNm(sel.lat, sel.lng, tgt.lat, tgt.lng);
+                            return d.toFixed(1) + ' nm';
+                        }, false),
+                        font: '12px JetBrains Mono',
+                        fillColor: color.cesium,
+                        outlineColor: Cesium.Color.BLACK,
+                        outlineWidth: 3,
+                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                        pixelOffset: new Cesium.Cartesian2(0, -12),
+                        disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    }
+                });
+            });
+        }
+
+        function renderNearbyPanel(nearbyVessels) {
+            const section = document.getElementById('nearbyVesselsSection');
+            const list = document.getElementById('nearbyVesselsList');
+
+            if (nearbyVessels.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+            list.innerHTML = nearbyVessels.map(nv => {
+                const color = proximityColor(nv.distance);
+                return `<div class="nearby-row" data-mmsi="${nv.mmsi}" data-lat="${nv.lat}" data-lng="${nv.lng}">
+                    <span class="nearby-dot" style="background:${color.css}"></span>
+                    <span class="nearby-name">${nv.name}</span>
+                    <span class="nearby-dist">${nv.distance.toFixed(1)} nm</span>
+                </div>`;
+            }).join('');
+
+            // Click handler: fly to vessel
+            list.querySelectorAll('.nearby-row').forEach(row => {
+                row.addEventListener('click', () => {
+                    const lat = parseFloat(row.dataset.lat);
+                    const lng = parseFloat(row.dataset.lng);
+                    viewer.camera.flyTo({
+                        destination: Cesium.Cartesian3.fromDegrees(lng, lat, 50000)
+                    });
+                });
+            });
+        }
+
+        function clearProximity() {
+            selectedProximityMmsi = null;
+            proximityMissCount = 0;
+            proximityDataSource.entities.removeAll();
+            const section = document.getElementById('nearbyVesselsSection');
+            if (section) section.style.display = 'none';
+        }
+
+        function updateProximity() {
+            if (!selectedProximityMmsi || timeMode !== 'live') {
+                clearProximity();
+                return;
+            }
+            // Tolerate 2 consecutive misses before clearing (spec requirement)
+            if (!latestWsShipsMmsis.has(selectedProximityMmsi)) {
+                proximityMissCount++;
+                if (proximityMissCount >= 2) {
+                    clearProximity();
+                }
+                return;
+            }
+            proximityMissCount = 0; // reset on successful match
+            const nearby = findNearbyVessels(selectedProximityMmsi, PROXIMITY_RADIUS_NM, PROXIMITY_MAX_COUNT);
+            renderProximityLines(selectedProximityMmsi, nearby);
+            renderNearbyPanel(nearby);
+        }
+        // ── End Vessel Proximity Distance ────────────────────────────────────
+
         function updateShipsLayer(ships) {
             const byType = {};
             SHIP_TYPES.forEach(t => byType[t] = []);
+
+            // Update lookup map with latest data
+            ships.forEach(s => { shipDataMap[s.mmsi] = s; });
 
             ships.forEach(ship => {
                 const type = ship.type || 'other';
@@ -1392,19 +1756,26 @@
                     const position = Cesium.Cartesian3.fromDegrees(ship.lng, ship.lat);
 
                     if (!entity) {
-                        // We only build description when clicked to save memory/CPU
+                        const mmsiKey = ship.mmsi;
+                        // Description reads from shipDataMap so it always reflects latest data
                         const desc = new Cesium.CallbackProperty(() => {
-                            return `
-                            <table class="cesium-infoBox-defaultTable">
-                                <tbody>
-                                    <tr><th>Name</th><td>${ship.name}</td></tr>
-                                    <tr><th>MMSI</th><td>${ship.mmsi}</td></tr>
-                                    <tr><th>Type</th><td>${ship.type}</td></tr>
-                                    <tr><th>SOG</th><td>${ship.speed || ship.sog || 0} kts</td></tr>
-                                    <tr><th>COG</th><td>${ship.heading}°</td></tr>
-                                </tbody>
-                            </table>
-                            `;
+                            const s = shipDataMap[mmsiKey] || ship;
+                            let rows = `
+                                    <tr><th>Name</th><td>${s.name}</td></tr>
+                                    <tr><th>MMSI</th><td>${s.mmsi}</td></tr>
+                                    <tr><th>Type</th><td>${s.type}</td></tr>
+                                    <tr><th>Country</th><td>${s.country || 'UNKNOWN'}</td></tr>
+                                    <tr><th>SOG</th><td>${s.sog || 0} kts</td></tr>
+                                    <tr><th>COG</th><td>${s.cog || 0}°</td></tr>
+                                    <tr><th>Heading</th><td>${s.heading || 0}°</td></tr>`;
+                            if (s.length) rows += `<tr><th>Length</th><td>${s.length} m</td></tr>`;
+                            if (s.beam) rows += `<tr><th>Beam</th><td>${s.beam} m</td></tr>`;
+                            if (s.draught) rows += `<tr><th>Draught</th><td>${s.draught} m</td></tr>`;
+                            if (s.destination && s.destination !== 'UNKNOWN') rows += `<tr><th>Destination</th><td>${s.destination}</td></tr>`;
+                            if (s.eta) rows += `<tr><th>ETA</th><td>${s.eta}</td></tr>`;
+                            if (s.callsign) rows += `<tr><th>Callsign</th><td>${s.callsign}</td></tr>`;
+                            if (s.imo) rows += `<tr><th>IMO</th><td>${s.imo}</td></tr>`;
+                            return `<table class="cesium-infoBox-defaultTable"><tbody>${rows}</tbody></table>`;
                         }, false);
 
                         ds.entities.add({
@@ -1417,7 +1788,8 @@
                                 width: 14,
                                 height: 16,
                                 rotation: new Cesium.CallbackProperty(() => {
-                                    return Cesium.Math.toRadians(-(ship.heading || 0));
+                                    const s = shipDataMap[mmsiKey] || ship;
+                                    return Cesium.Math.toRadians(-(s.heading || 0));
                                 }, false)
                             }
                         });
@@ -1477,6 +1849,18 @@
                     const data = JSON.parse(event.data);
                     if (data.type === "ships_update") {
                         updateShipsLayer(data.ships || []);
+
+                        // Track which MMSIs are in the latest payload (for proximity staleness check)
+                        latestWsShipsMmsis = new Set((data.ships || []).map(s => s.mmsi));
+
+                        // Throttled proximity update
+                        if (selectedProximityMmsi) {
+                            const now = Date.now();
+                            if (now - lastProximityUpdate >= PROXIMITY_THROTTLE_MS) {
+                                lastProximityUpdate = now;
+                                updateProximity();
+                            }
+                        }
 
                         document.getElementById('total-ships').textContent = (data.total_tracked || data.ship_count || 0).toLocaleString();
                         document.getElementById('stat-assets').textContent = data.total_tracked || data.ship_count || 0;
@@ -1662,23 +2046,14 @@
                 </div>
             </div>
 
-            <div id="sentinelCard" style="
-                display:none; position:fixed; z-index:9998; 
-                top:400px; bottom:60px; right:285px;
-                background:var(--panel-bg); border:1px solid var(--panel-border);
-                border-radius:12px; width:360px; max-width:92vw;
-                flex-direction:column;
-                backdrop-filter:blur(12px); box-shadow:0 10px 30px rgba(0,0,0,0.5);">
-                <div style="padding:14px 18px; border-bottom:1px solid var(--panel-border);
-                    display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
-                    <span style="color:#38bdf8; font-family:'Inter', sans-serif; font-size:0.9rem; font-weight:600; letter-spacing:0.05em;">
-                        <i class="fa-solid fa-satellite-dish" style="color:#38bdf8;"></i>&nbsp; SENTINEL-2 IMAGERY
+            <div id="sentinelCard" class="drag-panel">
+                <div id="sentinelCardHeader" class="drag-panel-header">
+                    <span class="title">
+                        <i class="fa-solid fa-satellite-dish"></i>&nbsp; SENTINEL-2 IMAGERY
                     </span>
-                    <button onclick="document.getElementById('sentinelCard').style.display='none'"
-                        style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;transition:color 0.2s;"
-                        onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-dim)'">&#x2715;</button>
+                    <button class="close-btn" onclick="document.getElementById('sentinelCard').style.display='none'">&#x2715;</button>
                 </div>
-                <div id="sentinelCardBody" class="feed-list" style="padding:18px; overflow-y:auto; flex-grow:1; max-height:none;"></div>
+                <div id="sentinelCardBody" class="drag-panel-body"></div>
             </div>
         `);
 
@@ -1730,19 +2105,116 @@
                 const href = data.fullres_url ? 'href="' + data.fullres_url + '" target="_blank"' : '';
 
                 body.innerHTML =
-                    (data.thumbnail_url ? '<a ' + href + '><img src="' + data.thumbnail_url + '" style="width:100%;border-radius:8px;border:1px solid rgba(99,102,241,0.3);display:block;margin-bottom:14px;"></a>' : '') +
-                    '<table style="width:100%;font-family:\'JetBrains Mono\',monospace;font-size:0.75rem;border-collapse:separate; border-spacing:0 8px;">' +
-                    '<tr><td style="color:var(--text-dim);">📅 촬영일</td><td style="color:#e2e8f0;text-align:right;">' + dt + '</td></tr>' +
-                    '<tr><td style="color:var(--text-dim);">☁️ 구름량</td><td style="color:' + ccColor + ';text-align:right;">' + cc + '</td></tr>' +
-                    '<tr><td style="color:var(--text-dim);">🛰️ 플랫폼</td><td style="color:#e2e8f0;text-align:right;">' + (data.platform || 'Sentinel-2') + '</td></tr>' +
-                    '<tr><td style="color:var(--text-dim);">📍 좌표</td><td style="color:#e2e8f0;text-align:right;">' + _sentinelLat + '\u00b0<br>' + _sentinelLng + '\u00b0</td></tr>' +
+                    (data.thumbnail_url ? '<a ' + href + '><img src="' + data.thumbnail_url + '" style="width:100%;border-radius:8px;border:1px solid var(--panel-border);display:block;margin-bottom:14px;"></a>' : '') +
+                    '<table>' +
+                    '<tr><th>촬영일</th><td>' + dt + '</td></tr>' +
+                    '<tr><th>구름량</th><td style="color:' + ccColor + ';">' + cc + '</td></tr>' +
+                    '<tr><th>플랫폼</th><td>' + (data.platform || 'Sentinel-2') + '</td></tr>' +
+                    '<tr><th>좌표</th><td>' + _sentinelLat + '\u00b0, ' + _sentinelLng + '\u00b0</td></tr>' +
                     '</table>' +
-                    (href ? '<a ' + href + ' style="display:block;margin-top:20px;text-align:center;color:var(--primary-color);font-family:\'Inter\',sans-serif;font-size:0.8rem;text-decoration:none;border:1px solid var(--panel-border);border-radius:6px;padding:10px;background:rgba(99,102,241,0.1);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(99,102,241,0.2)\'" onmouseout="this.style.background=\'rgba(99,102,241,0.1)\'"><i class="fa-solid fa-expand"></i> 전체 화질로 뷰어 열기</a>' : '');
+                    (href ? '<a ' + href + ' style="display:block;margin-top:16px;text-align:center;color:var(--accent-cyan);font-family:\'Inter\',sans-serif;font-size:0.8rem;text-decoration:none;border:1px solid var(--panel-border);border-radius:6px;padding:10px;background:rgba(56,189,248,0.08);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(56,189,248,0.15)\'" onmouseout="this.style.background=\'rgba(56,189,248,0.08)\'"><i class="fa-solid fa-expand"></i> 전체 화질로 뷰어 열기</a>' : '');
             } catch (err) {
                 body.innerHTML = '<div style="text-align:center;color:#ef4444;font-size:0.75rem;padding:20px;">Error: ' + err.message + '</div>';
             }
         });
         // ── End Sentinel-2 ────────────────────────────────────────────────────
+
+        // ── Draggable Panels ──────────────────────────────────────────────────
+        function makeDraggable(panel, handle) {
+            let isDragging = false, startX, startY, startLeft, startTop;
+
+            handle.addEventListener('mousedown', (e) => {
+                if (e.target.tagName === 'BUTTON') return; // Don't drag on close button
+                isDragging = true;
+                const rect = panel.getBoundingClientRect();
+                startX = e.clientX;
+                startY = e.clientY;
+                startLeft = rect.left;
+                startTop = rect.top;
+                handle.style.cursor = 'grabbing';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                panel.style.left = (startLeft + dx) + 'px';
+                panel.style.top = (startTop + dy) + 'px';
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!isDragging) return;
+                isDragging = false;
+                handle.style.cursor = 'grab';
+            });
+        }
+
+        // Make Sentinel-2 card draggable
+        makeDraggable(
+            document.getElementById('sentinelCard'),
+            document.getElementById('sentinelCardHeader')
+        );
+
+        // Make Ship Info panel draggable
+        makeDraggable(
+            document.getElementById('shipInfoPanel'),
+            document.getElementById('shipInfoHeader')
+        );
+
+        // Close button
+        document.getElementById('shipInfoClose').addEventListener('click', () => {
+            document.getElementById('shipInfoPanel').style.display = 'none';
+            clearProximity();
+        });
+
+        // Show custom ship info panel when entity is clicked
+        function showShipInfo(entity) {
+            const panel = document.getElementById('shipInfoPanel');
+            const title = document.getElementById('shipInfoTitle');
+            const body = document.getElementById('shipInfoBody');
+
+            const name = entity.name || 'UNKNOWN';
+            title.textContent = name;
+
+            // Get description HTML from CallbackProperty or string
+            let descHtml = '';
+            if (entity.description) {
+                if (entity.description.getValue) {
+                    descHtml = entity.description.getValue(viewer.clock.currentTime);
+                } else {
+                    descHtml = entity.description;
+                }
+            }
+
+            body.innerHTML = descHtml || '<p style="color:var(--text-dim);font-size:0.8rem;">No details available</p>';
+            panel.style.display = 'flex';
+        }
+
+        // Listen for entity selection on the viewer
+        const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        handler.setInputAction((click) => {
+            const picked = viewer.scene.pick(click.position);
+            if (Cesium.defined(picked) && picked.id) {
+                showShipInfo(picked.id);
+                // Activate proximity only for ship entities
+                // picked.id is a Cesium Entity; picked.id.id is the entity's ID (= ship.mmsi)
+                const entityId = picked.id.id !== undefined ? picked.id.id : picked.id;
+                if (shipDataMap[entityId]) {
+                    selectedProximityMmsi = entityId;
+                    proximityMissCount = 0;
+                    updateProximity();
+                } else {
+                    clearProximity();
+                }
+            } else {
+                document.getElementById('shipInfoPanel').style.display = 'none';
+                clearProximity();
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        // ── End Draggable Panels ──────────────────────────────────────────────
     </script>
 </body>
 
