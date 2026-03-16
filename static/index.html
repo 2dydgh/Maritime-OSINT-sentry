@@ -447,9 +447,8 @@
 
         /* Sentinel-2 Panel positioning */
         #sentinelCard {
-            top: 400px;
-            right: 285px;
-            width: 360px;
+            right: 20px;
+            width: 260px;
             max-width: 92vw;
             max-height: 400px;
             z-index: 9998;
@@ -2092,6 +2091,11 @@
             document.getElementById('sentinelMenu').style.display = 'none';
             const card = document.getElementById('sentinelCard');
             const body = document.getElementById('sentinelCardBody');
+
+            // Position below shipFilterPanel
+            const filterPanel = document.getElementById('shipFilterPanel');
+            const filterRect = filterPanel.getBoundingClientRect();
+            card.style.top = (filterRect.bottom + 10) + 'px';
 
             // Show as flex so the column layout works for scrolling
             card.style.display = 'flex';
