@@ -30,5 +30,8 @@ uvicorn_modular.log
 !package-lock.json
 
 
+# Worktrees
+.worktrees/
+
 # Large Media (excluded if > 100MB)
 
