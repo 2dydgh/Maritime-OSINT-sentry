@@ -33,5 +33,8 @@ uvicorn_modular.log
 # Worktrees
 .worktrees/
 
+# Superpowers brainstorm
+.superpowers/
+
 # Large Media (excluded if > 100MB)
 
