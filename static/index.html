@@ -700,6 +700,14 @@
         let lastHistoryFetchTime = 0;
         let cachedHistoryShips = []; // Cache for re-rendering on camera move
 
+        // Sliding window state
+        const WINDOW_HALF_MS = 30 * 60 * 1000; // ±30 minutes = 1 hour window
+        let currentWindowCenter = null; // Date object: center of current window
+        let currentWindowStart = null;  // Date object
+        let currentWindowEnd = null;    // Date object
+        let isLoadingWindow = false;    // Prevents concurrent loads
+        let historyInterpolationLoaded = false;
+
         // Debounce function
         function debounce(func, wait) {
             let timeout;
@@ -733,19 +741,34 @@
             return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(id));
         }
 
-        // Load history data with interpolation for smooth playback
-        let historyInterpolationLoaded = false;
+        // Load history data for a sliding window centered on centerDate
+        async function loadHistoryWindow(centerDate) {
+            if (isLoadingWindow) return;
+            isLoadingWindow = true;
 
-        async function loadHistoryWithInterpolation(startTime, endTime) {
-            const startIso = Cesium.JulianDate.toDate(startTime).toISOString();
-            const endIso = Cesium.JulianDate.toDate(endTime).toISOString();
+            // Show loading indicator
+            document.getElementById('loading').style.display = 'flex';
+            document.getElementById('loading').innerHTML = '<i class="fa-solid fa-clock-rotate-left fa-spin"></i> LOADING HISTORY...';
 
-            console.log('[HISTORY] Loading trajectories for interpolation:', startIso, 'to', endIso);
+            const windowStart = new Date(centerDate.getTime() - WINDOW_HALF_MS);
+            const windowEnd = new Date(centerDate.getTime() + WINDOW_HALF_MS);
+            const startIso = windowStart.toISOString();
+            const endIso = windowEnd.toISOString();
+
+            console.log('[HISTORY] Loading window:', startIso, 'to', endIso);
 
             try {
-                const res = await fetchWithTimeout(`/api/v1/history/trajectories?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&limit_per_ship=30`);
+                const res = await fetchWithTimeout(
+                    `/api/v1/history/trajectories?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&limit_per_ship=60&max_ships=500`,
+                    15000
+                );
                 if (!res.ok) {
                     console.error('[HISTORY] Trajectory API error:', res.status);
+                    document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> LOAD ERROR';
+                    setTimeout(() => {
+                        document.getElementById('loading').style.display = 'none';
+                    }, 2000);
+                    isLoadingWindow = false;
                     return;
                 }
 
@@ -763,23 +786,20 @@
 
                 // Create entities with SampledPositionProperty for each ship
                 for (const [mmsi, shipData] of Object.entries(ships)) {
-                    if (shipData.points.length < 2) continue; // Need at least 2 points for interpolation
+                    if (shipData.points.length < 2) continue;
 
                     const type = shipData.type || 'other';
                     const ds = shipDataSources[type] || shipDataSources['other'];
                     if (!ds) continue;
 
-                    // Create SampledPositionProperty
                     const positionProperty = new Cesium.SampledPositionProperty();
                     positionProperty.setInterpolationOptions({
                         interpolationDegree: 1,
                         interpolationAlgorithm: Cesium.LinearApproximation
                     });
 
-                    // Create heading property for rotation
                     const headingProperty = new Cesium.SampledProperty(Number);
 
-                    // Add samples
                     shipData.points.forEach(pt => {
                         const time = Cesium.JulianDate.fromIso8601(pt.time);
                         const position = Cesium.Cartesian3.fromDegrees(pt.lng, pt.lat);
@@ -787,7 +807,6 @@
                         headingProperty.addSample(time, pt.heading || 0);
                     });
 
-                    // Create entity with interpolated position
                     ds.entities.add({
                         id: mmsi,
                         name: shipData.name || 'UNKNOWN',
@@ -814,62 +833,32 @@
                     });
                 }
 
+                // Update window state
+                currentWindowCenter = centerDate;
+                currentWindowStart = windowStart;
+                currentWindowEnd = windowEnd;
                 historyInterpolationLoaded = true;
+
+                // Update UI stats
                 document.getElementById('total-ships').textContent = shipCount.toLocaleString();
                 document.getElementById('stat-assets').textContent = shipCount;
-                console.log('[HISTORY] Interpolation entities created:', shipCount);
+
+                console.log('[HISTORY] Window loaded:', shipCount, 'ships');
 
             } catch (err) {
-                console.error('[HISTORY] Error loading trajectories:', err);
-                document.getElementById('historyTimeDisplay').textContent = 'Load error — returning to LIVE';
-                setTimeout(() => setTimeMode('live'), 2000);
+                console.error('[HISTORY] Error loading window:', err);
+                document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> LOAD ERROR';
+                setTimeout(() => {
+                    document.getElementById('loading').style.display = 'none';
+                    setTimeMode('live');
+                }, 2000);
+            } finally {
+                // Hide loading indicator
+                document.getElementById('loading').style.display = 'none';
+                isLoadingWindow = false;
             }
         }
 
-        // Load history data for a specific time (fallback, non-interpolated)
-        async function loadHistoryData(julianDate) {
-            const jsDate = Cesium.JulianDate.toDate(julianDate);
-            const isoTime = jsDate.toISOString();
-
-            // Update history indicator display
-            const displayTime = jsDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-            document.getElementById('historyTimeDisplay').textContent = displayTime;
-
-            console.log('[HISTORY] Loading data for:', isoTime);
-
-            try {
-                // Fetch ships at this time
-                const shipsRes = await fetchWithTimeout(`/api/v1/history/ships?time=${encodeURIComponent(isoTime)}`);
-                console.log('[HISTORY] API response status:', shipsRes.status);
-
-                if (shipsRes.ok) {
-                    const shipsData = await shipsRes.json();
-                    const ships = shipsData.ships || shipsData || [];
-                    console.log('[HISTORY] Ships received:', ships.length);
-
-                    // Cache for re-rendering on camera move
-                    cachedHistoryShips = ships;
-
-                    updateShipsLayer(ships);
-
-                    // Update stats
-                    document.getElementById('total-ships').textContent = ships.length.toLocaleString();
-                    document.getElementById('stat-assets').textContent = ships.length;
-                    document.getElementById('last-update').textContent = displayTime.substring(11, 19);
-                } else {
-                    console.error('[HISTORY] API error:', shipsRes.status);
-                }
-
-                // Fetch satellites at this time (SGP4 will calculate correct positions)
-                const satsRes = await fetchWithTimeout(`/api/v1/satellites?time=${encodeURIComponent(isoTime)}`);
-                if (satsRes.ok) {
-                    const sats = await satsRes.json();
-                    updateSatellitesForTime(sats, jsDate);
-                }
-            } catch (err) {
-                console.warn('Error loading history data:', err);
-            }
-        }
 
         // Update satellites for a specific time (history mode)
         // Server already calculates SGP4 positions for the requested time
@@ -937,9 +926,6 @@
             document.getElementById('total-sats').textContent = sats.length;
         }
 
-        // Debounced version for timeline scrubbing
-        const debouncedLoadHistory = debounce(loadHistoryData, 300);
-
         // Load history time range from API
         async function loadHistoryRange() {
             try {
@@ -988,9 +974,6 @@
                 btnHistory.classList.remove('active');
                 indicator.classList.remove('visible');
 
-                // Stop history checker
-                stopHistoryChecker();
-
                 // Stop animation and reset to live time
                 viewer.clock.shouldAnimate = false;
                 viewer.clock.currentTime = Cesium.JulianDate.now();
@@ -1011,6 +994,12 @@
                         shipDataSources[type].entities.removeAll();
                     }
                 });
+
+                // Reset sliding window state
+                currentWindowCenter = null;
+                currentWindowStart = null;
+                currentWindowEnd = null;
+                historyInterpolationLoaded = false;
 
                 console.log('Switched to LIVE mode');
 
@@ -1039,70 +1028,74 @@
                 const rangeLoaded = await loadHistoryRange();
 
                 if (rangeLoaded) {
-                    // Load trajectories with interpolation for smooth playback
-                    // Use a 5-minute window around current time, or full range if smaller
-                    const windowMinutes = 5;
-                    const windowMs = windowMinutes * 60 * 1000;
+                    // Set initial time to most recent data point
+                    const initialCenter = new Date(historyRange.max);
 
-                    let startTime, endTime;
-                    if (historyRange.min && historyRange.max) {
-                        // Use full data range for interpolation
-                        startTime = Cesium.JulianDate.fromDate(new Date(historyRange.min));
-                        endTime = Cesium.JulianDate.fromDate(new Date(historyRange.max));
-                    } else {
-                        // Fallback to window around current time
-                        const now = new Date();
-                        startTime = Cesium.JulianDate.fromDate(new Date(now.getTime() - windowMs));
-                        endTime = Cesium.JulianDate.fromDate(now);
-                    }
-
-                    await loadHistoryWithInterpolation(startTime, endTime);
+                    // Load 1-hour window around initial time
+                    await loadHistoryWindow(initialCenter);
 
                     // Enable animation for smooth playback
                     viewer.clock.shouldAnimate = true;
                     viewer.clock.multiplier = 60; // 60x speed (1 min/sec)
-
-                    // onTick listener handles time display; SampledPositionProperty handles interpolation automatically
                 } else {
                     // No history data available — return to LIVE after brief message
                     document.getElementById('historyTimeDisplay').textContent = 'No history data — returning to LIVE';
                     setTimeout(() => setTimeMode('live'), 2000);
                 }
 
-                console.log('Switched to HISTORY mode with interpolation');
+                console.log('Switched to HISTORY mode with sliding window');
             }
         }
 
-        // Setup clock tick listener for history mode
+        // Setup clock tick listener for history mode — window boundary detection + prefetch
         viewer.clock.onTick.addEventListener((clock) => {
-            if (timeMode === 'history') {
-                // Update time display (interpolation handles position automatically)
-                const jsDate = Cesium.JulianDate.toDate(clock.currentTime);
-                const displayTime = jsDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-                document.getElementById('historyTimeDisplay').textContent = displayTime;
-                document.getElementById('last-update').textContent = displayTime.substring(11, 19);
+            if (timeMode !== 'history') return;
+
+            // Update time display
+            const jsDate = Cesium.JulianDate.toDate(clock.currentTime);
+            const displayTime = jsDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+            document.getElementById('historyTimeDisplay').textContent = displayTime;
+            document.getElementById('last-update').textContent = displayTime.substring(11, 19);
+
+            // Window boundary detection: reload when current time exceeds 70% of window
+            if (!currentWindowStart || !currentWindowEnd || isLoadingWindow) return;
+
+            const windowDuration = currentWindowEnd.getTime() - currentWindowStart.getTime();
+            const elapsed = jsDate.getTime() - currentWindowStart.getTime();
+            const progress = elapsed / windowDuration;
+
+            // If past 70% of window (forward) or before 10% (backward via scrub), load new window
+            if (progress > 0.7 || progress < -0.1) {
+                console.log('[HISTORY] Window boundary reached, progress:', (progress * 100).toFixed(0) + '%');
+                loadHistoryWindow(jsDate);
             }
         });
 
-        // Also listen for timeline scrubbing (when user clicks/drags timeline)
-        let historyCheckInterval = null;
-        function startHistoryChecker() {
-            if (historyCheckInterval) return;
-            historyCheckInterval = setInterval(() => {
-                if (timeMode !== 'history') return;
-                const currentTimeMs = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
-                if (Math.abs(currentTimeMs - lastHistoryFetchTime) > 1000) {
-                    lastHistoryFetchTime = currentTimeMs;
-                    debouncedLoadHistory(viewer.clock.currentTime);
-                }
-            }, 500);
-        }
-        function stopHistoryChecker() {
-            if (historyCheckInterval) {
-                clearInterval(historyCheckInterval);
-                historyCheckInterval = null;
+        // Timeline scrub: detect large time jumps via debounced check
+        let lastCheckedTime = 0;
+        const debouncedWindowJump = debounce((julianDate) => {
+            if (timeMode !== 'history' || isLoadingWindow) return;
+
+            const jsDate = Cesium.JulianDate.toDate(julianDate);
+
+            // Check if jumped outside current window
+            if (!currentWindowStart || !currentWindowEnd) {
+                loadHistoryWindow(jsDate);
+                return;
             }
-        }
+
+            if (jsDate < currentWindowStart || jsDate > currentWindowEnd) {
+                console.log('[HISTORY] Timeline jump detected, loading new window');
+                loadHistoryWindow(jsDate);
+            }
+        }, 500);
+
+        // Cesium timeline click/drag handler
+        viewer.timeline.addEventListener('settime', () => {
+            if (timeMode === 'history') {
+                debouncedWindowJump(viewer.clock.currentTime);
+            }
+        });
 
         // Setup mode toggle button listeners
         document.getElementById('btn-live').addEventListener('click', () => setTimeMode('live'));
@@ -1316,7 +1309,7 @@
         }, SAT_API_INTERVAL_MS);
 
         // Re-propagate positions every 5 seconds (local calculation, no API call)
-        // Only propagate in LIVE mode; HISTORY mode uses loadHistoryData
+        // Only propagate in LIVE mode; HISTORY mode uses sliding window
         setInterval(() => {
             if (timeMode === 'live') {
                 _propagateSatPositions();
