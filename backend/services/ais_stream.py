@@ -447,6 +447,11 @@ def _ais_stream_loop():
                         cur_lat = vessel.get("lat")
                         cur_lng = vessel.get("lng")
 
+                    # Backfill unknown ship_type in DB for this MMSI
+                    classified_type = vessel.get("type", "unknown")
+                    if classified_type and classified_type not in ("unknown", "other"):
+                        history_writer.update_ship_type(mmsi, classified_type)
+
                     # --- Anomaly: Destination change ---
                     if (old_dest and new_dest and old_dest != new_dest
                             and old_dest not in ("UNKNOWN", "@", "")
