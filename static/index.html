@@ -1974,7 +1974,7 @@
                             if (alert.lat && alert.lng) {
                                 card.style.cursor = 'pointer';
                                 card.addEventListener('click', () => {
-                                    const mmsiStr = alert.mmsi.toString();
+                                    const mmsi = alert.mmsi;
 
                                     // 먼저 위치로 이동, 이동 완료 후 엔티티 찾기
                                     viewer.camera.flyTo({
@@ -1982,12 +1982,16 @@
                                         duration: 1.5,
                                         complete: () => {
                                             // 이동 완료 후 엔티티 찾기 (이제 뷰포트 안에 있음)
+                                            // 엔티티 ID 타입이 숫자/문자열 모두 가능하므로 둘 다 시도
                                             setTimeout(() => {
+                                                let found = false;
                                                 for (const type in shipDataSources) {
                                                     const ds = shipDataSources[type];
-                                                    const entity = ds.entities.getById(mmsiStr);
+                                                    const entity = ds.entities.getById(mmsi) || ds.entities.getById(String(mmsi)) || ds.entities.getById(Number(mmsi));
                                                     if (entity) {
                                                         viewer.selectedEntity = entity;
+                                                        showShipInfo(entity);
+                                                        found = true;
                                                         break;
                                                     }
                                                 }
