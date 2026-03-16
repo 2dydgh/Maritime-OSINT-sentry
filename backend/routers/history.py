@@ -9,7 +9,7 @@ Provides endpoints for:
 
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Request
 from pydantic import BaseModel
 import logging
 
@@ -182,7 +182,11 @@ async def get_bulk_trajectories(
     start: datetime = Query(..., description="Start time (ISO 8601)"),
     end: datetime = Query(..., description="End time (ISO 8601)"),
     limit_per_ship: int = Query(default=60, description="Max points per ship"),
-    max_ships: int = Query(default=500, ge=1, le=2000, description="Max number of ships to return")
+    max_ships: int = Query(default=2000, ge=1, le=5000, description="Max number of ships to return"),
+    west: Optional[float] = Query(default=None, description="Bounding box west longitude"),
+    south: Optional[float] = Query(default=None, description="Bounding box south latitude"),
+    east: Optional[float] = Query(default=None, description="Bounding box east longitude"),
+    north: Optional[float] = Query(default=None, description="Bounding box north latitude"),
 ):
     """
     Retrieve trajectory data for ALL ships within a time range.
@@ -199,43 +203,83 @@ async def get_bulk_trajectories(
     # Get vessel metadata for enrichment
     vessel_metadata = get_all_vessel_metadata()
 
-    # Query: get trajectory points for all ships, limited samples per ship
-    query = """
-        WITH ship_activity AS (
-            SELECT object_id, COUNT(*) as point_count
-            FROM trajectories
-            WHERE object_type = 'ship'
-              AND record_time BETWEEN $1 AND $2
-            GROUP BY object_id
-            HAVING COUNT(*) >= 2
-            ORDER BY point_count DESC
-            LIMIT $4
-        ),
-        ranked AS (
-            SELECT
-                t.object_id as mmsi,
-                ST_Y(t.geom::geometry) as lat,
-                ST_X(t.geom::geometry) as lng,
-                t.velocity as sog,
-                t.heading,
-                t.record_time,
-                t.ship_type,
-                ROW_NUMBER() OVER (PARTITION BY t.object_id ORDER BY t.record_time ASC) as rn,
-                COUNT(*) OVER (PARTITION BY t.object_id) as total_points
-            FROM trajectories t
-            INNER JOIN ship_activity s ON t.object_id = s.object_id
-            WHERE t.object_type = 'ship'
-              AND t.record_time BETWEEN $1 AND $2
-        )
-        SELECT mmsi, lat, lng, sog, heading, record_time, ship_type
-        FROM ranked
-        WHERE rn <= $3 OR rn % GREATEST(1, total_points / $3) = 0
-        ORDER BY mmsi, record_time ASC
-    """
+    # Build query with optional bbox filtering
+    has_bbox = all(v is not None for v in (west, south, east, north))
+
+    if has_bbox:
+        bbox_filter = "AND ST_Intersects(geom, ST_MakeEnvelope($5, $6, $7, $8, 4326))"
+        query = f"""
+            WITH ship_activity AS (
+                SELECT object_id, COUNT(*) as point_count
+                FROM trajectories
+                WHERE object_type = 'ship'
+                  AND record_time BETWEEN $1 AND $2
+                  {bbox_filter}
+                GROUP BY object_id
+                HAVING COUNT(*) >= 2
+                ORDER BY point_count DESC
+                LIMIT $4
+            ),
+            ranked AS (
+                SELECT
+                    t.object_id as mmsi,
+                    ST_Y(t.geom::geometry) as lat,
+                    ST_X(t.geom::geometry) as lng,
+                    t.velocity as sog,
+                    t.heading,
+                    t.record_time,
+                    t.ship_type,
+                    ROW_NUMBER() OVER (PARTITION BY t.object_id ORDER BY t.record_time ASC) as rn,
+                    COUNT(*) OVER (PARTITION BY t.object_id) as total_points
+                FROM trajectories t
+                INNER JOIN ship_activity s ON t.object_id = s.object_id
+                WHERE t.object_type = 'ship'
+                  AND t.record_time BETWEEN $1 AND $2
+            )
+            SELECT mmsi, lat, lng, sog, heading, record_time, ship_type
+            FROM ranked
+            WHERE rn <= $3 OR rn % GREATEST(1, total_points / $3) = 0
+            ORDER BY mmsi, record_time ASC
+        """
+        params = [start, end, limit_per_ship, max_ships, west, south, east, north]
+    else:
+        query = """
+            WITH ship_activity AS (
+                SELECT object_id, COUNT(*) as point_count
+                FROM trajectories
+                WHERE object_type = 'ship'
+                  AND record_time BETWEEN $1 AND $2
+                GROUP BY object_id
+                HAVING COUNT(*) >= 2
+                ORDER BY point_count DESC
+                LIMIT $4
+            ),
+            ranked AS (
+                SELECT
+                    t.object_id as mmsi,
+                    ST_Y(t.geom::geometry) as lat,
+                    ST_X(t.geom::geometry) as lng,
+                    t.velocity as sog,
+                    t.heading,
+                    t.record_time,
+                    t.ship_type,
+                    ROW_NUMBER() OVER (PARTITION BY t.object_id ORDER BY t.record_time ASC) as rn,
+                    COUNT(*) OVER (PARTITION BY t.object_id) as total_points
+                FROM trajectories t
+                INNER JOIN ship_activity s ON t.object_id = s.object_id
+                WHERE t.object_type = 'ship'
+                  AND t.record_time BETWEEN $1 AND $2
+            )
+            SELECT mmsi, lat, lng, sog, heading, record_time, ship_type
+            FROM ranked
+            WHERE rn <= $3 OR rn % GREATEST(1, total_points / $3) = 0
+            ORDER BY mmsi, record_time ASC
+        """
+        params = [start, end, limit_per_ship, max_ships]
 
     try:
         async with pool.acquire() as conn:
-            rows = await conn.fetch(query, start, end, limit_per_ship, max_ships)
+            rows = await conn.fetch(query, *params)
 
             # Group by mmsi
             ships = {}
