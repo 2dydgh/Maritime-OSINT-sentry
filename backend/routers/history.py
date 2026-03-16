@@ -181,7 +181,8 @@ async def get_ship_trajectory(
 async def get_bulk_trajectories(
     start: datetime = Query(..., description="Start time (ISO 8601)"),
     end: datetime = Query(..., description="End time (ISO 8601)"),
-    limit_per_ship: int = Query(default=20, description="Max points per ship")
+    limit_per_ship: int = Query(default=60, description="Max points per ship"),
+    max_ships: int = Query(default=500, ge=1, le=2000, description="Max number of ships to return")
 ):
     """
     Retrieve trajectory data for ALL ships within a time range.
@@ -200,13 +201,15 @@ async def get_bulk_trajectories(
 
     # Query: get trajectory points for all ships, limited samples per ship
     query = """
-        WITH ship_ids AS (
-            SELECT DISTINCT object_id
+        WITH ship_activity AS (
+            SELECT object_id, COUNT(*) as point_count
             FROM trajectories
             WHERE object_type = 'ship'
               AND record_time BETWEEN $1 AND $2
-            ORDER BY object_id
-            LIMIT 200
+            GROUP BY object_id
+            HAVING COUNT(*) >= 2
+            ORDER BY point_count DESC
+            LIMIT $4
         ),
         ranked AS (
             SELECT
@@ -220,7 +223,7 @@ async def get_bulk_trajectories(
                 ROW_NUMBER() OVER (PARTITION BY t.object_id ORDER BY t.record_time ASC) as rn,
                 COUNT(*) OVER (PARTITION BY t.object_id) as total_points
             FROM trajectories t
-            INNER JOIN ship_ids s ON t.object_id = s.object_id
+            INNER JOIN ship_activity s ON t.object_id = s.object_id
             WHERE t.object_type = 'ship'
               AND t.record_time BETWEEN $1 AND $2
         )
@@ -232,7 +235,7 @@ async def get_bulk_trajectories(
 
     try:
         async with pool.acquire() as conn:
-            rows = await conn.fetch(query, start, end, limit_per_ship)
+            rows = await conn.fetch(query, start, end, limit_per_ship, max_ships)
 
             # Group by mmsi
             ships = {}
