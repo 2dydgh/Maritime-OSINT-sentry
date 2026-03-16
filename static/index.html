@@ -719,6 +719,18 @@
             };
         }
 
+        // Get current viewport bounding box as query string params
+        function getViewportBbox() {
+            const rect = viewer.camera.computeViewRectangle();
+            if (!rect) return '';
+            const buffer = 0.5; // degrees buffer
+            const west = Cesium.Math.toDegrees(rect.west) - buffer;
+            const south = Cesium.Math.toDegrees(rect.south) - buffer;
+            const east = Cesium.Math.toDegrees(rect.east) + buffer;
+            const north = Cesium.Math.toDegrees(rect.north) + buffer;
+            return `&west=${west.toFixed(4)}&south=${south.toFixed(4)}&east=${east.toFixed(4)}&north=${north.toFixed(4)}`;
+        }
+
         // Fetch helper with configurable timeout (aborts stale requests)
         function fetchWithTimeout(url, timeoutMs = 10000) {
             const controller = new AbortController();
@@ -743,8 +755,9 @@
             console.log('[HISTORY] Loading window:', startIso, 'to', endIso);
 
             try {
+                const bbox = getViewportBbox();
                 const res = await fetchWithTimeout(
-                    `/api/v1/history/trajectories?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&limit_per_ship=60&max_ships=500`,
+                    `/api/v1/history/trajectories?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&limit_per_ship=60${bbox}`,
                     15000
                 );
                 if (!res.ok) {
@@ -1074,6 +1087,19 @@
         viewer.timeline.addEventListener('settime', () => {
             if (timeMode === 'history') {
                 debouncedWindowJump(viewer.clock.currentTime);
+            }
+        });
+
+        // Camera move: reload history data for new viewport
+        const debouncedViewportReload = debounce(() => {
+            if (timeMode !== 'history' || isLoadingWindow || !currentWindowCenter) return;
+            console.log('[HISTORY] Viewport changed, reloading for new bbox');
+            loadHistoryWindow(currentWindowCenter);
+        }, 800);
+
+        viewer.camera.moveEnd.addEventListener(() => {
+            if (timeMode === 'history') {
+                debouncedViewportReload();
             }
         });
 
