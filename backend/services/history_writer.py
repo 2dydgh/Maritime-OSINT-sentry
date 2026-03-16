@@ -174,3 +174,41 @@ def record_position(
             pass
 
 
+def update_ship_type(mmsi: int, ship_type: str) -> None:
+    """
+    ShipStaticData 도착 시 해당 MMSI의 'unknown' 레코드를 일괄 업데이트.
+    메인 이벤트 루프에서 비동기 DB 업데이트를 스케줄링한다.
+    """
+    if not _db_pool or not _main_loop or not _running:
+        return
+    if not ship_type or ship_type == "unknown":
+        return
+
+    mmsi_str = str(mmsi)
+
+    async def _do_update():
+        try:
+            async with _db_pool.acquire() as conn:
+                result = await conn.execute(
+                    """
+                    UPDATE trajectories
+                    SET ship_type = $1
+                    WHERE object_id = $2
+                      AND object_type = 'ship'
+                      AND (ship_type IS NULL OR ship_type = 'unknown')
+                      AND record_time > NOW() - INTERVAL '1 hour'
+                    """,
+                    ship_type, mmsi_str
+                )
+                if result and result != "UPDATE 0":
+                    logger.debug(f"Updated ship_type for MMSI {mmsi_str}: {result}")
+        except Exception as e:
+            logger.warning(f"Failed to update ship_type for MMSI {mmsi_str}: {e}")
+
+    try:
+        _main_loop.call_soon_threadsafe(
+            lambda: asyncio.create_task(_do_update())
+        )
+    except RuntimeError:
+        pass
+
