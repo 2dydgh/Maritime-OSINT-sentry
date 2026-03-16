@@ -914,6 +914,8 @@
         });
 
         // ── Time Control Bar Logic ───────────────────────────────────────────
+        // timeMode declared early so updateClock() can reference it
+        let timeMode = 'live'; // 'live' | 'history'
         const SPEED_STEPS = [1, 10, 60, 300, 600];
         let currentSpeedIndex = 2; // default 60x
         let _lastPlayingState = null;
@@ -1035,7 +1037,6 @@
         // ─────────────────────────────────────────────────────────────────────
 
         // ── Time Travel Mode ───────────────────────────────────────────────────
-        let timeMode = 'live'; // 'live' | 'history'
         let liveClockIntervalId = null;
         let historyRange = { min: null, max: null };
 
