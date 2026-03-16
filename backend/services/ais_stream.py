@@ -11,6 +11,8 @@ import time
 from datetime import datetime, timezone
 import os
 
+from . import history_writer
+
 logger = logging.getLogger(__name__)
 
 AIS_WS_URL = "wss://stream.aisstream.io/v0/stream"
@@ -233,11 +235,42 @@ def _load_cache():
         logger.error(f"Failed to load AIS cache: {e}")
 
 
+def get_vessel_metadata(mmsi: int) -> dict | None:
+    """Get metadata for a specific vessel by MMSI (name, type, country, etc.)."""
+    with _vessels_lock:
+        v = _vessels.get(mmsi)
+        if v:
+            return {
+                "mmsi": mmsi,
+                "name": v.get("name", "UNKNOWN"),
+                "type": v.get("type", "unknown"),
+                "country": get_country_from_mmsi(mmsi),
+                "callsign": v.get("callsign", ""),
+                "destination": v.get("destination", "") or "UNKNOWN",
+                "imo": v.get("imo", 0),
+            }
+    return None
+
+
+def get_all_vessel_metadata() -> dict[int, dict]:
+    """Get metadata for all tracked vessels as a dict keyed by MMSI."""
+    with _vessels_lock:
+        return {
+            mmsi: {
+                "name": v.get("name", "UNKNOWN"),
+                "type": v.get("type", "unknown"),
+                "country": get_country_from_mmsi(mmsi),
+            }
+            for mmsi, v in _vessels.items()
+            if v.get("name")  # Only vessels with known metadata
+        }
+
+
 def get_ais_vessels() -> list[dict]:
     """Return a snapshot of tracked AIS vessels, excluding 'other' type, pruning stale."""
     now = time.time()
     stale_cutoff = now - 900  # 15 minutes
-    
+
     with _vessels_lock:
         # Prune stale vessels
         stale_keys = [k for k, v in _vessels.items() if v.get("_updated", 0) < stale_cutoff]
@@ -356,6 +389,25 @@ def _ais_stream_loop():
                         # Use metadata name if we don't have one yet
                         if not vessel.get("name") or vessel["name"] == "UNKNOWN":
                             vessel["name"] = metadata.get("ShipName", "UNKNOWN").strip() or "UNKNOWN"
+
+                    # --- Record position to history writer for DB persistence ---
+                    try:
+                        sog_val = report.get("Sog", 0) or 0
+                        heading_val = vessel.get("heading", 0) or 0
+                        ship_type = vessel.get("type", "unknown") or "unknown"
+                        ship_name = vessel.get("name", "UNKNOWN") or "UNKNOWN"
+                        history_writer.record_position(
+                            mmsi=mmsi,
+                            lat=lat,
+                            lng=lng,
+                            sog=sog_val,
+                            heading=heading_val,
+                            ship_type=ship_type,
+                            ship_name=ship_name
+                        )
+                    except Exception as e:
+                        # DB 기록 실패해도 실시간 기능은 계속 동작
+                        logger.warning(f"History record failed for MMSI {mmsi}: {e}")
 
                     # --- Anomaly: Speeding vessel ---
                     sog = report.get("Sog", 0)

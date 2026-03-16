@@ -383,6 +383,71 @@
             color: #38bdf8 !important;
             fill: #38bdf8 !important;
         }
+
+        /* Mode Toggle Buttons */
+        .mode-toggle {
+            display: flex;
+            gap: 8px;
+            margin-right: 30px;
+        }
+
+        .mode-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--panel-border);
+            color: var(--text-dim);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .mode-btn.active {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .mode-btn:hover:not(.active) {
+            background: rgba(56, 189, 248, 0.1);
+        }
+
+        .mode-btn.history-mode.active {
+            background: rgba(168, 85, 247, 0.2);
+            border-color: #a855f7;
+            color: #a855f7;
+        }
+
+        /* History mode indicator */
+        .history-indicator {
+            display: none;
+            position: absolute;
+            top: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(168, 85, 247, 0.9);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            z-index: 100;
+            box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
+        }
+
+        .history-indicator.visible {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .history-indicator i {
+            animation: pulse 1.5s infinite;
+        }
     </style>
 </head>
 
@@ -399,6 +464,15 @@
                 DASHBOARD</span>
         </div>
         <div class="header-stats">
+            <!-- Mode Toggle -->
+            <div class="mode-toggle">
+                <button id="btn-live" class="mode-btn active">
+                    <i class="fa-solid fa-broadcast-tower"></i> LIVE
+                </button>
+                <button id="btn-history" class="mode-btn history-mode">
+                    <i class="fa-solid fa-clock-rotate-left"></i> HISTORY
+                </button>
+            </div>
             <div class="stat-item">
                 <span class="stat-value" id="stat-events">0</span>
                 <span class="stat-label">Active Events</span>
@@ -413,6 +487,12 @@
             </div>
         </div>
     </header>
+
+    <!-- History Mode Indicator -->
+    <div id="historyIndicator" class="history-indicator">
+        <i class="fa-solid fa-clock-rotate-left"></i>
+        <span id="historyTimeDisplay">--</span>
+    </div>
 
     <!-- Left Feed Panel -->
     <div id="feedPanel" class="glass-panel">
@@ -517,6 +597,31 @@
             }))
         });
 
+        // ── Hybrid Map: Ocean (low zoom) + OSM (high zoom) ─────────────────────
+        // OpenStreetMap 레이어 추가 (높은 줌 레벨용)
+        const osmLayer = viewer.imageryLayers.addImageryProvider(
+            new Cesium.UrlTemplateImageryProvider({
+                url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                credit: '© OpenStreetMap contributors',
+                minimumLevel: 0,
+                maximumLevel: 19
+            })
+        );
+        osmLayer.alpha = 0; // 처음엔 투명
+
+        // 카메라 높이에 따라 레이어 전환 (Esri Ocean max level 13 ≈ 150km)
+        viewer.camera.changed.addEventListener(() => {
+            const height = viewer.camera.positionCartographic.height;
+            // 150km 이하로 내려가면 OSM 표시 시작 (Esri 한계 전에 전환)
+            if (height < 150000) {
+                // 높이에 따라 부드럽게 전환 (150km~50km 사이)
+                const t = Math.max(0, Math.min(1, (150000 - height) / 100000));
+                osmLayer.alpha = t;
+            } else {
+                osmLayer.alpha = 0;
+            }
+        });
+
         // ── Globe appearance: tactical dark style ─────────────────────────────
         const scene = viewer.scene;
         const globe = viewer.scene.globe;
@@ -528,10 +633,7 @@
         const now = Cesium.JulianDate.now();
         viewer.clock.currentTime = now;
         viewer.clock.shouldAnimate = false; // Don't advance the simulation clock
-        // Keep updating Cesium's internal time with real wall-clock every second
-        setInterval(() => {
-            viewer.clock.currentTime = Cesium.JulianDate.now();
-        }, 1000);
+        // Live clock sync is now managed by the Time Travel Mode section below
 
         // Deep space atmosphere — more dramatic blue-violet glow
         scene.skyAtmosphere.hueShift = -0.05;      // slight blue shift
@@ -561,6 +663,459 @@
         setInterval(updateClock, 1000);
         updateClock();
 
+        // ── Satellite Colors & Icon (needed by Time Travel Mode) ─────────────
+        const SAT_COLORS = {
+            military_recon: '#ef4444', // Red
+            military_sar: '#f97316', // Orange
+            sar: '#f97316', // Orange
+            sigint: '#eab308', // Yellow
+            navigation: '#10b981', // Green
+            early_warning: '#a855f7', // Purple
+            space_station: '#3b82f6', // Blue
+            commercial_imaging: '#94a3b8', // Grey-blue
+        };
+
+        function getSatIcon(colorHex) {
+            const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='3' fill='${colorHex}'/><line x1='12' y1='2' x2='12' y2='6' stroke='${colorHex}' stroke-width='2'/><line x1='12' y1='18' x2='12' y2='22' stroke='${colorHex}' stroke-width='2'/><line x1='2' y1='12' x2='6' y2='12' stroke='${colorHex}' stroke-width='2'/><line x1='18' y1='12' x2='22' y2='12' stroke='${colorHex}' stroke-width='2'/></svg>`;
+            return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+        }
+
+        // Satellite data source (needed by both Time Travel and Satellite Layer sections)
+        const satDataSource = new Cesium.CustomDataSource('Satellites');
+        viewer.dataSources.add(satDataSource);
+        satDataSource.show = false;
+
+        // TLE cache for satellite.js propagation
+        let _satRecCache = {};
+
+        // Ship data sources (needed by Time Travel Mode for entity cleanup)
+        const shipDataSources = {};
+        const SHIP_TYPES = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
+        // ─────────────────────────────────────────────────────────────────────
+
+        // ── Time Travel Mode ───────────────────────────────────────────────────
+        let timeMode = 'live'; // 'live' | 'history'
+        let liveClockIntervalId = null;
+        let historyRange = { min: null, max: null };
+        let lastHistoryFetchTime = 0;
+        let cachedHistoryShips = []; // Cache for re-rendering on camera move
+
+        // Debounce function
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Re-render history ships on camera move (debounced)
+        const debouncedHistoryRerender = debounce(() => {
+            if (timeMode === 'history' && cachedHistoryShips.length > 0) {
+                console.log('[HISTORY] Re-rendering on camera move:', cachedHistoryShips.length, 'ships');
+                updateShipsLayer(cachedHistoryShips);
+            }
+        }, 300);
+
+        // Listen for camera movement to re-render in HISTORY mode
+        viewer.camera.moveEnd.addEventListener(() => {
+            debouncedHistoryRerender();
+        });
+
+        // Fetch helper with configurable timeout (aborts stale requests)
+        function fetchWithTimeout(url, timeoutMs = 10000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeoutMs);
+            return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(id));
+        }
+
+        // Load history data with interpolation for smooth playback
+        let historyInterpolationLoaded = false;
+
+        async function loadHistoryWithInterpolation(startTime, endTime) {
+            const startIso = Cesium.JulianDate.toDate(startTime).toISOString();
+            const endIso = Cesium.JulianDate.toDate(endTime).toISOString();
+
+            console.log('[HISTORY] Loading trajectories for interpolation:', startIso, 'to', endIso);
+
+            try {
+                const res = await fetchWithTimeout(`/api/v1/history/trajectories?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&limit_per_ship=30`);
+                if (!res.ok) {
+                    console.error('[HISTORY] Trajectory API error:', res.status);
+                    return;
+                }
+
+                const data = await res.json();
+                const ships = data.ships || {};
+                const shipCount = Object.keys(ships).length;
+                console.log('[HISTORY] Loaded trajectories for', shipCount, 'ships');
+
+                // Clear existing ship entities
+                SHIP_TYPES.forEach(type => {
+                    if (shipDataSources[type]) {
+                        shipDataSources[type].entities.removeAll();
+                    }
+                });
+
+                // Create entities with SampledPositionProperty for each ship
+                for (const [mmsi, shipData] of Object.entries(ships)) {
+                    if (shipData.points.length < 2) continue; // Need at least 2 points for interpolation
+
+                    const type = shipData.type || 'other';
+                    const ds = shipDataSources[type] || shipDataSources['other'];
+                    if (!ds) continue;
+
+                    // Create SampledPositionProperty
+                    const positionProperty = new Cesium.SampledPositionProperty();
+                    positionProperty.setInterpolationOptions({
+                        interpolationDegree: 1,
+                        interpolationAlgorithm: Cesium.LinearApproximation
+                    });
+
+                    // Create heading property for rotation
+                    const headingProperty = new Cesium.SampledProperty(Number);
+
+                    // Add samples
+                    shipData.points.forEach(pt => {
+                        const time = Cesium.JulianDate.fromIso8601(pt.time);
+                        const position = Cesium.Cartesian3.fromDegrees(pt.lng, pt.lat);
+                        positionProperty.addSample(time, position);
+                        headingProperty.addSample(time, pt.heading || 0);
+                    });
+
+                    // Create entity with interpolated position
+                    ds.entities.add({
+                        id: mmsi,
+                        name: shipData.name || 'UNKNOWN',
+                        description: `
+                            <table class="cesium-infoBox-defaultTable">
+                                <tbody>
+                                    <tr><th>Name</th><td>${shipData.name}</td></tr>
+                                    <tr><th>MMSI</th><td>${mmsi}</td></tr>
+                                    <tr><th>Type</th><td>${shipData.type}</td></tr>
+                                    <tr><th>Country</th><td>${shipData.country}</td></tr>
+                                </tbody>
+                            </table>
+                        `,
+                        position: positionProperty,
+                        billboard: {
+                            image: getShipIcon(SHIP_COLORS[type] || SHIP_COLORS['other']),
+                            width: 14,
+                            height: 16,
+                            rotation: new Cesium.CallbackProperty(() => {
+                                const heading = headingProperty.getValue(viewer.clock.currentTime);
+                                return Cesium.Math.toRadians(-(heading || 0));
+                            }, false)
+                        }
+                    });
+                }
+
+                historyInterpolationLoaded = true;
+                document.getElementById('total-ships').textContent = shipCount.toLocaleString();
+                document.getElementById('stat-assets').textContent = shipCount;
+                console.log('[HISTORY] Interpolation entities created:', shipCount);
+
+            } catch (err) {
+                console.error('[HISTORY] Error loading trajectories:', err);
+                document.getElementById('historyTimeDisplay').textContent = 'Load error — returning to LIVE';
+                setTimeout(() => setTimeMode('live'), 2000);
+            }
+        }
+
+        // Load history data for a specific time (fallback, non-interpolated)
+        async function loadHistoryData(julianDate) {
+            const jsDate = Cesium.JulianDate.toDate(julianDate);
+            const isoTime = jsDate.toISOString();
+
+            // Update history indicator display
+            const displayTime = jsDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+            document.getElementById('historyTimeDisplay').textContent = displayTime;
+
+            console.log('[HISTORY] Loading data for:', isoTime);
+
+            try {
+                // Fetch ships at this time
+                const shipsRes = await fetchWithTimeout(`/api/v1/history/ships?time=${encodeURIComponent(isoTime)}`);
+                console.log('[HISTORY] API response status:', shipsRes.status);
+
+                if (shipsRes.ok) {
+                    const shipsData = await shipsRes.json();
+                    const ships = shipsData.ships || shipsData || [];
+                    console.log('[HISTORY] Ships received:', ships.length);
+
+                    // Cache for re-rendering on camera move
+                    cachedHistoryShips = ships;
+
+                    updateShipsLayer(ships);
+
+                    // Update stats
+                    document.getElementById('total-ships').textContent = ships.length.toLocaleString();
+                    document.getElementById('stat-assets').textContent = ships.length;
+                    document.getElementById('last-update').textContent = displayTime.substring(11, 19);
+                } else {
+                    console.error('[HISTORY] API error:', shipsRes.status);
+                }
+
+                // Fetch satellites at this time (SGP4 will calculate correct positions)
+                const satsRes = await fetchWithTimeout(`/api/v1/satellites?time=${encodeURIComponent(isoTime)}`);
+                if (satsRes.ok) {
+                    const sats = await satsRes.json();
+                    updateSatellitesForTime(sats, jsDate);
+                }
+            } catch (err) {
+                console.warn('Error loading history data:', err);
+            }
+        }
+
+        // Update satellites for a specific time (history mode)
+        // Server already calculates SGP4 positions for the requested time
+        function updateSatellitesForTime(sats, targetDate) {
+            // Use server-provided pre-calculated positions
+            sats.forEach(sat => {
+                const satId = String(sat.id);
+                const lat = sat.lat;
+                const lng = sat.lng;
+                const altKm = sat.alt_km || 0;
+                const color = SAT_COLORS[sat.mission] || '#94a3b8';
+                const position = Cesium.Cartesian3.fromDegrees(lng, lat, altKm * 1000);
+
+                let entity = satDataSource.entities.getById(satId);
+                if (!entity) {
+                    // Create entity if it doesn't exist
+                    satDataSource.entities.add({
+                        id: satId,
+                        name: sat.name,
+                        description: `
+                            <table class="cesium-infoBox-defaultTable"><tbody>
+                                <tr><th>Name</th><td>${sat.name}</td></tr>
+                                <tr><th>NORAD ID</th><td>${sat.id}</td></tr>
+                                <tr><th>Country</th><td>${sat.country || 'UNKNOWN'}</td></tr>
+                                <tr><th>Mission</th><td>${sat.sat_type || sat.mission || '-'}</td></tr>
+                                <tr><th>Altitude</th><td>${Math.round(altKm)} km</td></tr>
+                                <tr><th>Speed</th><td>${sat.speed_knots || 0} kts</td></tr>
+                                ${sat.wiki ? `<tr><th>Info</th><td><a href="${sat.wiki}" target="_blank">Wikipedia</a></td></tr>` : ''}
+                            </tbody></table>
+                        `,
+                        position: position,
+                        billboard: {
+                            image: getSatIcon(color),
+                            width: 18,
+                            height: 18,
+                            scaleByDistance: new Cesium.NearFarScalar(1.5e7, 1.5, 8.0e7, 0.5),
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY
+                        },
+                        label: {
+                            text: sat.name,
+                            font: '10px JetBrains Mono, monospace',
+                            fillColor: Cesium.Color.fromCssColorString(color),
+                            outlineColor: Cesium.Color.BLACK,
+                            outlineWidth: 2,
+                            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                            pixelOffset: new Cesium.Cartesian2(0, -20),
+                            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2e7),
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY
+                        }
+                    });
+                } else {
+                    entity.position = position;
+                }
+
+                // Update cache for consistency
+                _satRecCache[satId] = { satrec: null, sat };
+            });
+
+            // Remove satellites not in the current result
+            const currentIds = new Set(sats.map(s => String(s.id)));
+            satDataSource.entities.values
+                .filter(e => !currentIds.has(e.id))
+                .forEach(e => satDataSource.entities.remove(e));
+
+            document.getElementById('total-sats').textContent = sats.length;
+        }
+
+        // Debounced version for timeline scrubbing
+        const debouncedLoadHistory = debounce(loadHistoryData, 300);
+
+        // Load history time range from API
+        async function loadHistoryRange() {
+            try {
+                const res = await fetchWithTimeout('/api/v1/history/range');
+                if (!res.ok) {
+                    console.warn('History range API not available');
+                    return false;
+                }
+                const range = await res.json();
+
+                if (range.min_time && range.max_time) {
+                    historyRange.min = range.min_time;
+                    historyRange.max = range.max_time;
+
+                    const start = Cesium.JulianDate.fromIso8601(range.min_time);
+                    const stop = Cesium.JulianDate.fromIso8601(range.max_time);
+
+                    // Set timeline bounds
+                    viewer.timeline.zoomTo(start, stop);
+                    viewer.clock.startTime = start.clone();
+                    viewer.clock.stopTime = stop.clone();
+                    viewer.clock.currentTime = stop.clone(); // Start at most recent
+                    viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
+                    viewer.clock.multiplier = 60; // 1 minute per second default
+
+                    return true;
+                }
+                return false;
+            } catch (err) {
+                console.warn('Error loading history range:', err);
+                return false;
+            }
+        }
+
+        // Set time mode (live or history)
+        async function setTimeMode(mode) {
+            const btnLive = document.getElementById('btn-live');
+            const btnHistory = document.getElementById('btn-history');
+            const indicator = document.getElementById('historyIndicator');
+
+            if (mode === 'live') {
+                timeMode = 'live';
+
+                // Update UI
+                btnLive.classList.add('active');
+                btnHistory.classList.remove('active');
+                indicator.classList.remove('visible');
+
+                // Stop history checker
+                stopHistoryChecker();
+
+                // Stop animation and reset to live time
+                viewer.clock.shouldAnimate = false;
+                viewer.clock.currentTime = Cesium.JulianDate.now();
+
+                // Restart live clock sync
+                if (!liveClockIntervalId) {
+                    liveClockIntervalId = setInterval(() => {
+                        if (timeMode === 'live') {
+                            viewer.clock.currentTime = Cesium.JulianDate.now();
+                        }
+                    }, 1000);
+                }
+
+                // Clear ship entities and history cache
+                cachedHistoryShips = [];
+                SHIP_TYPES.forEach(type => {
+                    if (shipDataSources[type]) {
+                        shipDataSources[type].entities.removeAll();
+                    }
+                });
+
+                console.log('Switched to LIVE mode');
+
+            } else if (mode === 'history') {
+                timeMode = 'history';
+
+                // Update UI
+                btnLive.classList.remove('active');
+                btnHistory.classList.add('active');
+                indicator.classList.add('visible');
+
+                // Stop live clock sync
+                if (liveClockIntervalId) {
+                    clearInterval(liveClockIntervalId);
+                    liveClockIntervalId = null;
+                }
+
+                // Clear existing ship entities (from LIVE mode)
+                SHIP_TYPES.forEach(type => {
+                    if (shipDataSources[type]) {
+                        shipDataSources[type].entities.removeAll();
+                    }
+                });
+
+                // Load history range and setup timeline
+                const rangeLoaded = await loadHistoryRange();
+
+                if (rangeLoaded) {
+                    // Load trajectories with interpolation for smooth playback
+                    // Use a 5-minute window around current time, or full range if smaller
+                    const windowMinutes = 5;
+                    const windowMs = windowMinutes * 60 * 1000;
+
+                    let startTime, endTime;
+                    if (historyRange.min && historyRange.max) {
+                        // Use full data range for interpolation
+                        startTime = Cesium.JulianDate.fromDate(new Date(historyRange.min));
+                        endTime = Cesium.JulianDate.fromDate(new Date(historyRange.max));
+                    } else {
+                        // Fallback to window around current time
+                        const now = new Date();
+                        startTime = Cesium.JulianDate.fromDate(new Date(now.getTime() - windowMs));
+                        endTime = Cesium.JulianDate.fromDate(now);
+                    }
+
+                    await loadHistoryWithInterpolation(startTime, endTime);
+
+                    // Enable animation for smooth playback
+                    viewer.clock.shouldAnimate = true;
+                    viewer.clock.multiplier = 60; // 60x speed (1 min/sec)
+
+                    // onTick listener handles time display; SampledPositionProperty handles interpolation automatically
+                } else {
+                    // No history data available — return to LIVE after brief message
+                    document.getElementById('historyTimeDisplay').textContent = 'No history data — returning to LIVE';
+                    setTimeout(() => setTimeMode('live'), 2000);
+                }
+
+                console.log('Switched to HISTORY mode with interpolation');
+            }
+        }
+
+        // Setup clock tick listener for history mode
+        viewer.clock.onTick.addEventListener((clock) => {
+            if (timeMode === 'history') {
+                // Update time display (interpolation handles position automatically)
+                const jsDate = Cesium.JulianDate.toDate(clock.currentTime);
+                const displayTime = jsDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+                document.getElementById('historyTimeDisplay').textContent = displayTime;
+                document.getElementById('last-update').textContent = displayTime.substring(11, 19);
+            }
+        });
+
+        // Also listen for timeline scrubbing (when user clicks/drags timeline)
+        let historyCheckInterval = null;
+        function startHistoryChecker() {
+            if (historyCheckInterval) return;
+            historyCheckInterval = setInterval(() => {
+                if (timeMode !== 'history') return;
+                const currentTimeMs = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+                if (Math.abs(currentTimeMs - lastHistoryFetchTime) > 1000) {
+                    lastHistoryFetchTime = currentTimeMs;
+                    debouncedLoadHistory(viewer.clock.currentTime);
+                }
+            }, 500);
+        }
+        function stopHistoryChecker() {
+            if (historyCheckInterval) {
+                clearInterval(historyCheckInterval);
+                historyCheckInterval = null;
+            }
+        }
+
+        // Setup mode toggle button listeners
+        document.getElementById('btn-live').addEventListener('click', () => setTimeMode('live'));
+        document.getElementById('btn-history').addEventListener('click', () => setTimeMode('history'));
+
+        // Initialize: Start live clock sync
+        liveClockIntervalId = setInterval(() => {
+            if (timeMode === 'live') {
+                viewer.clock.currentTime = Cesium.JulianDate.now();
+            }
+        }, 1000);
+        // ── End Time Travel Mode ───────────────────────────────────────────────
+
         const SHIP_COLORS = {
             cargo: '#10b981',      // Cesium.Color.fromCssColorString('#10b981')
             tanker: '#f97316',
@@ -571,14 +1126,20 @@
             other: '#6b7280'
         };
 
-        // Helper function to generate colored SVG ship icon
+        // Helper function to generate colored SVG ship icon (triangle with trail dots)
         function getShipIcon(colorHex) {
-            const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='${colorHex}' d='M12 2L4 20l8-4 8 4 8-18z'/></svg>`;
+            const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 32'>
+                <!-- Trail dots -->
+                <circle cx='12' cy='28' r='1.5' fill='${colorHex}' opacity='0.3'/>
+                <circle cx='12' cy='24' r='1.8' fill='${colorHex}' opacity='0.5'/>
+                <circle cx='12' cy='20' r='2' fill='${colorHex}' opacity='0.7'/>
+                <!-- Ship triangle -->
+                <polygon points='12,2 6,16 12,14 18,16' fill='${colorHex}'/>
+            </svg>`;
             return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
         }
 
-        const shipDataSources = {};
-        const SHIP_TYPES = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
+        // shipDataSources and SHIP_TYPES are defined earlier (before Time Travel Mode)
 
         SHIP_TYPES.forEach(async (type) => {
             const ds = new Cesium.CustomDataSource(`Ships - ${type}`);
@@ -629,33 +1190,12 @@
         });
 
         // ── Satellite Layer ──────────────────────────────────────────────────
-        const SAT_COLORS = {
-            military_recon: '#ef4444', // Red
-            military_sar: '#f97316', // Orange
-            sar: '#f97316', // Orange
-            sigint: '#eab308', // Yellow
-            navigation: '#10b981', // Green
-            early_warning: '#a855f7', // Purple
-            space_station: '#3b82f6', // Blue
-            commercial_imaging: '#94a3b8', // Grey-blue
-        };
-
-        function getSatIcon(colorHex) {
-            const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='3' fill='${colorHex}'/><line x1='12' y1='2' x2='12' y2='6' stroke='${colorHex}' stroke-width='2'/><line x1='12' y1='18' x2='12' y2='22' stroke='${colorHex}' stroke-width='2'/><line x1='2' y1='12' x2='6' y2='12' stroke='${colorHex}' stroke-width='2'/><line x1='18' y1='12' x2='22' y2='12' stroke='${colorHex}' stroke-width='2'/></svg>`;
-            return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
-        }
-
-        const satDataSource = new Cesium.CustomDataSource('Satellites');
-        viewer.dataSources.add(satDataSource);
-        satDataSource.show = false;
+        // SAT_COLORS, getSatIcon, satDataSource, and _satRecCache are defined earlier
 
         document.getElementById('layer-sats').addEventListener('change', (e) => {
             satDataSource.show = e.target.checked;
         });
 
-        // In-memory TLE cache: { id -> {satrec, meta} }
-        // Populated from API (every 30min), positions re-propagated every 5s locally
-        let _satRecCache = {};
         let _satLastApiFetch = 0;
         const SAT_API_INTERVAL_MS = 30 * 60 * 1000; // re-fetch TLE data every 30 min
 
@@ -768,13 +1308,20 @@
         // Initial TLE load
         _refreshSatTleCache().then(() => _propagateSatPositions());
 
-        // Refresh TLE data from API every 30 minutes
+        // Refresh TLE data from API every 30 minutes (only in LIVE mode)
         setInterval(async () => {
-            await _refreshSatTleCache();
+            if (timeMode === 'live') {
+                await _refreshSatTleCache();
+            }
         }, SAT_API_INTERVAL_MS);
 
         // Re-propagate positions every 5 seconds (local calculation, no API call)
-        setInterval(_propagateSatPositions, 5000);
+        // Only propagate in LIVE mode; HISTORY mode uses loadHistoryData
+        setInterval(() => {
+            if (timeMode === 'live') {
+                _propagateSatPositions();
+            }
+        }, 5000);
         // ── End Satellite Layer ───────────────────────────────────────────────
 
 
@@ -789,23 +1336,30 @@
             });
 
             // Get current camera bounding box (Viewport Culling)
-            const cameraRect = viewer.camera.computeViewRectangle();
-            let west = -Math.PI;
-            let east = Math.PI;
-            let south = -Math.PI / 2;
-            let north = Math.PI / 2;
+            // Default to full world bounds in DEGREES
+            let west = -180;
+            let east = 180;
+            let south = -90;
+            let north = 90;
 
-            if (cameraRect) {
-                // Add a small buffer around the view
-                const buffer = 0.5; // degrees
-                west = Cesium.Math.toDegrees(cameraRect.west) - buffer;
-                east = Cesium.Math.toDegrees(cameraRect.east) + buffer;
-                south = Cesium.Math.toDegrees(cameraRect.south) - buffer;
-                north = Cesium.Math.toDegrees(cameraRect.north) + buffer;
+            // In HISTORY mode, skip viewport culling to show all ships
+            // In LIVE mode, apply viewport culling for performance
+            if (timeMode === 'live') {
+                const cameraRect = viewer.camera.computeViewRectangle();
+                if (cameraRect) {
+                    const buffer = 0.5; // degrees
+                    west = Cesium.Math.toDegrees(cameraRect.west) - buffer;
+                    east = Cesium.Math.toDegrees(cameraRect.east) + buffer;
+                    south = Cesium.Math.toDegrees(cameraRect.south) - buffer;
+                    north = Cesium.Math.toDegrees(cameraRect.north) + buffer;
+                }
             }
 
-            // Limit the max number of ships we show at once per type to prevent massive lag while maintaining fairness
-            const MAX_SHIPS_PER_TYPE = 400;
+            // Limit the max number of ships we show at once per type
+            // HISTORY mode: higher limit since we want to see all historical data
+            // LIVE mode: lower limit for real-time performance
+            const MAX_SHIPS_PER_TYPE = (timeMode === 'history') ? 2000 : 400;
+            let totalRendered = 0;
 
             SHIP_TYPES.forEach(type => {
                 const ds = shipDataSources[type];
@@ -821,6 +1375,7 @@
                     if (ship.lng < west || ship.lng > east || ship.lat < south || ship.lat > north) return;
 
                     typeRenderedCount++;
+                    totalRendered++;
                     existingIds.add(ship.mmsi);
                     let entity = ds.entities.getById(ship.mmsi);
                     const position = Cesium.Cartesian3.fromDegrees(ship.lng, ship.lat);
@@ -834,8 +1389,8 @@
                                     <tr><th>Name</th><td>${ship.name}</td></tr>
                                     <tr><th>MMSI</th><td>${ship.mmsi}</td></tr>
                                     <tr><th>Type</th><td>${ship.type}</td></tr>
-                                    <tr><th>Speed</th><td>${ship.speed || ship.sog || 0} knots</td></tr>
-                                    <tr><th>Heading</th><td>${ship.heading}°</td></tr>
+                                    <tr><th>SOG</th><td>${ship.speed || ship.sog || 0} kts</td></tr>
+                                    <tr><th>COG</th><td>${ship.heading}°</td></tr>
                                 </tbody>
                             </table>
                             `;
@@ -883,6 +1438,7 @@
                 const countEl = document.getElementById(`count-${type}`);
                 if (countEl) countEl.textContent = typeShips.length.toLocaleString();
             });
+
         }
 
         let ws;
@@ -903,6 +1459,9 @@
             };
 
             ws.onmessage = (event) => {
+                // Only process WebSocket updates in LIVE mode
+                if (timeMode !== 'live') return;
+
                 try {
                     const data = JSON.parse(event.data);
                     if (data.type === "ships_update") {
@@ -1014,30 +1573,26 @@
                             if (alert.lat && alert.lng) {
                                 card.style.cursor = 'pointer';
                                 card.addEventListener('click', () => {
-                                    // Try to find the entity in any of the ship data sources
-                                    let foundEntity = null;
                                     const mmsiStr = alert.mmsi.toString();
-                                    for (const type in shipDataSources) {
-                                        const ds = shipDataSources[type];
-                                        const entity = ds.entities.getById(mmsiStr);
-                                        if (entity) {
-                                            foundEntity = entity;
-                                            break;
-                                        }
-                                    }
 
-                                    if (foundEntity) {
-                                        viewer.selectedEntity = foundEntity;
-                                        viewer.camera.flyTo({
-                                            destination: Cesium.Cartesian3.fromDegrees(alert.lng, alert.lat, 50000.0),
-                                            duration: 1.5
-                                        });
-                                    } else {
-                                        viewer.camera.flyTo({
-                                            destination: Cesium.Cartesian3.fromDegrees(alert.lng, alert.lat, 150000.0),
-                                            duration: 1.8
-                                        });
-                                    }
+                                    // 먼저 위치로 이동, 이동 완료 후 엔티티 찾기
+                                    viewer.camera.flyTo({
+                                        destination: Cesium.Cartesian3.fromDegrees(alert.lng, alert.lat, 50000.0),
+                                        duration: 1.5,
+                                        complete: () => {
+                                            // 이동 완료 후 엔티티 찾기 (이제 뷰포트 안에 있음)
+                                            setTimeout(() => {
+                                                for (const type in shipDataSources) {
+                                                    const ds = shipDataSources[type];
+                                                    const entity = ds.entities.getById(mmsiStr);
+                                                    if (entity) {
+                                                        viewer.selectedEntity = entity;
+                                                        break;
+                                                    }
+                                                }
+                                            }, 500); // WebSocket 업데이트 대기
+                                        }
+                                    });
                                 });
                             }
 

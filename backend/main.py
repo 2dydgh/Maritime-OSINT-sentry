@@ -7,8 +7,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import database, config, websocket
-from .services import ais_stream, data_fetcher
-from .routers import ships, satellites, events, data, sentinel, alerts
+from .services import ais_stream, data_fetcher, history_writer
+from .routers import ships, satellites, events, data, sentinel, alerts, history
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +19,18 @@ async def lifespan(app: FastAPI):
     # Startup logic
     logger.info("Starting up OSINT 4D Backend...")
     await database.init_db()
-    
+
+    # Initialize history writer for AIS trajectory persistence
+    try:
+        db_pool = database.get_db_pool()
+        if db_pool:
+            await history_writer.init_history_writer(db_pool)
+        else:
+            logger.warning("DB pool not available, history writer will not persist data")
+    except Exception as e:
+        logger.error(f"Failed to initialize history writer: {e}")
+        # 실패해도 실시간 기능은 계속 동작
+
     # Start AIS Stream Background Task
     ais_stream.start_ais_stream()
     
@@ -60,6 +71,13 @@ async def lifespan(app: FastAPI):
     ais_stream.stop_ais_stream()
     broadcast_task.cancel()
     data_fetcher.stop_data_fetcher()
+
+    # Stop history writer and flush remaining buffer
+    try:
+        await history_writer.stop_history_writer()
+    except Exception as e:
+        logger.error(f"Error stopping history writer: {e}")
+
     await database.close_db()
 
 app = FastAPI(title="OSINT 4D Dashboard", lifespan=lifespan)
@@ -94,6 +112,7 @@ app.include_router(events.router, prefix="/api/v1")
 app.include_router(data.router, prefix="/api/v1")
 app.include_router(sentinel.router, prefix="/api/v1")
 app.include_router(alerts.router, prefix="/api/v1")
+app.include_router(history.router, prefix="/api/v1")
 
 # Static Files
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

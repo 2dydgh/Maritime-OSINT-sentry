@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS trajectories (
     altitude NUMERIC(10, 2),              -- 고도 (미터 또는 피트)
     velocity NUMERIC(8, 2),               -- 속도
     heading NUMERIC(5, 2),                -- 진행 방향 (0~360도)
+    ship_type VARCHAR(50),                -- 선박 유형 (AIS 기준)
     PRIMARY KEY (object_id, record_time)
 );
 
