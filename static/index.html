@@ -259,7 +259,7 @@
         .cesium-viewer-timelineContainer {
             z-index: 10;
             bottom: 25px !important;
-            left: 580px !important;
+            left: 480px !important;
             right: 20px !important;
             width: auto !important;
             border-radius: 8px;
@@ -268,9 +268,7 @@
         }
 
         .cesium-viewer-animationContainer {
-            z-index: 10;
-            bottom: 20px !important;
-            left: 390px !important;
+            display: none !important;
         }
 
         .cesium-widget-credits {
@@ -535,69 +533,145 @@
             text-align: right;
         }
 
-        /* Mode Toggle Buttons */
-        .mode-toggle {
+        /* Time Control Bar */
+        #timeControlBar {
+            position: fixed;
+            bottom: 25px;
+            left: 20px;
             display: flex;
-            gap: 8px;
-            margin-right: 30px;
+            align-items: center;
+            gap: 2px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            padding: 6px 10px;
+            z-index: 10;
+            transition: border-color 0.3s;
+            min-width: 440px;
         }
 
-        .mode-btn {
+        #timeControlBar.history-active {
+            border-color: rgba(168, 85, 247, 0.3);
+        }
+
+        .tcb-divider {
+            width: 1px;
+            height: 24px;
+            background: var(--panel-border);
+            margin: 0 8px;
+            transition: background 0.3s;
+        }
+
+        #timeControlBar.history-active .tcb-divider {
+            background: rgba(168, 85, 247, 0.3);
+        }
+
+        .tcb-mode-btn {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--panel-border);
             color: var(--text-dim);
-            padding: 8px 16px;
+            padding: 6px 14px;
             border-radius: 6px;
             cursor: pointer;
             font-family: 'Inter', sans-serif;
-            font-size: 0.8rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
             transition: all 0.2s;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
         }
 
-        .mode-btn.active {
+        .tcb-mode-btn.active {
             background: rgba(56, 189, 248, 0.2);
             border-color: var(--accent-cyan);
             color: var(--accent-cyan);
         }
 
-        .mode-btn:hover:not(.active) {
-            background: rgba(56, 189, 248, 0.1);
-        }
-
-        .mode-btn.history-mode.active {
+        .tcb-mode-btn.history.active {
             background: rgba(168, 85, 247, 0.2);
             border-color: #a855f7;
             color: #a855f7;
         }
 
-        /* History mode indicator */
-        .history-indicator {
-            display: none;
-            position: absolute;
-            top: 90px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(168, 85, 247, 0.9);
-            color: white;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
-            z-index: 100;
-            box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
+        .tcb-mode-btn:hover:not(.active) {
+            background: rgba(56, 189, 248, 0.1);
         }
 
-        .history-indicator.visible {
+        .tcb-play-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--panel-border);
             display: flex;
             align-items: center;
-            gap: 10px;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-dim);
+            font-size: 0.7rem;
+            transition: all 0.2s;
         }
 
-        .history-indicator i {
-            animation: pulse 1.5s infinite;
+        .tcb-play-btn.main {
+            width: 34px;
+            height: 34px;
+            font-size: 0.85rem;
+        }
+
+        .tcb-play-btn:disabled {
+            opacity: 0.3;
+            cursor: default;
+            pointer-events: none;
+        }
+
+        .tcb-play-btn.enabled {
+            color: #a855f7;
+            border-color: rgba(168, 85, 247, 0.25);
+            background: rgba(168, 85, 247, 0.1);
+        }
+
+        .tcb-play-btn.enabled:hover {
+            background: rgba(168, 85, 247, 0.2);
+        }
+
+        .tcb-play-btn.enabled.main {
+            border-color: rgba(168, 85, 247, 0.4);
+            background: rgba(168, 85, 247, 0.2);
+        }
+
+        .tcb-play-btn.enabled.active-reverse {
+            background: rgba(168, 85, 247, 0.3);
+            border-color: #a855f7;
+        }
+
+        #tcb-speed {
+            color: var(--text-dim);
+            font-size: 0.72rem;
+            font-family: 'JetBrains Mono', monospace;
+            min-width: 36px;
+            text-align: center;
+            transition: color 0.3s;
+        }
+
+        #tcb-speed.active {
+            color: #a855f7;
+            font-weight: 700;
+        }
+
+        #tcb-time-display {
+            color: var(--accent-cyan);
+            font-size: 0.78rem;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 0.03em;
+            transition: color 0.3s;
+            white-space: nowrap;
+        }
+
+        #tcb-time-display.history {
+            color: #a855f7;
         }
     </style>
 </head>
@@ -615,15 +689,6 @@
                 DASHBOARD</span>
         </div>
         <div class="header-stats">
-            <!-- Mode Toggle -->
-            <div class="mode-toggle">
-                <button id="btn-live" class="mode-btn active">
-                    <i class="fa-solid fa-broadcast-tower"></i> LIVE
-                </button>
-                <button id="btn-history" class="mode-btn history-mode">
-                    <i class="fa-solid fa-clock-rotate-left"></i> HISTORY
-                </button>
-            </div>
             <div class="stat-item">
                 <span class="stat-value" id="stat-events">0</span>
                 <span class="stat-label">Active Events</span>
@@ -632,18 +697,8 @@
                 <span class="stat-value" id="stat-assets">7</span>
                 <span class="stat-label">Tracked Assets</span>
             </div>
-            <div class="stat-item">
-                <span class="stat-value" id="stat-time">SYS_TIME</span>
-                <span class="stat-label">UTC CLOCK</span>
-            </div>
         </div>
     </header>
-
-    <!-- History Mode Indicator -->
-    <div id="historyIndicator" class="history-indicator">
-        <i class="fa-solid fa-clock-rotate-left"></i>
-        <span id="historyTimeDisplay">--</span>
-    </div>
 
     <!-- Left Feed Panel -->
     <div id="feedPanel" class="glass-panel">
@@ -748,6 +803,35 @@
     <div id="loading" class="glass-panel">
         <i class="fa-solid fa-circle-notch fa-spin"></i> INITIALIZING SYSTEM
     </div>
+
+    <!-- Time Control Bar -->
+    <div id="timeControlBar">
+        <div style="display:flex;gap:3px;margin-right:2px;">
+            <button id="tcb-btn-live" class="tcb-mode-btn active">
+                <i class="fa-solid fa-broadcast-tower"></i> LIVE
+            </button>
+            <button id="tcb-btn-history" class="tcb-mode-btn history">
+                <i class="fa-solid fa-clock-rotate-left"></i> HISTORY
+            </button>
+        </div>
+        <div class="tcb-divider"></div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <button id="tcb-reverse" class="tcb-play-btn" disabled title="Reverse">
+                <i class="fa-solid fa-backward"></i>
+            </button>
+            <button id="tcb-playpause" class="tcb-play-btn main" disabled title="Play/Pause">
+                <i class="fa-solid fa-play" id="tcb-playpause-icon"></i>
+            </button>
+            <button id="tcb-ff" class="tcb-play-btn" disabled title="Speed Up">
+                <i class="fa-solid fa-forward"></i>
+            </button>
+        </div>
+        <div class="tcb-divider"></div>
+        <span id="tcb-speed">1x</span>
+        <div class="tcb-divider"></div>
+        <span id="tcb-time-display">--:--:-- Z</span>
+    </div>
+
     <script>
         Cesium.Ion.defaultAccessToken = '';
 
