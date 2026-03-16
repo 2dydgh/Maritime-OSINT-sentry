@@ -739,20 +739,23 @@
         }
 
         // Load history data for a sliding window centered on centerDate
-        async function loadHistoryWindow(centerDate) {
+        // silent=true: no loading indicator, used for auto-reload during playback
+        async function loadHistoryWindow(centerDate, { silent = false } = {}) {
             if (isLoadingWindow) return;
             isLoadingWindow = true;
 
-            // Show loading indicator
-            document.getElementById('loading').style.display = 'flex';
-            document.getElementById('loading').innerHTML = '<i class="fa-solid fa-clock-rotate-left fa-spin"></i> LOADING HISTORY...';
+            // Show loading indicator only on non-silent loads (initial, timeline jump)
+            if (!silent) {
+                document.getElementById('loading').style.display = 'flex';
+                document.getElementById('loading').innerHTML = '<i class="fa-solid fa-clock-rotate-left fa-spin"></i> LOADING HISTORY...';
+            }
 
             const windowStart = new Date(centerDate.getTime() - WINDOW_HALF_MS);
             const windowEnd = new Date(centerDate.getTime() + WINDOW_HALF_MS);
             const startIso = windowStart.toISOString();
             const endIso = windowEnd.toISOString();
 
-            console.log('[HISTORY] Loading window:', startIso, 'to', endIso);
+            console.log('[HISTORY] Loading window:', startIso, 'to', endIso, silent ? '(silent)' : '');
 
             try {
                 const bbox = getViewportBbox();
@@ -762,8 +765,10 @@
                 );
                 if (!res.ok) {
                     console.error('[HISTORY] Trajectory API error:', res.status);
-                    document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> LOAD ERROR';
-                    setTimeout(() => document.getElementById('loading').style.display = 'none', 2000);
+                    if (!silent) {
+                        document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> LOAD ERROR';
+                        setTimeout(() => document.getElementById('loading').style.display = 'none', 2000);
+                    }
                     return;
                 }
 
@@ -772,14 +777,9 @@
                 const shipCount = Object.keys(ships).length;
                 console.log('[HISTORY] Loaded trajectories for', shipCount, 'ships');
 
-                // Clear existing ship entities
-                SHIP_TYPES.forEach(type => {
-                    if (shipDataSources[type]) {
-                        shipDataSources[type].entities.removeAll();
-                    }
-                });
-
-                // Create entities with SampledPositionProperty for each ship
+                // Build new entities first, then swap (clear old → add new in one batch)
+                // Collect new entity definitions
+                const newEntities = [];
                 for (const [mmsi, shipData] of Object.entries(ships)) {
                     if (shipData.points.length < 2) continue;
 
@@ -802,7 +802,7 @@
                         headingProperty.addSample(time, pt.heading || 0);
                     });
 
-                    ds.entities.add({
+                    newEntities.push({ ds, def: {
                         id: mmsi,
                         name: shipData.name || 'UNKNOWN',
                         description: `
@@ -825,8 +825,16 @@
                                 return Cesium.Math.toRadians(-(heading || 0));
                             }, false)
                         }
-                    });
+                    }});
                 }
+
+                // Now swap: clear old entities then add new ones
+                SHIP_TYPES.forEach(type => {
+                    if (shipDataSources[type]) {
+                        shipDataSources[type].entities.removeAll();
+                    }
+                });
+                newEntities.forEach(({ ds, def }) => ds.entities.add(def));
 
                 // Update window state
                 currentWindowCenter = centerDate;
@@ -838,17 +846,20 @@
                 document.getElementById('total-ships').textContent = shipCount.toLocaleString();
                 document.getElementById('stat-assets').textContent = shipCount;
 
-                // Hide loading indicator on success
-                document.getElementById('loading').style.display = 'none';
+                if (!silent) {
+                    document.getElementById('loading').style.display = 'none';
+                }
                 console.log('[HISTORY] Window loaded:', shipCount, 'ships');
 
             } catch (err) {
                 console.error('[HISTORY] Error loading window:', err);
-                document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> LOAD ERROR';
-                setTimeout(() => {
-                    document.getElementById('loading').style.display = 'none';
-                    setTimeMode('live');
-                }, 2000);
+                if (!silent) {
+                    document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> LOAD ERROR';
+                    setTimeout(() => {
+                        document.getElementById('loading').style.display = 'none';
+                        setTimeMode('live');
+                    }, 2000);
+                }
             } finally {
                 isLoadingWindow = false;
             }
@@ -1061,7 +1072,7 @@
             // If past 70% of window (forward) or before 10% (backward via scrub), load new window
             if (progress > 0.7 || progress < -0.1) {
                 console.log('[HISTORY] Window boundary reached, progress:', (progress * 100).toFixed(0) + '%');
-                loadHistoryWindow(jsDate);
+                loadHistoryWindow(jsDate, { silent: true });
             }
         });
 
@@ -1090,11 +1101,12 @@
             }
         });
 
-        // Camera move: reload history data for new viewport
+        // Camera move: reload history data for new viewport (skip during animation playback)
         const debouncedViewportReload = debounce(() => {
             if (timeMode !== 'history' || isLoadingWindow || !currentWindowCenter) return;
+            if (viewer.clock.shouldAnimate) return; // Don't reload while playing
             console.log('[HISTORY] Viewport changed, reloading for new bbox');
-            loadHistoryWindow(currentWindowCenter);
+            loadHistoryWindow(currentWindowCenter, { silent: true });
         }, 800);
 
         viewer.camera.moveEnd.addEventListener(() => {
