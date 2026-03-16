@@ -697,8 +697,6 @@
         let timeMode = 'live'; // 'live' | 'history'
         let liveClockIntervalId = null;
         let historyRange = { min: null, max: null };
-        let lastHistoryFetchTime = 0;
-        let cachedHistoryShips = []; // Cache for re-rendering on camera move
 
         // Sliding window state
         const WINDOW_HALF_MS = 30 * 60 * 1000; // ±30 minutes = 1 hour window
@@ -720,19 +718,6 @@
                 timeout = setTimeout(later, wait);
             };
         }
-
-        // Re-render history ships on camera move (debounced)
-        const debouncedHistoryRerender = debounce(() => {
-            if (timeMode === 'history' && cachedHistoryShips.length > 0) {
-                console.log('[HISTORY] Re-rendering on camera move:', cachedHistoryShips.length, 'ships');
-                updateShipsLayer(cachedHistoryShips);
-            }
-        }, 300);
-
-        // Listen for camera movement to re-render in HISTORY mode
-        viewer.camera.moveEnd.addEventListener(() => {
-            debouncedHistoryRerender();
-        });
 
         // Fetch helper with configurable timeout (aborts stale requests)
         function fetchWithTimeout(url, timeoutMs = 10000) {
@@ -765,10 +750,7 @@
                 if (!res.ok) {
                     console.error('[HISTORY] Trajectory API error:', res.status);
                     document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> LOAD ERROR';
-                    setTimeout(() => {
-                        document.getElementById('loading').style.display = 'none';
-                    }, 2000);
-                    isLoadingWindow = false;
+                    setTimeout(() => document.getElementById('loading').style.display = 'none', 2000);
                     return;
                 }
 
@@ -843,6 +825,8 @@
                 document.getElementById('total-ships').textContent = shipCount.toLocaleString();
                 document.getElementById('stat-assets').textContent = shipCount;
 
+                // Hide loading indicator on success
+                document.getElementById('loading').style.display = 'none';
                 console.log('[HISTORY] Window loaded:', shipCount, 'ships');
 
             } catch (err) {
@@ -853,8 +837,6 @@
                     setTimeMode('live');
                 }, 2000);
             } finally {
-                // Hide loading indicator
-                document.getElementById('loading').style.display = 'none';
                 isLoadingWindow = false;
             }
         }
@@ -987,8 +969,7 @@
                     }, 1000);
                 }
 
-                // Clear ship entities and history cache
-                cachedHistoryShips = [];
+                // Clear ship entities
                 SHIP_TYPES.forEach(type => {
                     if (shipDataSources[type]) {
                         shipDataSources[type].entities.removeAll();
@@ -1072,7 +1053,6 @@
         });
 
         // Timeline scrub: detect large time jumps via debounced check
-        let lastCheckedTime = 0;
         const debouncedWindowJump = debounce((julianDate) => {
             if (timeMode !== 'history' || isLoadingWindow) return;
 
