@@ -12,11 +12,13 @@ from datetime import datetime, timezone
 import os
 
 from . import history_writer
+from backend.services.metrics import ais_messages_total, ais_vessels_active, alerts_fired_total
 
 logger = logging.getLogger(__name__)
 
 AIS_WS_URL = "wss://stream.aisstream.io/v0/stream"
-API_KEY = os.environ.get("AIS_API_KEY", "")
+from backend.config import AIS_API_KEY
+API_KEY = AIS_API_KEY
 
 # AIS vessel type code classification
 # See: https://coast.noaa.gov/data/marinecadastre/ais/VesselTypeCodes2018.pdf
@@ -163,6 +165,7 @@ def _maybe_alert(alert_type: str, mmsi: int, data: dict):
             "ts": datetime.now(timezone.utc).isoformat(),
             **data,
         })
+        alerts_fired_total.labels(alert_type=alert_type).inc()
 
 
 def get_alerts(max_count: int = 50) -> list[dict]:
@@ -300,7 +303,12 @@ def get_ais_vessels() -> list[dict]:
                 "destination": v.get("destination", "") or "UNKNOWN",
                 "imo": v.get("imo", 0),
                 "country": get_country_from_mmsi(mmsi),
+                "length": v.get("length", 0),
+                "beam": v.get("beam", 0),
+                "draught": v.get("draught", 0),
+                "eta": v.get("eta", ""),
             })
+        ais_vessels_active.set(len(result))
         return result
 
 
@@ -409,6 +417,8 @@ def _ais_stream_loop():
                         # DB 기록 실패해도 실시간 기능은 계속 동작
                         logger.warning(f"History record failed for MMSI {mmsi}: {e}")
 
+                    ais_messages_total.labels(message_type="position").inc()
+
                     # --- Anomaly: Speeding vessel ---
                     sog = report.get("Sog", 0)
                     v_name = vessel.get("name", "UNKNOWN")
@@ -435,6 +445,29 @@ def _ais_stream_loop():
                     new_dest = (static.get("Destination", "") or "").strip().replace("@", "")
                     v_name_static = (static.get("Name", "") or metadata.get("ShipName", "UNKNOWN")).strip() or "UNKNOWN"
 
+                    # Parse vessel dimensions (A+B=length, C+D=beam)
+                    dimension = static.get("Dimension", {})
+                    dim_a = dimension.get("A", 0) or 0
+                    dim_b = dimension.get("B", 0) or 0
+                    dim_c = dimension.get("C", 0) or 0
+                    dim_d = dimension.get("D", 0) or 0
+                    length = dim_a + dim_b
+                    beam = dim_c + dim_d
+                    draught = static.get("MaximumStaticDraught", 0) or 0
+
+                    # Parse ETA
+                    eta_raw = static.get("Eta", {})
+                    eta_str = ""
+                    if eta_raw:
+                        eta_month = eta_raw.get("Month", 0) or 0
+                        eta_day = eta_raw.get("Day", 0) or 0
+                        eta_hour = eta_raw.get("Hour", 24)
+                        eta_minute = eta_raw.get("Minute", 60)
+                        if 1 <= eta_month <= 12 and 1 <= eta_day <= 31:
+                            eta_str = f"{eta_month:02d}-{eta_day:02d}"
+                            if eta_hour < 24 and eta_minute < 60:
+                                eta_str += f" {eta_hour:02d}:{eta_minute:02d}"
+
                     with _vessels_lock:
                         old_dest = vessel.get("destination", "")
                         vessel["name"] = v_name_static
@@ -444,8 +477,18 @@ def _ais_stream_loop():
                         vessel["ais_type_code"] = ais_type
                         vessel["type"] = classify_vessel(ais_type, mmsi)
                         vessel["_updated"] = time.time()
+                        if length > 0:
+                            vessel["length"] = length
+                        if beam > 0:
+                            vessel["beam"] = beam
+                        if draught > 0:
+                            vessel["draught"] = round(draught / 10, 1)
+                        if eta_str:
+                            vessel["eta"] = eta_str
                         cur_lat = vessel.get("lat")
                         cur_lng = vessel.get("lng")
+
+                    ais_messages_total.labels(message_type="static_data").inc()
 
                     # Backfill unknown ship_type in DB for this MMSI
                     classified_type = vessel.get("type", "unknown")

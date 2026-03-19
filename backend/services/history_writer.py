@@ -11,6 +11,8 @@ import threading
 from datetime import datetime, timezone
 from typing import Optional
 
+from backend.services.metrics import db_writes_total, db_write_duration_seconds
+
 logger = logging.getLogger(__name__)
 
 # Configuration
@@ -86,6 +88,7 @@ async def _flush_buffer() -> None:
         return
 
     try:
+        start_time = time.monotonic()
         async with _db_pool.acquire() as conn:
             # Bulk insert with ON CONFLICT DO UPDATE
             await conn.executemany(
@@ -117,6 +120,9 @@ async def _flush_buffer() -> None:
                 ]
             )
         logger.info(f"History writer: flushed {len(records_to_insert)} records to DB")
+        duration = time.monotonic() - start_time
+        db_writes_total.labels(table="trajectories").inc(len(records_to_insert))
+        db_write_duration_seconds.observe(duration)
     except Exception as e:
         logger.error(f"History writer DB error: {e}")
         # 실패해도 실시간 기능은 계속 동작해야 하므로 재시도 없이 로그만 남김
