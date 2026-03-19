@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import database, config, websocket
 from .services import ais_stream, data_fetcher, history_writer
-from .routers import ships, satellites, events, data, sentinel, alerts, history
+from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -113,6 +113,7 @@ app.include_router(data.router, prefix="/api/v1")
 app.include_router(sentinel.router, prefix="/api/v1")
 app.include_router(alerts.router, prefix="/api/v1")
 app.include_router(history.router, prefix="/api/v1")
+app.include_router(metrics.router)
 
 # Static Files
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
