@@ -61,6 +61,23 @@ pip install -r requirements.txt
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
+## Monitoring
+
+Start the full stack with monitoring:
+
+```bash
+cp .env.example .env  # 환경변수 설정 후 값 수정
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8001
+```
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| App | http://localhost:8001 | Maritime OSINT Dashboard |
+| Prometheus | http://localhost:9090 | Metrics collection |
+| Grafana | http://localhost:3000 | Monitoring dashboard (admin/admin) |
+| Redis | localhost:6379 | Stream pipeline |
+
 ## 🔒 Security Note
 This repository includes a `.gitignore` to prevent leaking sensitive API keys and database credentials. Never commit your `.env` file.
 
