@@ -16,3 +16,7 @@ AIS_API_KEY = os.getenv("AIS_API_KEY", "")
 # App
 PORT = int(os.getenv("PORT", 8001))
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
+# Phase 1
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+METRICS_ENABLED = os.getenv("METRICS_ENABLED", "true").lower() == "true"

@@ -1,5 +1,6 @@
 # Secrets
 .env
+!.env.example
 
 # Python
 __pycache__/
@@ -28,6 +29,7 @@ uvicorn_modular.log
 *.json
 !package.json
 !package-lock.json
+!monitoring/**/*.json
 
 
 # Worktrees
