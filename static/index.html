@@ -112,6 +112,57 @@
             gap: 30px;
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.9rem;
+            align-items: center;
+        }
+
+        .quickview-btn {
+            background: rgba(56, 189, 248, 0.15);
+            border: 1px solid var(--panel-border);
+            color: var(--accent-cyan);
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .quickview-btn:hover {
+            background: rgba(56, 189, 248, 0.3);
+        }
+
+        .quickview-btn.active {
+            background: rgba(56, 189, 248, 0.4);
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+        }
+
+        .quickview-btn.danger {
+            color: var(--accent-red);
+            background: rgba(244, 63, 94, 0.12);
+            border-color: rgba(244, 63, 94, 0.25);
+        }
+
+        .quickview-btn.danger:hover {
+            background: rgba(244, 63, 94, 0.25);
+        }
+
+        .quickview-btn.danger.active {
+            background: rgba(244, 63, 94, 0.35);
+            border-color: var(--accent-red);
+            box-shadow: 0 0 8px rgba(244, 63, 94, 0.3);
+        }
+
+        .quickview-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
         }
 
         .stat-item {
@@ -259,12 +310,22 @@
         .cesium-viewer-timelineContainer {
             z-index: 10;
             bottom: 25px !important;
-            left: 540px !important;
+            left: 620px !important;
             right: 20px !important;
             width: auto !important;
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
             border: 1px solid var(--panel-border);
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+        }
+
+        .cesium-timeline-main {
+            background: transparent !important;
+        }
+
+        .cesium-timeline-bar {
+            background: rgba(56, 189, 248, 0.08) !important;
         }
 
         .cesium-viewer-animationContainer {
@@ -284,7 +345,13 @@
             width: 220px;
             padding: 15px;
             z-index: 10;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
         }
+
+        #shipFilterPanel::-webkit-scrollbar { width: 4px; }
+        #shipFilterPanel::-webkit-scrollbar-track { background: transparent; }
+        #shipFilterPanel::-webkit-scrollbar-thumb { background: var(--accent-cyan); border-radius: 2px; }
 
         #shipFilterPanel h3 {
             margin: 0 0 12px 0;
@@ -581,7 +648,9 @@
             transition: all 0.2s;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 5px;
+            min-width: 88px;
         }
 
         .tcb-mode-btn.active {
@@ -668,6 +737,8 @@
             letter-spacing: 0.03em;
             transition: color 0.3s;
             white-space: nowrap;
+            min-width: 170px;
+            text-align: right;
         }
 
         #tcb-time-display.history {
@@ -689,6 +760,23 @@
                 DASHBOARD</span>
         </div>
         <div class="header-stats">
+            <div class="quickview-group">
+                <button class="quickview-btn" onclick="selectQuickview(this, flyToKorea)">
+                    <i class="fa-solid fa-location-crosshairs"></i> 한국 해역
+                </button>
+                <button class="quickview-btn" onclick="selectQuickview(this, flyToArcticRoute)">
+                    <i class="fa-solid fa-snowflake"></i> 북극항로
+                </button>
+                <button class="quickview-btn danger" onclick="selectQuickview(this, flyToSomalia)">
+                    <i class="fa-solid fa-skull-crossbones"></i> 소말리아
+                </button>
+                <button class="quickview-btn danger" onclick="selectQuickview(this, flyToMalacca)">
+                    <i class="fa-solid fa-skull-crossbones"></i> 말라카
+                </button>
+                <button class="quickview-btn danger" onclick="selectQuickview(this, flyToGuineaGulf)">
+                    <i class="fa-solid fa-skull-crossbones"></i> 기니만
+                </button>
+            </div>
             <div class="stat-item">
                 <span class="stat-value" id="stat-events">0</span>
                 <span class="stat-label">Active Events</span>
@@ -774,6 +862,17 @@
             <label><input type="checkbox" id="layer-sats"><span class="color-dot"
                     style="background-color: #a78bfa;"></span> Intel Satellites</label>
         </div>
+        <div id="satSubToggles" style="display:none; margin-left: 18px; margin-top: 6px;">
+            <div class="filter-item" style="padding: 4px 0;">
+                <label style="font-size:0.78rem;"><input type="checkbox" id="layer-sat-orbits" checked> 3D Orbit</label>
+            </div>
+            <div class="filter-item" style="padding: 4px 0;">
+                <label style="font-size:0.78rem;"><input type="checkbox" id="layer-sat-ground" checked> Ground Track</label>
+            </div>
+            <div class="filter-item" style="padding: 4px 0;">
+                <label style="font-size:0.78rem;"><input type="checkbox" id="layer-sat-footprint" checked> Sensor Footprint</label>
+            </div>
+        </div>
         <div id="satStats"
             style="margin-top:8px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-dim);">
             Total: <span id="total-sats">0</span> tracked
@@ -833,7 +932,7 @@
     </div>
 
     <script>
-        Cesium.Ion.defaultAccessToken = '';
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzY2MxZDJjNC03MGIxLTQzZjAtODM1OS1hYzMyNDIzZWE5YjYiLCJpZCI6NDA2NDI4LCJpYXQiOjE3NzM5NzA2ODl9.1ndfOL5CbW4FcszgDSjQhZKQGK41z7xlFT4ikUEOfVk';
 
         const viewer = new Cesium.Viewer('cesiumContainer', {
             animation: true,
@@ -845,17 +944,16 @@
             sceneModePicker: false,
             navigationHelpButton: false,
             fullscreenButton: false,
-            // 해양 지형과 수심이 강조된 해상 지도 (Esri Ocean)
+            // Esri World Imagery — 위성사진 기반 (바다 + 육지 리얼)
             baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
-                url: 'https://services.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-                credit: '© Esri, GEBCO, NOAA, National Geographic, DeLorme, HERE, Geonames.org',
+                url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                credit: '© Esri, Maxar, Earthstar Geographics, USDA FSA, USGS, Aerogrid, IGN, IGP, and the GIS User Community',
                 minimumLevel: 0,
-                maximumLevel: 13
+                maximumLevel: 19
             }))
         });
 
-        // ── Hybrid Map: Ocean (low zoom) + OSM (high zoom) ─────────────────────
-        // OpenStreetMap 레이어 추가 (높은 줌 레벨용)
+        // ── Hybrid Map: 위성사진(기본) + OSM(고줌 폴백) ─────────────────────
         const osmLayer = viewer.imageryLayers.addImageryProvider(
             new Cesium.UrlTemplateImageryProvider({
                 url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -864,19 +962,31 @@
                 maximumLevel: 19
             })
         );
-        osmLayer.alpha = 0; // 처음엔 투명
+        osmLayer.alpha = 0; // 기본은 숨김
 
-        // 카메라 높이에 따라 레이어 전환 (Esri Ocean max level 13 ≈ 150km)
+        // 고줌(5km 이하)에서만 OSM을 페이드인 — 위성사진 빈 곳 보완
         viewer.camera.changed.addEventListener(() => {
             const height = viewer.camera.positionCartographic.height;
-            // 150km 이하로 내려가면 OSM 표시 시작 (Esri 한계 전에 전환)
-            if (height < 150000) {
-                // 높이에 따라 부드럽게 전환 (150km~50km 사이)
-                const t = Math.max(0, Math.min(1, (150000 - height) / 100000));
+            if (height < 5000) {
+                const t = Math.max(0, Math.min(1, (5000 - height) / 3000));
                 osmLayer.alpha = t;
             } else {
                 osmLayer.alpha = 0;
             }
+        });
+
+        // ── OSM Buildings 3D Tileset ────────────────────────────────────────
+        let osmBuildingsTileset = null;
+        Cesium.createOsmBuildingsAsync().then(tileset => {
+            osmBuildingsTileset = viewer.scene.primitives.add(tileset);
+            osmBuildingsTileset.show = false; // 초기엔 숨김, 줌인 시 표시
+        });
+
+        // 카메라 높이에 따라 3D 건물 표시/숨김 (50km 이하에서 표시)
+        viewer.camera.changed.addEventListener(() => {
+            if (!osmBuildingsTileset) return;
+            const height = viewer.camera.positionCartographic.height;
+            osmBuildingsTileset.show = height < 50000;
         });
 
         // ── Globe appearance: tactical dark style ─────────────────────────────
@@ -908,6 +1018,77 @@
         viewer.cesiumWidget.creditContainer.style.display = 'none';
         // ── End globe style ───────────────────────────────────────────────────
 
+        // ── 퀵뷰 해역 이동 ─────────────────────────────────────────────────
+        function selectQuickview(btn, flyFn) {
+            document.querySelectorAll('.quickview-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            flyFn();
+        }
+
+        function flyToKorea() {
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(128.0, 35.5, 800000.0),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0),
+                    pitch: Cesium.Math.toRadians(-45),
+                    roll: 0
+                },
+                duration: 2.0
+            });
+        }
+
+        function flyToArcticRoute() {
+            // 북극항로 (Northern Sea Route) — 러시아 북쪽 베링해협~바렌츠해
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(100.0, 75.0, 5000000.0),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0),
+                    pitch: Cesium.Math.toRadians(-60),
+                    roll: 0
+                },
+                duration: 2.0
+            });
+        }
+
+        function flyToSomalia() {
+            // 소말리아/아덴만 해적 해역
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(48.0, 12.0, 2000000.0),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0),
+                    pitch: Cesium.Math.toRadians(-45),
+                    roll: 0
+                },
+                duration: 2.0
+            });
+        }
+
+        function flyToMalacca() {
+            // 말라카 해협
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(101.5, 2.5, 800000.0),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0),
+                    pitch: Cesium.Math.toRadians(-45),
+                    roll: 0
+                },
+                duration: 2.0
+            });
+        }
+
+        function flyToGuineaGulf() {
+            // 기니만 (서아프리카 해적 해역)
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(3.0, 3.0, 2500000.0),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0),
+                    pitch: Cesium.Math.toRadians(-45),
+                    roll: 0
+                },
+                duration: 2.0
+            });
+        }
+
         // Default view
         viewer.camera.flyTo({
             destination: Cesium.Cartesian3.fromDegrees(53.0, 24.0, 3000000.0)
@@ -924,7 +1105,7 @@
         function updateClock() {
             if (timeMode !== 'live') return; // guard: don't overwrite history time display
             const now = new Date();
-            document.getElementById('tcb-time-display').textContent = now.toISOString().substring(11, 19) + " Z";
+            document.getElementById('tcb-time-display').textContent = now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
         }
         setInterval(updateClock, 1000);
         updateClock();
@@ -1008,7 +1189,7 @@
 
         // ── Satellite Colors & Icon (needed by Time Travel Mode) ─────────────
         const SAT_COLORS = {
-            military_recon: '#ef4444', // Red
+            military_recon: '#fde047', // Bright yellow
             military_sar: '#f97316', // Orange
             sar: '#f97316', // Orange
             sigint: '#eab308', // Yellow
@@ -1019,7 +1200,36 @@
         };
 
         function getSatIcon(colorHex) {
-            const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='3' fill='${colorHex}'/><line x1='12' y1='2' x2='12' y2='6' stroke='${colorHex}' stroke-width='2'/><line x1='12' y1='18' x2='12' y2='22' stroke='${colorHex}' stroke-width='2'/><line x1='2' y1='12' x2='6' y2='12' stroke='${colorHex}' stroke-width='2'/><line x1='18' y1='12' x2='22' y2='12' stroke='${colorHex}' stroke-width='2'/></svg>`;
+            const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'>
+                <defs>
+                    <filter id='glow-${colorHex.slice(1)}' x='-50%' y='-50%' width='200%' height='200%'>
+                        <feGaussianBlur stdDeviation='2' result='blur'/>
+                        <feMerge><feMergeNode in='blur'/><feMergeNode in='SourceGraphic'/></feMerge>
+                    </filter>
+                </defs>
+                <g filter='url(%23glow-${colorHex.slice(1)})'>
+                    <!-- 태양광 패널 (좌) -->
+                    <rect x='3' y='18' width='14' height='12' rx='1' fill='${colorHex}' opacity='0.3' stroke='${colorHex}' stroke-width='1'/>
+                    <line x1='6' y1='18' x2='6' y2='30' stroke='${colorHex}' stroke-width='0.5' opacity='0.5'/>
+                    <line x1='10' y1='18' x2='10' y2='30' stroke='${colorHex}' stroke-width='0.5' opacity='0.5'/>
+                    <line x1='14' y1='18' x2='14' y2='30' stroke='${colorHex}' stroke-width='0.5' opacity='0.5'/>
+                    <line x1='3' y1='22' x2='17' y2='22' stroke='${colorHex}' stroke-width='0.5' opacity='0.5'/>
+                    <line x1='3' y1='26' x2='17' y2='26' stroke='${colorHex}' stroke-width='0.5' opacity='0.5'/>
+                    <!-- 본체 -->
+                    <rect x='18' y='19' width='12' height='10' rx='2' fill='${colorHex}' opacity='0.6' stroke='${colorHex}' stroke-width='1.2'/>
+                    <circle cx='24' cy='24' r='2.5' fill='${colorHex}'/>
+                    <!-- 태양광 패널 (우) -->
+                    <rect x='31' y='18' width='14' height='12' rx='1' fill='${colorHex}' opacity='0.3' stroke='${colorHex}' stroke-width='1'/>
+                    <line x1='34' y1='18' x2='34' y2='30' stroke='${colorHex}' stroke-width='0.5' opacity='0.5'/>
+                    <line x1='38' y1='18' x2='38' y2='30' stroke='${colorHex}' stroke-width='0.5' opacity='0.5'/>
+                    <line x1='42' y1='18' x2='42' y2='30' stroke='${colorHex}' stroke-width='0.5' opacity='0.5'/>
+                    <line x1='31' y1='22' x2='45' y2='22' stroke='${colorHex}' stroke-width='0.5' opacity='0.5'/>
+                    <line x1='31' y1='26' x2='45' y2='26' stroke='${colorHex}' stroke-width='0.5' opacity='0.5'/>
+                    <!-- 안테나 -->
+                    <line x1='24' y1='19' x2='24' y2='12' stroke='${colorHex}' stroke-width='1'/>
+                    <circle cx='24' cy='11' r='1.5' fill='none' stroke='${colorHex}' stroke-width='0.8'/>
+                </g>
+            </svg>`;
             return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
         }
 
@@ -1160,8 +1370,9 @@
                         position: positionProperty,
                         billboard: {
                             image: getShipIcon(SHIP_COLORS[type] || SHIP_COLORS['other']),
-                            width: 14,
-                            height: 16,
+                            width: getShipSize(shipData.length, shipData.beam).width,
+                            height: getShipSize(shipData.length, shipData.beam).height,
+                            scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
                             rotation: new Cesium.CallbackProperty(() => {
                                 const heading = headingProperty.getValue(viewer.clock.currentTime);
                                 return Cesium.Math.toRadians(-(heading || 0));
@@ -1240,19 +1451,19 @@
                         position: position,
                         billboard: {
                             image: getSatIcon(color),
-                            width: 18,
-                            height: 18,
-                            scaleByDistance: new Cesium.NearFarScalar(1.5e7, 1.5, 8.0e7, 0.5),
+                            width: 32,
+                            height: 32,
+                            scaleByDistance: new Cesium.NearFarScalar(1.5e7, 1.5, 8.0e7, 0.6),
                             disableDepthTestDistance: Number.POSITIVE_INFINITY
                         },
                         label: {
                             text: sat.name,
-                            font: '10px JetBrains Mono, monospace',
+                            font: '11px JetBrains Mono, monospace',
                             fillColor: Cesium.Color.fromCssColorString(color),
                             outlineColor: Cesium.Color.BLACK,
-                            outlineWidth: 2,
+                            outlineWidth: 3,
                             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                            pixelOffset: new Cesium.Cartesian2(0, -20),
+                            pixelOffset: new Cesium.Cartesian2(0, -26),
                             distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2e7),
                             disableDepthTestDistance: Number.POSITIVE_INFINITY
                         }
@@ -1496,15 +1707,40 @@
             other: '#6b7280'
         };
 
-        // Helper function to generate colored SVG ship icon (triangle with trail dots)
+        // Ship size based on actual vessel length (AIS dimension data)
+        // Returns { width, height } in pixels, proportional to real-world size
+        function getShipSize(lengthM, beamM) {
+            // Default sizes for unknown dimensions
+            const len = lengthM || 50;
+            const bm = beamM || 10;
+            // Scale: small boat (~10m) → 10px, large vessel (~400m) → 30px
+            const h = Math.max(10, Math.min(30, 10 + (len / 400) * 20));
+            const w = h * (bm / len) * 2.5;  // aspect ratio from beam/length
+            return { width: Math.max(8, Math.round(w)), height: Math.round(h) };
+        }
+
+        // Helper function to generate colored SVG ship icon (top-down vessel shape with glow)
         function getShipIcon(colorHex) {
-            const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 32'>
-                <!-- Trail dots -->
-                <circle cx='12' cy='28' r='1.5' fill='${colorHex}' opacity='0.3'/>
-                <circle cx='12' cy='24' r='1.8' fill='${colorHex}' opacity='0.5'/>
-                <circle cx='12' cy='20' r='2' fill='${colorHex}' opacity='0.7'/>
-                <!-- Ship triangle -->
-                <polygon points='12,2 6,16 12,14 18,16' fill='${colorHex}'/>
+            const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 40'>
+                <defs>
+                    <filter id='glow' x='-50%' y='-50%' width='200%' height='200%'>
+                        <feGaussianBlur stdDeviation='2' result='blur'/>
+                        <feMerge><feMergeNode in='blur'/><feMergeNode in='SourceGraphic'/></feMerge>
+                    </filter>
+                </defs>
+                <!-- Wake trail -->
+                <line x1='16' y1='30' x2='10' y2='38' stroke='${colorHex}' stroke-width='1' opacity='0.25'/>
+                <line x1='16' y1='30' x2='22' y2='38' stroke='${colorHex}' stroke-width='1' opacity='0.25'/>
+                <line x1='16' y1='30' x2='16' y2='39' stroke='${colorHex}' stroke-width='1.2' opacity='0.15'/>
+                <!-- Ship hull (top-down view) -->
+                <path d='M16,2 L22,12 L22,26 L20,30 L12,30 L10,26 L10,12 Z'
+                      fill='${colorHex}' filter='url(#glow)' opacity='0.9'/>
+                <!-- Bridge -->
+                <rect x='12' y='10' width='8' height='5' rx='1' fill='white' opacity='0.35'/>
+                <!-- Bow line -->
+                <line x1='16' y1='2' x2='16' y2='9' stroke='white' stroke-width='0.8' opacity='0.5'/>
+                <!-- Deck line -->
+                <line x1='12' y1='20' x2='20' y2='20' stroke='white' stroke-width='0.6' opacity='0.3'/>
             </svg>`;
             return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
         }
@@ -1564,6 +1800,25 @@
 
         document.getElementById('layer-sats').addEventListener('change', (e) => {
             satDataSource.show = e.target.checked;
+            // 서브 토글 표시/숨김
+            document.getElementById('satSubToggles').style.display = e.target.checked ? 'block' : 'none';
+        });
+
+        // 서브 토글: 3D Orbit, Ground Track, Sensor Footprint 개별 제어
+        function _toggleSatLayer(prefix, visible) {
+            satDataSource.entities.values.forEach(e => {
+                if (e.id.startsWith(prefix)) e.show = visible;
+            });
+        }
+
+        document.getElementById('layer-sat-orbits').addEventListener('change', (e) => {
+            _toggleSatLayer('orbit-', e.target.checked);
+        });
+        document.getElementById('layer-sat-ground').addEventListener('change', (e) => {
+            _toggleSatLayer('ground-', e.target.checked);
+        });
+        document.getElementById('layer-sat-footprint').addEventListener('change', (e) => {
+            _toggleSatLayer('footprint-', e.target.checked);
         });
 
         let _satLastApiFetch = 0;
@@ -1580,10 +1835,12 @@
                 sats.forEach(sat => {
                     const satId = String(sat.id);
                     let satrec = null;
-                    if (hasSatelliteJs && sat.tle && sat.tle.length === 2) {
-                        try {
-                            satrec = satellite.twoline2satrec(sat.tle[0], sat.tle[1]);
-                        } catch (e) { /* skip */ }
+                    if (hasSatelliteJs) {
+                        if (sat.tle && sat.tle.length === 2) {
+                            try { satrec = satellite.twoline2satrec(sat.tle[0], sat.tle[1]); } catch (e) { /* skip */ }
+                        } else if (sat.gp) {
+                            satrec = _createSatrecFromGP(sat.gp, sat.id);
+                        }
                     }
                     newCache[satId] = { satrec, sat };
                 });
@@ -1593,6 +1850,96 @@
             } catch (err) {
                 console.error('Error fetching satellite TLE data:', err);
             }
+        }
+
+        // GP 요소로 satrec 생성 (서버에서 받은 궤도 파라미터 사용)
+        function _createSatrecFromGP(gp, noradId) {
+            if (!gp || typeof satellite === 'undefined') return null;
+            try {
+                const epochDt = new Date(gp.EPOCH);
+                const year = epochDt.getUTCFullYear();
+                const startOfYear = new Date(Date.UTC(year, 0, 1));
+                const dayOfYear = (epochDt - startOfYear) / 86400000 + 1;
+                const epochYr = year % 100;
+                const epochDay = dayOfYear + epochDt.getUTCHours() / 24 +
+                    epochDt.getUTCMinutes() / 1440 + epochDt.getUTCSeconds() / 86400;
+
+                // Build TLE lines from GP elements
+                const norad = String(noradId).padStart(5, '0');
+                const eLine1 = `1 ${norad}U 00000A   ${String(epochYr).padStart(2,'0')}${epochDay.toFixed(8).padStart(12,' ')} .00000000  00000-0  ${(gp.BSTAR || 0).toExponential(4).replace('e','').replace('+','').replace('.','').padStart(8,' ')} 0    0`;
+                const eLine2 = `2 ${norad} ${(gp.INCLINATION).toFixed(4).padStart(8,' ')} ${(gp.RA_OF_ASC_NODE).toFixed(4).padStart(8,' ')} ${String(Math.round(gp.ECCENTRICITY * 1e7)).padStart(7,'0')} ${(gp.ARG_OF_PERICENTER).toFixed(4).padStart(8,' ')} ${(gp.MEAN_ANOMALY).toFixed(4).padStart(8,' ')} ${(gp.MEAN_MOTION).toFixed(8).padStart(11,' ')}    0`;
+
+                return satellite.twoline2satrec(eLine1, eLine2);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // Ground Track 계산 (궤도를 지표면에 투영)
+        function _computeGroundTrack(satrec, now, steps = 120) {
+            const positions = [];
+            const periodMin = satrec.no ? (2 * Math.PI / satrec.no) : 90;
+            for (let i = 0; i <= steps; i++) {
+                const t = new Date(now.getTime() + (i / steps) * periodMin * 60 * 1000);
+                try {
+                    const posVel = satellite.propagate(satrec, t);
+                    if (!posVel.position) continue;
+                    const gmst = satellite.gstime(t);
+                    const geo = satellite.eciToGeodetic(posVel.position, gmst);
+                    positions.push(
+                        satellite.degreesLong(geo.longitude),
+                        satellite.degreesLat(geo.latitude)
+                    );
+                } catch (e) { /* skip */ }
+            }
+            return positions;
+        }
+
+        // Sensor Footprint 계산 (위성 관측 범위 원형)
+        function _computeFootprint(lat, lng, altKm, numPoints = 18) {
+            // 지평선까지의 각도: acos(R / (R + h))
+            const R = 6371; // 지구 반지름 km
+            const halfAngleDeg = Math.acos(R / (R + altKm)) * (180 / Math.PI) * 0.5; // 실제 FOV의 50%로 축소
+            const positions = [];
+            for (let i = 0; i <= numPoints; i++) {
+                const bearing = (360 / numPoints) * i;
+                const bearingRad = bearing * Math.PI / 180;
+                const latRad = lat * Math.PI / 180;
+                const lngRad = lng * Math.PI / 180;
+                const angDist = halfAngleDeg * Math.PI / 180;
+                const newLat = Math.asin(
+                    Math.sin(latRad) * Math.cos(angDist) +
+                    Math.cos(latRad) * Math.sin(angDist) * Math.cos(bearingRad)
+                );
+                const newLng = lngRad + Math.atan2(
+                    Math.sin(bearingRad) * Math.sin(angDist) * Math.cos(latRad),
+                    Math.cos(angDist) - Math.sin(latRad) * Math.sin(newLat)
+                );
+                positions.push(newLng * 180 / Math.PI, newLat * 180 / Math.PI);
+            }
+            return positions;
+        }
+
+        // 궤도 경로 계산 (satellite.js로 1 orbit 예측)
+        function _computeOrbitPath(satrec, now, steps = 120) {
+            const positions = [];
+            // 궤도 주기 계산: T = 1440 / meanMotion (분)
+            const periodMin = satrec.no ? (2 * Math.PI / satrec.no) : 90;
+            for (let i = 0; i <= steps; i++) {
+                const t = new Date(now.getTime() + (i / steps) * periodMin * 60 * 1000);
+                try {
+                    const posVel = satellite.propagate(satrec, t);
+                    if (!posVel.position) continue;
+                    const gmst = satellite.gstime(t);
+                    const geo = satellite.eciToGeodetic(posVel.position, gmst);
+                    positions.push(
+                        satellite.degreesLong(geo.longitude),
+                        satellite.degreesLat(geo.latitude),
+                        geo.height * 1000
+                    );
+                } catch (e) { /* skip point */ }
+            }
+            return positions;
         }
 
         function _propagateSatPositions() {
@@ -1626,6 +1973,48 @@
 
                 let entity = satDataSource.entities.getById(satId);
                 if (!entity) {
+                    // 궤도 경로 + Ground Track + Sensor Footprint 생성
+                    if (hasSatelliteJs && satrec) {
+                        const cesiumColor = Cesium.Color.fromCssColorString(color);
+
+                        // 1) 3D 궤도선 (점선, 우주 공간)
+                        const orbitCoords = _computeOrbitPath(satrec, now);
+                        if (orbitCoords.length > 6) {
+                            satDataSource.entities.add({
+                                id: 'orbit-' + satId,
+                                polyline: {
+                                    positions: Cesium.Cartesian3.fromDegreesArrayHeights(orbitCoords),
+                                    width: 1.5,
+                                    material: new Cesium.PolylineDashMaterialProperty({
+                                        color: cesiumColor.withAlpha(0.4),
+                                        dashLength: 16,
+                                        dashPattern: 255
+                                    })
+                                }
+                            });
+                        }
+
+                        // 2) Ground Track (지표면 투영 궤적)
+                        const groundCoords = _computeGroundTrack(satrec, now);
+                        if (groundCoords.length > 4) {
+                            satDataSource.entities.add({
+                                id: 'ground-' + satId,
+                                polyline: {
+                                    positions: Cesium.Cartesian3.fromDegreesArray(groundCoords),
+                                    width: 1.5,
+                                    clampToGround: true,
+                                    material: new Cesium.PolylineDashMaterialProperty({
+                                        color: cesiumColor.withAlpha(0.35),
+                                        dashLength: 10,
+                                        dashPattern: 255
+                                    })
+                                }
+                            });
+                        }
+
+                        // 3) Sensor Footprint — 클릭 시에만 생성 (아래 클릭 핸들러에서 처리)
+                    }
+
                     satDataSource.entities.add({
                         id: satId,
                         name: sat.name,
@@ -1645,33 +2034,47 @@
                             , false),
                         billboard: {
                             image: getSatIcon(color),
-                            width: 18,
-                            height: 18,
-                            scaleByDistance: new Cesium.NearFarScalar(1.5e7, 1.5, 8.0e7, 0.5),
+                            width: 32,
+                            height: 32,
+                            scaleByDistance: new Cesium.NearFarScalar(1.5e7, 1.5, 8.0e7, 0.6),
                             disableDepthTestDistance: Number.POSITIVE_INFINITY
                         },
                         label: {
                             text: sat.name,
-                            font: '10px JetBrains Mono, monospace',
+                            font: '11px JetBrains Mono, monospace',
                             fillColor: Cesium.Color.fromCssColorString(color),
                             outlineColor: Cesium.Color.BLACK,
-                            outlineWidth: 2,
+                            outlineWidth: 3,
                             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                            pixelOffset: new Cesium.Cartesian2(0, -20),
+                            pixelOffset: new Cesium.Cartesian2(0, -26),
                             distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2e7),
                             disableDepthTestDistance: Number.POSITIVE_INFINITY
                         }
                     });
                 }
-                // Update position directly on entity
+                // Update position + footprint
                 const e = satDataSource.entities.getById(satId);
                 if (e) e.position = position;
+
+                // 서브 토글 상태 반영
+                const orbitE = satDataSource.entities.getById('orbit-' + satId);
+                if (orbitE) orbitE.show = document.getElementById('layer-sat-orbits').checked;
+                const groundE = satDataSource.entities.getById('ground-' + satId);
+                if (groundE) groundE.show = document.getElementById('layer-sat-ground').checked;
+                const fpE = satDataSource.entities.getById('footprint-' + satId);
+                if (fpE) fpE.show = document.getElementById('layer-sat-footprint').checked;
             });
 
-            // Remove entities not in cache anymore
+            // Remove entities not in cache anymore (위성 + 궤도선 + ground track + footprint)
             const cacheIds = new Set(Object.keys(_satRecCache));
             satDataSource.entities.values
-                .filter(e => !cacheIds.has(e.id))
+                .filter(e => {
+                    let baseId = e.id;
+                    for (const prefix of ['orbit-', 'ground-', 'footprint-']) {
+                        if (baseId.startsWith(prefix)) { baseId = baseId.slice(prefix.length); break; }
+                    }
+                    return !cacheIds.has(baseId);
+                })
                 .forEach(e => satDataSource.entities.remove(e));
         }
 
@@ -1969,6 +2372,7 @@
                             return `<table class="cesium-infoBox-defaultTable"><tbody>${rows}</tbody></table>`;
                         }, false);
 
+                        const shipSize = getShipSize(ship.length, ship.beam);
                         ds.entities.add({
                             id: ship.mmsi,
                             name: ship.name,
@@ -1976,8 +2380,9 @@
                             position: position,
                             billboard: {
                                 image: getShipIcon(SHIP_COLORS[type]),
-                                width: 14,
-                                height: 16,
+                                width: shipSize.width,
+                                height: shipSize.height,
+                                scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
                                 rotation: new Cesium.CallbackProperty(() => {
                                     const s = shipDataMap[mmsiKey] || ship;
                                     return Cesium.Math.toRadians(-(s.heading || 0));
@@ -2281,10 +2686,10 @@
             const card = document.getElementById('sentinelCard');
             const body = document.getElementById('sentinelCardBody');
 
-            // Position below shipFilterPanel
-            const filterPanel = document.getElementById('shipFilterPanel');
-            const filterRect = filterPanel.getBoundingClientRect();
-            card.style.top = (filterRect.bottom + 10) + 'px';
+            // Position: 화면 중앙 약간 위
+            card.style.top = Math.max(100, (window.innerHeight - 400) / 2) + 'px';
+            card.style.left = Math.max(20, (window.innerWidth - 260) / 2) + 'px';
+            card.style.right = 'auto';
 
             // Show as flex so the column layout works for scrolling
             card.style.display = 'flex';
@@ -2393,15 +2798,96 @@
             panel.style.display = 'flex';
         }
 
+        // ── Satellite Footprint: 클릭 시 토글 ────────────────────────────
+        let _activeFootprintSatId = null;
+
+        function _getSatRealTimePosition(satId) {
+            const cache = _satRecCache[satId];
+            if (!cache) return null;
+            const { satrec, sat } = cache;
+            if (typeof satellite !== 'undefined' && satrec) {
+                try {
+                    const now = new Date();
+                    const posVel = satellite.propagate(satrec, now);
+                    if (posVel.position) {
+                        const gmst = satellite.gstime(now);
+                        const geo = satellite.eciToGeodetic(posVel.position, gmst);
+                        return {
+                            lat: satellite.degreesLat(geo.latitude),
+                            lng: satellite.degreesLong(geo.longitude),
+                            altKm: geo.height
+                        };
+                    }
+                } catch (e) { /* fallback below */ }
+            }
+            return { lat: sat.lat, lng: sat.lng, altKm: sat.alt_km || 400 };
+        }
+
+        function _toggleSatFootprint(satId) {
+            // 기존 footprint 제거
+            if (_activeFootprintSatId) {
+                const old = satDataSource.entities.getById('footprint-' + _activeFootprintSatId);
+                if (old) satDataSource.entities.remove(old);
+            }
+
+            // 같은 위성 다시 클릭 → 끄기
+            if (_activeFootprintSatId === satId) {
+                _activeFootprintSatId = null;
+                return;
+            }
+
+            // 실시간 위치로 footprint 생성
+            const cache = _satRecCache[satId];
+            if (!cache) return;
+            const color = SAT_COLORS[cache.sat.mission] || '#94a3b8';
+            const pos = _getSatRealTimePosition(satId);
+            if (!pos) return;
+
+            const footprintCoords = _computeFootprint(pos.lat, pos.lng, pos.altKm);
+            if (footprintCoords.length > 4) {
+                satDataSource.entities.add({
+                    id: 'footprint-' + satId,
+                    polygon: {
+                        hierarchy: Cesium.Cartesian3.fromDegreesArray(footprintCoords),
+                        material: Cesium.Color.fromCssColorString(color).withAlpha(0.12),
+                        outline: true,
+                        outlineColor: Cesium.Color.fromCssColorString(color).withAlpha(0.5),
+                        outlineWidth: 1,
+                        height: 0
+                    }
+                });
+                _activeFootprintSatId = satId;
+            }
+        }
+
         // Listen for entity selection on the viewer
         const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
         handler.setInputAction((click) => {
             const picked = viewer.scene.pick(click.position);
             if (Cesium.defined(picked) && picked.id) {
-                showShipInfo(picked.id);
-                // Activate proximity only for ship entities
-                // picked.id is a Cesium Entity; picked.id.id is the entity's ID (= ship.mmsi)
                 const entityId = picked.id.id !== undefined ? picked.id.id : picked.id;
+
+                // 위성 클릭 → footprint 토글 + 카메라 이동
+                if (_satRecCache[entityId]) {
+                    _toggleSatFootprint(entityId);
+                    // footprint가 활성화되면 실시간 위치로 flyTo
+                    if (_activeFootprintSatId === entityId) {
+                        const pos = _getSatRealTimePosition(entityId);
+                        if (pos) {
+                            // footprint 반경의 ~4배 높이로 줌아웃 → 지구 위에서 해당 지역 한눈에 보기
+                            const horizonAngle = Math.acos(6371 / (6371 + pos.altKm));
+                            const footprintRadiusKm = 6371 * horizonAngle;
+                            const viewAlt = Math.max(footprintRadiusKm * 4 * 1000, 8000000);
+                            viewer.camera.flyTo({
+                                destination: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, viewAlt),
+                                duration: 1.5
+                            });
+                        }
+                    }
+                    return;
+                }
+
+                showShipInfo(picked.id);
                 if (shipDataMap[entityId]) {
                     selectedProximityMmsi = entityId;
                     proximityMissCount = 0;
@@ -2412,6 +2898,12 @@
             } else {
                 document.getElementById('shipInfoPanel').style.display = 'none';
                 clearProximity();
+                // 빈 곳 클릭 → footprint 제거
+                if (_activeFootprintSatId) {
+                    const old = satDataSource.entities.getById('footprint-' + _activeFootprintSatId);
+                    if (old) satDataSource.entities.remove(old);
+                    _activeFootprintSatId = null;
+                }
             }
         }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
         // ── End Draggable Panels ──────────────────────────────────────────────
