@@ -38,5 +38,8 @@ uvicorn_modular.log
 # Superpowers brainstorm
 .superpowers/
 
+# Production secrets
+deploy/.env.prod
+
 # Large Media (excluded if > 100MB)
 

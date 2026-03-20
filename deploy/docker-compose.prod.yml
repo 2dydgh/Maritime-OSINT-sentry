@@ -1,0 +1,92 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: osint_app
+    restart: always
+    env_file:
+      - .env.prod
+    depends_on:
+      - db
+      - redis
+    networks:
+      - internal
+
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: osint_db
+    restart: always
+    environment:
+      POSTGRES_USER: osint_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: osint_4d
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+      - ../schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: osint_redis
+    restart: always
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: osint_prometheus
+    restart: always
+    volumes:
+      - ./prometheus.prod.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - internal
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: osint_grafana
+    restart: always
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SERVER_ROOT_URL=https://${DOMAIN:-localhost}/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: osint_caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    depends_on:
+      - app
+    networks:
+      - internal
+
+volumes:
+  postgis_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    driver: bridge

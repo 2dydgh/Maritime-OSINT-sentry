@@ -1,0 +1,35 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Deploy to Oracle Cloud
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            cd ~/osint-sentry
+            git pull origin main
+            cd deploy
+            docker compose --env-file .env.prod -f docker-compose.prod.yml build app
+            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+            echo "Waiting for health check..."
+            sleep 10
+            curl -sf http://localhost/health || {
+              echo "Health check failed!"
+              docker compose -f docker-compose.prod.yml logs app --tail 50
+              exit 1
+            }
+            echo "Deploy successful!"

@@ -45,3 +45,18 @@ jobs:
 
       - name: Format check
         run: ruff format --check backend/ tests/
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t osint-sentry:ci .
+
+      - name: Test health endpoint
+        run: |
+          docker run --rm -d --name ci-test -p 8002:8001 osint-sentry:ci
+          sleep 5
+          curl -sf http://localhost:8002/health
+          docker stop ci-test
