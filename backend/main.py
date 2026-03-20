@@ -8,7 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import database, config, websocket
 from .services import ais_stream, data_fetcher, history_writer
-from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health
+from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision
+from .services import collision_analyzer
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -63,6 +64,18 @@ async def lifespan(app: FastAPI):
                 ais_stream.check_signal_loss()
             except Exception as e:
                 logger.error(f"Signal loss scan error: {e}")
+
+    # Background task: collision risk analysis every 10 seconds
+    async def collision_scanner():
+        while True:
+            await asyncio.sleep(10)
+            try:
+                vessels = ais_stream.get_ais_vessels()
+                collision_analyzer.update_collision_cache(vessels)
+            except Exception as e:
+                logger.error(f"Collision analysis error: {e}")
+
+    collision_task = asyncio.create_task(collision_scanner())
     
     yield
     
@@ -70,6 +83,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down OSINT 4D Backend...")
     ais_stream.stop_ais_stream()
     broadcast_task.cancel()
+    collision_task.cancel()
     data_fetcher.stop_data_fetcher()
 
     # Stop history writer and flush remaining buffer
@@ -114,6 +128,7 @@ app.include_router(sentinel.router, prefix="/api/v1")
 app.include_router(alerts.router, prefix="/api/v1")
 app.include_router(history.router, prefix="/api/v1")
 app.include_router(metrics.router)
+app.include_router(collision.router, prefix="/api/v1")
 app.include_router(health.router)
 
 # Static Files
