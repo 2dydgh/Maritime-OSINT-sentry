@@ -1,46 +1,57 @@
 {
-  "dashboard": {
-    "title": "Maritime OSINT Sentry",
-    "uid": "osint-overview",
-    "panels": [
-      {
-        "title": "AIS Messages/sec",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
-        "targets": [{"expr": "rate(ais_messages_total[1m])", "legendFormat": "{{message_type}}"}]
-      },
-      {
-        "title": "Active Vessels",
-        "type": "stat",
-        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
-        "targets": [{"expr": "ais_vessels_active"}]
-      },
-      {
-        "title": "WebSocket Connections",
-        "type": "stat",
-        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
-        "targets": [{"expr": "websocket_connections_active"}]
-      },
-      {
-        "title": "DB Write Latency",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
-        "targets": [{"expr": "histogram_quantile(0.95, rate(db_write_duration_seconds_bucket[5m]))", "legendFormat": "p95"}]
-      },
-      {
-        "title": "Alerts Fired",
-        "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
-        "targets": [{"expr": "rate(alerts_fired_total[5m])", "legendFormat": "{{alert_type}}"}]
-      },
-      {
-        "title": "Redis Stream Lag",
-        "type": "gauge",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
-        "targets": [{"expr": "stream_lag_messages"}]
-      }
-    ],
-    "time": {"from": "now-1h", "to": "now"},
-    "refresh": "10s"
-  }
+  "title": "Maritime OSINT Sentry",
+  "uid": "osint-overview",
+  "panels": [
+    {
+      "id": 1,
+      "title": "AIS Messages/sec",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": "Prometheus",
+      "targets": [{"expr": "rate(ais_messages_total[1m])", "legendFormat": "{{message_type}}"}]
+    },
+    {
+      "id": 2,
+      "title": "Active Vessels",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+      "datasource": "Prometheus",
+      "targets": [{"expr": "ais_vessels_active"}]
+    },
+    {
+      "id": 3,
+      "title": "WebSocket Connections",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+      "datasource": "Prometheus",
+      "targets": [{"expr": "websocket_connections_active"}]
+    },
+    {
+      "id": 4,
+      "title": "DB Write Latency (p95)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": "Prometheus",
+      "targets": [{"expr": "histogram_quantile(0.95, rate(db_write_duration_seconds_bucket[5m]))", "legendFormat": "p95"}]
+    },
+    {
+      "id": 5,
+      "title": "Alerts Fired",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": "Prometheus",
+      "targets": [{"expr": "rate(alerts_fired_total[5m])", "legendFormat": "{{alert_type}}"}]
+    },
+    {
+      "id": 6,
+      "title": "Redis Stream Lag",
+      "type": "gauge",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "datasource": "Prometheus",
+      "targets": [{"expr": "stream_lag_messages"}]
+    }
+  ],
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "10s",
+  "schemaVersion": 39
 }
