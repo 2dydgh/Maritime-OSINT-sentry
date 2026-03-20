@@ -60,6 +60,7 @@ _SAT_INTEL_DB = [
     ("MENTOR", {"country": "USA", "mission": "sigint", "sat_type": "SIGINT / ELINT", "wiki": "https://en.wikipedia.org/wiki/Mentor_(satellite)"}),
     ("LUCH", {"country": "Russia", "mission": "sigint", "sat_type": "Relay / SIGINT", "wiki": "https://en.wikipedia.org/wiki/Luch_(satellite)"}),
     ("SHIJIAN", {"country": "China", "mission": "sigint", "sat_type": "ELINT / Tech Demo", "wiki": "https://en.wikipedia.org/wiki/Shijian"}),
+    ("HAWK", {"country": "USA", "mission": "sigint", "sat_type": "RF SIGINT / Maritime", "wiki": "https://en.wikipedia.org/wiki/HawkEye_360"}),
     # Navigation
     ("NAVSTAR", {"country": "USA", "mission": "navigation", "sat_type": "GPS", "wiki": "https://en.wikipedia.org/wiki/GPS_satellite_blocks"}),
     ("GLONASS", {"country": "Russia", "mission": "navigation", "sat_type": "GLONASS", "wiki": "https://en.wikipedia.org/wiki/GLONASS"}),
@@ -89,13 +90,20 @@ def _fetch_satellites_from_tle_api():
         term = key.split()[0] if len(key.split()) > 1 and key.split()[0] in ("USA", "NROL") else key
         search_terms.add(term)
 
-    all_results = []
-    seen_ids = set()
-    for term in search_terms:
+    # 디스크 캐시를 먼저 로드해서 기존 데이터 보존
+    existing = _load_gp_cache() or []
+    seen_ids = {s.get("NORAD_CAT_ID") for s in existing}
+    new_count = 0
+
+    for i, term in enumerate(search_terms):
         try:
+            # Rate limit: 1.5초 간격으로 요청
+            if i > 0:
+                time.sleep(1.5)
             url = f"https://tle.ivanstanojevic.me/api/tle/?search={term}&page_size=100&format=json"
             response = fetch_with_curl(url, timeout=10)
             if response.status_code != 200:
+                logger.debug(f"TLE fallback search '{term}' returned {response.status_code}")
                 continue
             data = response.json()
             for member in data.get("member", []):
@@ -107,13 +115,19 @@ def _fetch_satellites_from_tle_api():
                 line2 = member.get("line2", "")
                 if not (line1.startswith("1 ") and line2.startswith("2 ")):
                     continue
-                # Convert TLE to GP-style dict
                 gp = _tle_to_gp(member.get("name", "UNKNOWN"), sat_id, line1, line2)
                 if gp:
-                    all_results.append(gp)
+                    existing.append(gp)
+                    new_count += 1
+            logger.debug(f"TLE fallback search '{term}': done ({len(existing)} total)")
         except Exception as e:
             logger.debug(f"TLE fallback search '{term}' failed: {e}")
-    return all_results
+
+    # 결과를 디스크에 저장 (다음 시작 시 즉시 사용)
+    if existing:
+        _save_gp_cache(existing)
+    logger.info(f"TLE fallback: {new_count} new, {len(existing)} total (cached to disk)")
+    return existing
 
 
 def _tle_to_gp(name, norad_id, line1, line2):
@@ -155,6 +169,32 @@ def _tle_to_gp(name, norad_id, line1, line2):
         return None
 
 
+import os, json as _json
+
+_SAT_CACHE_FILE = os.path.join(os.path.dirname(__file__), "sat_gp_cache.json")
+
+def _save_gp_cache(data):
+    """Save GP data to disk for persistence across restarts."""
+    try:
+        with open(_SAT_CACHE_FILE, "w") as f:
+            _json.dump(data, f)
+        logger.debug(f"Saved {len(data)} GP records to disk cache")
+    except Exception as e:
+        logger.warning(f"Failed to save GP cache: {e}")
+
+def _load_gp_cache():
+    """Load GP data from disk cache."""
+    try:
+        if os.path.exists(_SAT_CACHE_FILE):
+            with open(_SAT_CACHE_FILE) as f:
+                data = _json.load(f)
+            logger.info(f"Loaded {len(data)} GP records from disk cache")
+            return data
+    except Exception as e:
+        logger.warning(f"Failed to load GP cache: {e}")
+    return None
+
+
 def fetch_intel_satellites():
     """Fetch and return the current list of intelligence satellite positions."""
     if "data" in _results_cache:
@@ -179,19 +219,27 @@ def fetch_intel_satellites():
                         if isinstance(gp_data, list) and len(gp_data) > 100:
                             _sat_gp_cache["data"] = gp_data
                             _sat_gp_cache["last_fetch"] = now_ts
+                            _save_gp_cache(gp_data)  # 디스크에 캐시 저장
                             logger.info(f"Satellites: Downloaded {len(gp_data)} GP records from {url}")
                             break
                 except Exception as e:
                     logger.warning(f"Satellites: Failed to fetch from {url}: {e}")
 
             # Fallback to TLE API if CelesTrak blocked
+            # _fetch_satellites_from_tle_api()가 디스크 캐시 로드 + 병합 + 저장을 자동 처리
             if _sat_gp_cache["data"] is None:
                 logger.info("Satellites: CelesTrak unreachable, trying TLE fallback API...")
                 fallback_data = _fetch_satellites_from_tle_api()
                 if fallback_data and len(fallback_data) > 5:
                     _sat_gp_cache["data"] = fallback_data
                     _sat_gp_cache["last_fetch"] = now_ts
-                    logger.info(f"Satellites: Got {len(fallback_data)} records from TLE fallback API")
+
+            # 모든 온라인 소스 실패 시 디스크 캐시에서 로드
+            if _sat_gp_cache["data"] is None:
+                disk_data = _load_gp_cache()
+                if disk_data:
+                    _sat_gp_cache["data"] = disk_data
+                    _sat_gp_cache["last_fetch"] = now_ts
 
         data = _sat_gp_cache["data"]
         if not data:
@@ -310,6 +358,17 @@ def fetch_intel_satellites():
                     "country": s.get("country"),
                     "sat_type": s.get("sat_type"),
                     "wiki": wiki,
+                    # GP orbital elements for client-side propagation
+                    "gp": {
+                        "MEAN_MOTION": mean_motion,
+                        "ECCENTRICITY": ecc,
+                        "INCLINATION": incl,
+                        "RA_OF_ASC_NODE": raan,
+                        "ARG_OF_PERICENTER": argp,
+                        "MEAN_ANOMALY": ma,
+                        "BSTAR": bstar,
+                        "EPOCH": epoch_str,
+                    },
                 })
 
             except Exception:
