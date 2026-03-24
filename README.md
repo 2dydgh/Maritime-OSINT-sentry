@@ -22,6 +22,17 @@ A high-performance, real-time maritime surveillance and intelligence dashboard. 
 - **Destination Changes**: Immediate notification when a vessel updates its tactical destination in mid-transit.
 - **Interactive Feed**: Click-to-fly functionality that automatically selects the target vessel and opens technical dossiers.
 
+### ⚠️ Collision Risk Analysis (Dual Engine)
+- **Distance-Based Analysis**: TCPA/DCPA calculation with spatial grid filtering (5nm radius). Danger (DCPA < 0.5nm) and Warning (DCPA < 1.0nm) classification.
+- **ML Model Analysis**: XGBoost-based collision risk prediction (0~3 risk levels) via da10-service. Features include COG difference, approach signal, bearing analysis, and 14 input parameters.
+- **Collision Candidate Pre-filter**: Range rate + bearing validation — filters out diverging vessel pairs before analysis. Requires at least one vessel heading toward the other (within 90°).
+- **Land Obstruction Filter**: Automatic exclusion of vessel pairs separated by land masses using GSHHG coastline data.
+- **Interactive Visualization**:
+  - COG projection lines (dashed) showing predicted vessel course over 10 minutes.
+  - CPA (Closest Point of Approach) marker with real-time DCPA/TCPA labels.
+  - Pulsing risk zone circle at CPA point, radius proportional to DCPA.
+  - Risk level color coding: Danger (red), Warning (orange), Caution (yellow), Safe (green).
+
 ### 🖼️ Sentinel-2 Imagery Search
 - Right-click contextual search for high-resolution satellite imagery via Microsoft Planetary Computer.
 - Immediate thumbnail preview and metadata fetching for precise site intelligence.
@@ -31,7 +42,8 @@ A high-performance, real-time maritime surveillance and intelligence dashboard. 
 - **Frontend**: CesiumJS, Vanilla CSS (Glassmorphism), JavaScript (ES6+).
 - **Backend**: FastAPI (Python 3.12), Uvicorn.
 - **Database**: PostgreSQL with PostGIS extension for spatial intelligence.
-- **Core Libraries**: `sgp4` (Orbital math), `asyncpg`, `apscheduler`, `websockets`.
+- **Collision Model**: XGBoost (da10-service), GSHHG coastline shapefile (`shapely`, `pyshp`).
+- **Core Libraries**: `sgp4` (Orbital math), `asyncpg`, `apscheduler`, `websockets`, `httpx`.
 
 ## 📦 Quick Start
 
@@ -75,7 +87,7 @@ python -m uvicorn backend.main:app --host 0.0.0.0 --port 8001
 |---------|-----|---------|
 | App | http://localhost:8001 | Maritime OSINT Dashboard |
 | Prometheus | http://localhost:9090 | Metrics collection |
-| Grafana | http://localhost:3000 | Monitoring dashboard (admin/admin) |
+| Grafana | http://localhost:3001 | Monitoring dashboard (admin/admin) |
 | Redis | localhost:6379 | Stream pipeline |
 
 ## 🔒 Security Note

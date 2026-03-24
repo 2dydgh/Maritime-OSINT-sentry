@@ -24,6 +24,21 @@ services:
     volumes:
       - redis_data:/data
 
+  collision-model:
+    build:
+      context: ./collision_model_new/da10-service/ds-api
+      dockerfile: Dockerfile
+    container_name: osint_collision_model
+    restart: always
+    ports:
+      - "127.0.0.1:5050:5000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
 volumes:
   postgis_data:
   redis_data:

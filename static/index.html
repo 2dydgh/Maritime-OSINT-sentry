@@ -53,6 +53,7 @@
             z-index: 1;
         }
 
+
         /* Glassmorphism UI Base */
         .glass-panel {
             background: var(--panel-bg);
@@ -154,22 +155,16 @@
             top: calc(100% + 6px);
             right: 0;
             background: var(--panel-bg);
-            backdrop-filter: blur(16px);
             border: 1px solid var(--panel-border);
             border-radius: 8px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
             min-width: 180px;
             z-index: 9999;
             padding: 4px 0;
-            opacity: 0;
-            transform: translateY(-8px);
-            transition: opacity 0.2s ease, transform 0.2s ease;
         }
 
         .region-dropdown.open {
             display: block;
-            opacity: 1;
-            transform: translateY(0);
         }
 
         .region-dropdown .region-group-label {
@@ -975,15 +970,29 @@
             bottom: 120px;
             right: 20px;
             z-index: 9998;
+            display: grid;
+            grid-template-areas:
+                ".    up   ."
+                "left zoom right"
+                ".    down .";
+            grid-template-columns: repeat(3, 44px);
+            grid-template-rows: repeat(3, 44px);
+            gap: 3px;
+        }
+        #mapNavControls #navUp    { grid-area: up; }
+        #mapNavControls #navDown  { grid-area: down; }
+        #mapNavControls #navLeft  { grid-area: left; }
+        #mapNavControls #navRight { grid-area: right; }
+        #mapNavControls .nav-zoom-group {
+            grid-area: zoom;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 2px;
         }
         .map-nav-btn {
-            width: 36px;
-            height: 36px;
+            width: 44px;
+            height: 44px;
             background: var(--panel-bg);
-            backdrop-filter: blur(12px);
             border: 1px solid var(--panel-border);
             border-radius: 8px;
             color: var(--text-main);
@@ -1002,10 +1011,11 @@
         .map-nav-btn:active {
             background: rgba(255,255,255,0.15);
         }
-        .map-nav-divider {
-            height: 1px;
-            background: var(--panel-border);
-            margin: 2px 4px;
+        .nav-zoom-group .map-nav-btn {
+            width: 44px;
+            height: 20px;
+            font-size: 0.8rem;
+            border-radius: 5px;
         }
 
         /* Shared draggable panel styles */
@@ -1262,13 +1272,14 @@
 
     <!-- Map Navigation Controls -->
     <div id="mapNavControls">
-        <button class="map-nav-btn" id="navZoomIn" title="Zoom In (+)"><i class="fa-solid fa-plus"></i></button>
-        <button class="map-nav-btn" id="navZoomOut" title="Zoom Out (-)"><i class="fa-solid fa-minus"></i></button>
-        <div class="map-nav-divider"></div>
         <button class="map-nav-btn" id="navUp" title="Pan Up (↑)"><i class="fa-solid fa-chevron-up"></i></button>
-        <button class="map-nav-btn" id="navDown" title="Pan Down (↓)"><i class="fa-solid fa-chevron-down"></i></button>
         <button class="map-nav-btn" id="navLeft" title="Pan Left (←)"><i class="fa-solid fa-chevron-left"></i></button>
+        <div class="nav-zoom-group">
+            <button class="map-nav-btn" id="navZoomIn" title="Zoom In (+)"><i class="fa-solid fa-plus"></i></button>
+            <button class="map-nav-btn" id="navZoomOut" title="Zoom Out (-)"><i class="fa-solid fa-minus"></i></button>
+        </div>
         <button class="map-nav-btn" id="navRight" title="Pan Right (→)"><i class="fa-solid fa-chevron-right"></i></button>
+        <button class="map-nav-btn" id="navDown" title="Pan Down (↓)"><i class="fa-solid fa-chevron-down"></i></button>
     </div>
 
     <!-- Top Header -->
@@ -1284,7 +1295,7 @@
                 <button class="region-toggle" id="regionToggle">
                     <i class="fa-solid fa-map-location-dot"></i>
                     <span id="regionLabel">지역 선택</span>
-                    <i class="fa-solid fa-chevron-down" style="font-size:0.55rem; opacity:0.6;"></i>
+                    <span id="regionChevron" style="display:inline-flex; align-items:center; padding:2px 0 2px 4px; margin-left:2px; border-left:1px solid rgba(255,255,255,0.1);"><i class="fa-solid fa-chevron-down" style="font-size:0.55rem; opacity:0.6;"></i></span>
                 </button>
                 <div class="region-dropdown" id="regionDropdown">
                     <div class="region-group-label">주요 해역</div>
@@ -1548,25 +1559,25 @@
             }))
         });
 
-        // ── Hybrid Map: 위성사진(기본) + OSM(고줌 폴백) ─────────────────────
-        const osmLayer = viewer.imageryLayers.addImageryProvider(
+        // ── Hybrid Map: 위성사진(기본) + 다크 타일(고줌 폴백) ────────────────
+        const fallbackLayer = viewer.imageryLayers.addImageryProvider(
             new Cesium.UrlTemplateImageryProvider({
-                url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                credit: '© OpenStreetMap contributors',
+                url: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+                credit: '© CartoDB © OpenStreetMap contributors',
                 minimumLevel: 0,
-                maximumLevel: 19
+                maximumLevel: 20
             })
         );
-        osmLayer.alpha = 0; // 기본은 숨김
+        fallbackLayer.alpha = 0;
 
-        // 고줌(5km 이하)에서만 OSM을 페이드인 — 위성사진 빈 곳 보완
+        // 10km 이하에서 점진적 페이드인 (더 넓은 범위로 부드러운 전환)
         viewer.camera.changed.addEventListener(() => {
             const height = viewer.camera.positionCartographic.height;
-            if (height < 5000) {
-                const t = Math.max(0, Math.min(1, (5000 - height) / 3000));
-                osmLayer.alpha = t;
+            if (height < 10000) {
+                const t = Math.max(0, Math.min(1, (10000 - height) / 8000));
+                fallbackLayer.alpha = t;
             } else {
-                osmLayer.alpha = 0;
+                fallbackLayer.alpha = 0;
             }
         });
 
@@ -1618,9 +1629,31 @@
         document.getElementById('navLeft').addEventListener('click', () => navPan(NAV_PAN_PIXELS, 0));
         document.getElementById('navRight').addEventListener('click', () => navPan(-NAV_PAN_PIXELS, 0));
 
-        // Keyboard shortcuts (arrow keys + plus/minus)
+        // Camera orbit rotation around the globe
+        const NAV_ROTATE_DEG = 5;
+
+        function navOrbit(deltaLon, deltaLat) {
+            const cam = viewer.camera;
+            const pos = cam.positionCartographic;
+            const newLon = pos.longitude + Cesium.Math.toRadians(deltaLon);
+            const newLat = Cesium.Math.clamp(
+                pos.latitude + Cesium.Math.toRadians(deltaLat),
+                Cesium.Math.toRadians(-85),
+                Cesium.Math.toRadians(85)
+            );
+            cam.setView({
+                destination: Cesium.Cartesian3.fromRadians(newLon, newLat, pos.height),
+                orientation: {
+                    heading: cam.heading,
+                    pitch: cam.pitch,
+                    roll: cam.roll
+                }
+            });
+        }
+
+        // Keyboard shortcuts
+        // Arrow keys: pan, +/-: zoom, Q/E: rotate, W/S: tilt
         document.addEventListener('keydown', (e) => {
-            // Skip if user is typing in an input field
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
             switch (e.key) {
@@ -1630,6 +1663,10 @@
                 case 'ArrowRight': e.preventDefault(); navPan(-NAV_PAN_PIXELS, 0); break;
                 case '+': case '=': e.preventDefault(); navZoom(1); break;
                 case '-': case '_': e.preventDefault(); navZoom(-1); break;
+                case 'a': case 'A': e.preventDefault(); navOrbit(-NAV_ROTATE_DEG, 0); break;
+                case 'd': case 'D': e.preventDefault(); navOrbit(NAV_ROTATE_DEG, 0); break;
+                case 'w': case 'W': e.preventDefault(); navOrbit(0, NAV_ROTATE_DEG); break;
+                case 's': case 'S': e.preventDefault(); navOrbit(0, -NAV_ROTATE_DEG); break;
             }
         });
 
@@ -1662,6 +1699,21 @@
         viewer.cesiumWidget.creditContainer.style.display = 'none';
         // ── End globe style ───────────────────────────────────────────────────
 
+        // ── Smooth camera transition — constrained maximumHeight to stay low ──
+        function smoothFlyTo(options) {
+            const destCart = Cesium.Cartographic.fromCartesian(options.destination);
+            const destAlt = destCart.height;
+            // Keep maximumHeight just slightly above destination altitude
+            // so the camera glides along the surface instead of arcing into space
+            const maxH = Math.max(destAlt * 1.8, 800000);
+            viewer.camera.flyTo({
+                ...options,
+                duration: options.duration || 2.0,
+                maximumHeight: maxH,
+                easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT
+            });
+        }
+
         // ── 지역 선택 드롭다운 ───────────────────────────────────────────────
         const REGIONS = {
             korea:   { label: '한국 해역',        lon: 128.0,  lat: 35.5, alt: 800000,  pitch: -45 },
@@ -1674,27 +1726,59 @@
         const regionToggle = document.getElementById('regionToggle');
         const regionDropdown = document.getElementById('regionDropdown');
         const regionLabel = document.getElementById('regionLabel');
+        let currentRegionKey = null;
 
+        function flyToRegion(key) {
+            const r = REGIONS[key];
+            if (!r) return;
+            smoothFlyTo({
+                destination: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, r.alt),
+                orientation: {
+                    heading: Cesium.Math.toRadians(0),
+                    pitch: Cesium.Math.toRadians(r.pitch),
+                    roll: 0
+                }
+            });
+        }
+
+        const regionChevron = document.getElementById('regionChevron');
+
+        function openRegionDropdown() {
+            regionDropdown.classList.add('open');
+            regionToggle.classList.add('open');
+        }
+
+        function closeRegionDropdown() {
+            regionDropdown.classList.remove('open');
+            regionToggle.classList.remove('open');
+        }
+
+        // 본문 클릭: 선택된 지역 있으면 복귀, 없으면 드롭다운 열기
         regionToggle.addEventListener('click', (e) => {
             e.stopPropagation();
+            closeRegionDropdown();
+            if (currentRegionKey) {
+                flyToRegion(currentRegionKey);
+            } else {
+                openRegionDropdown();
+            }
+        });
+
+        // 화살표 클릭: 항상 드롭다운 토글 (버튼 클릭 이벤트 전파 차단)
+        regionChevron.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.stopImmediatePropagation();
             const isOpen = regionDropdown.classList.contains('open');
             if (isOpen) {
-                regionDropdown.classList.remove('open');
-                regionToggle.classList.remove('open');
+                closeRegionDropdown();
             } else {
-                // force reflow for animation
-                regionDropdown.style.display = 'block';
-                requestAnimationFrame(() => {
-                    regionDropdown.classList.add('open');
-                    regionToggle.classList.add('open');
-                });
+                openRegionDropdown();
             }
         });
 
         // Close dropdown on outside click
         document.addEventListener('click', () => {
-            regionDropdown.classList.remove('open');
-            regionToggle.classList.remove('open');
+            closeRegionDropdown();
         });
         regionDropdown.addEventListener('click', (e) => e.stopPropagation());
 
@@ -1708,27 +1792,19 @@
                 document.querySelectorAll('.region-item').forEach(i => i.classList.remove('active'));
                 item.classList.add('active');
                 regionLabel.textContent = r.label;
+                currentRegionKey = key;
 
-                // Close dropdown
-                regionDropdown.classList.remove('open');
-                regionToggle.classList.remove('open');
-
-                // Fly to region
-                viewer.camera.flyTo({
-                    destination: Cesium.Cartesian3.fromDegrees(r.lon, r.lat, r.alt),
-                    orientation: {
-                        heading: Cesium.Math.toRadians(0),
-                        pitch: Cesium.Math.toRadians(r.pitch),
-                        roll: 0
-                    },
-                    duration: 2.0
-                });
+                // Close dropdown & fly
+                closeRegionDropdown();
+                flyToRegion(key);
             });
         });
 
         // Default view
         viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(53.0, 24.0, 3000000.0)
+            destination: Cesium.Cartesian3.fromDegrees(53.0, 24.0, 3000000.0),
+            duration: 2.0,
+            easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT
         });
 
         // ── Time Control Bar Logic ───────────────────────────────────────────
@@ -2970,6 +3046,54 @@
         }
 
         /**
+         * Project a position forward along a bearing (COG) by a given distance.
+         * Returns {lat, lng} in degrees.
+         */
+        function projectPosition(lat, lng, cogDeg, distNm) {
+            const R = 3440.065;
+            const toRad = Math.PI / 180;
+            const toDeg = 180 / Math.PI;
+            const lat1 = lat * toRad;
+            const lon1 = lng * toRad;
+            const brng = cogDeg * toRad;
+            const d = distNm / R;
+            const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng));
+            const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(lat1),
+                                            Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+            return { lat: lat2 * toDeg, lng: lon2 * toDeg };
+        }
+
+        /**
+         * Compute CPA (Closest Point of Approach) position and time.
+         * Uses relative velocity method. Returns {lat, lng, tcpaMin, dcpaNm}.
+         */
+        function computeCpa(shipA, shipB) {
+            const toRad = Math.PI / 180;
+            const nmPerDeg = 60;
+            const sogA = shipA.sog || 0, cogA = (shipA.cog || 0) * toRad;
+            const sogB = shipB.sog || 0, cogB = (shipB.cog || 0) * toRad;
+            const vxA = (sogA / 60) * Math.sin(cogA), vyA = (sogA / 60) * Math.cos(cogA);
+            const vxB = (sogB / 60) * Math.sin(cogB), vyB = (sogB / 60) * Math.cos(cogB);
+            const dLat = (shipB.lat - shipA.lat) * nmPerDeg;
+            const dLng = (shipB.lng - shipA.lng) * nmPerDeg * Math.cos(((shipA.lat + shipB.lat) / 2) * toRad);
+            const dvx = vxB - vxA, dvy = vyB - vyA;
+            const v2 = dvx * dvx + dvy * dvy;
+            if (v2 < 1e-10) {
+                return { lat: (shipA.lat + shipB.lat) / 2, lng: (shipA.lng + shipB.lng) / 2, tcpaMin: 0, dcpaNm: Math.sqrt(dLat * dLat + dLng * dLng) };
+            }
+            const tcpa = -(dLat * dvy + dLng * dvx) / v2;
+            const tcpaMin = Math.max(tcpa, 0);
+            const cpaA = projectPosition(shipA.lat, shipA.lng, shipA.cog || 0, (sogA / 60) * tcpaMin);
+            const cpaB = projectPosition(shipB.lat, shipB.lng, shipB.cog || 0, (sogB / 60) * tcpaMin);
+            const dcpaNm = haversineNm(cpaA.lat, cpaA.lng, cpaB.lat, cpaB.lng);
+            return {
+                lat: (cpaA.lat + cpaB.lat) / 2,
+                lng: (cpaA.lng + cpaB.lng) / 2,
+                tcpaMin, dcpaNm
+            };
+        }
+
+        /**
          * Find nearby vessels within radius, sorted by distance, max count.
          * Only includes vessels present in the latest WebSocket payload (not stale).
          */
@@ -3093,8 +3217,9 @@
                         ? { css: '#f43f5e', cesium: Cesium.Color.fromCssColorString('#f43f5e') }
                         : proximityColor(nv.distance);
                 const isHighlight = isMlPair || isCollisionTarget || nv.mmsi === closestMmsi;
+                const showCollisionViz = isMlPair || isCollisionTarget;
 
-                // Polyline
+                // ── Main proximity polyline ──
                 proximityDataSource.entities.add({
                     id: `prox-line-${nv.mmsi}`,
                     polyline: {
@@ -3121,7 +3246,7 @@
                     }
                 });
 
-                // Label at midpoint
+                // ── Label at midpoint ──
                 proximityDataSource.entities.add({
                     id: `prox-label-${nv.mmsi}`,
                     position: new Cesium.CallbackProperty(() => {
@@ -3151,6 +3276,138 @@
                         disableDepthTestDistance: Number.POSITIVE_INFINITY
                     }
                 });
+
+                // ── Collision visualization (COG lines + CPA marker + risk zone) ──
+                if (showCollisionViz) {
+                    const sel = shipDataMap[selectedMmsi];
+                    const tgt = shipDataMap[nv.mmsi];
+                    if (!sel || !tgt) return;
+
+                    const selSog = sel.sog || 0, selCog = sel.cog || 0;
+                    const tgtSog = tgt.sog || 0, tgtCog = tgt.cog || 0;
+
+                    // COG projection distance: speed * 10 min (nm), min 0.5nm for visibility
+                    const selProjDist = Math.max((selSog / 60) * 10, 0.5);
+                    const tgtProjDist = Math.max((tgtSog / 60) * 10, 0.5);
+
+                    // ① COG projection line — selected ship (dashed)
+                    proximityDataSource.entities.add({
+                        id: `cog-sel-${nv.mmsi}`,
+                        polyline: {
+                            positions: new Cesium.CallbackProperty(() => {
+                                const s = shipDataMap[selectedMmsi];
+                                if (!s) return [];
+                                const end = projectPosition(s.lat, s.lng, s.cog || 0, Math.max((s.sog || 0) / 60 * 10, 0.5));
+                                return Cesium.Cartesian3.fromDegreesArray([s.lng, s.lat, end.lng, end.lat]);
+                            }, false),
+                            width: 2,
+                            material: new Cesium.PolylineDashMaterialProperty({
+                                color: color.cesium.withAlpha(0.7),
+                                dashLength: 12
+                            }),
+                            clampToGround: false
+                        }
+                    });
+
+                    // ① COG projection line — target ship (dashed)
+                    proximityDataSource.entities.add({
+                        id: `cog-tgt-${nv.mmsi}`,
+                        polyline: {
+                            positions: new Cesium.CallbackProperty(() => {
+                                const t = shipDataMap[nv.mmsi];
+                                if (!t) return [];
+                                const end = projectPosition(t.lat, t.lng, t.cog || 0, Math.max((t.sog || 0) / 60 * 10, 0.5));
+                                return Cesium.Cartesian3.fromDegreesArray([t.lng, t.lat, end.lng, end.lat]);
+                            }, false),
+                            width: 2,
+                            material: new Cesium.PolylineDashMaterialProperty({
+                                color: color.cesium.withAlpha(0.7),
+                                dashLength: 12
+                            }),
+                            clampToGround: false
+                        }
+                    });
+
+                    // ② CPA point marker + ③ risk zone circle
+                    const cpa = computeCpa(sel, tgt);
+                    if (cpa.tcpaMin > 0 && cpa.tcpaMin < 60) {
+                        // CPA marker (X shape via point + label)
+                        proximityDataSource.entities.add({
+                            id: `cpa-marker-${nv.mmsi}`,
+                            position: new Cesium.CallbackProperty(() => {
+                                const s = shipDataMap[selectedMmsi];
+                                const t = shipDataMap[nv.mmsi];
+                                if (!s || !t) return Cesium.Cartesian3.fromDegrees(0, 0);
+                                const c = computeCpa(s, t);
+                                return Cesium.Cartesian3.fromDegrees(c.lng, c.lat);
+                            }, false),
+                            point: {
+                                pixelSize: 10,
+                                color: color.cesium.withAlpha(0.9),
+                                outlineColor: Cesium.Color.WHITE,
+                                outlineWidth: 2,
+                                disableDepthTestDistance: Number.POSITIVE_INFINITY
+                            },
+                            label: {
+                                text: new Cesium.CallbackProperty(() => {
+                                    const s = shipDataMap[selectedMmsi];
+                                    const t = shipDataMap[nv.mmsi];
+                                    if (!s || !t) return '';
+                                    const c = computeCpa(s, t);
+                                    return `CPA ${c.dcpaNm.toFixed(2)}nm\n${c.tcpaMin.toFixed(1)}min`;
+                                }, false),
+                                font: 'bold 11px JetBrains Mono',
+                                fillColor: Cesium.Color.WHITE,
+                                outlineColor: Cesium.Color.BLACK,
+                                outlineWidth: 3,
+                                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                                pixelOffset: new Cesium.Cartesian2(0, -20),
+                                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                                showBackground: true,
+                                backgroundColor: color.cesium.withAlpha(0.7)
+                            }
+                        });
+
+                        // ③ Risk zone — semi-transparent ellipse at CPA point
+                        // Radius based on DCPA: min 200m, scaled for visibility
+                        const riskRadiusM = Math.max(cpa.dcpaNm * 1852, 200);
+                        proximityDataSource.entities.add({
+                            id: `cpa-zone-${nv.mmsi}`,
+                            position: new Cesium.CallbackProperty(() => {
+                                const s = shipDataMap[selectedMmsi];
+                                const t = shipDataMap[nv.mmsi];
+                                if (!s || !t) return Cesium.Cartesian3.fromDegrees(0, 0);
+                                const c = computeCpa(s, t);
+                                return Cesium.Cartesian3.fromDegrees(c.lng, c.lat);
+                            }, false),
+                            ellipse: {
+                                semiMajorAxis: new Cesium.CallbackProperty(() => {
+                                    const s = shipDataMap[selectedMmsi];
+                                    const t = shipDataMap[nv.mmsi];
+                                    if (!s || !t) return 200;
+                                    const c = computeCpa(s, t);
+                                    return Math.max(c.dcpaNm * 1852, 200);
+                                }, false),
+                                semiMinorAxis: new Cesium.CallbackProperty(() => {
+                                    const s = shipDataMap[selectedMmsi];
+                                    const t = shipDataMap[nv.mmsi];
+                                    if (!s || !t) return 200;
+                                    const c = computeCpa(s, t);
+                                    return Math.max(c.dcpaNm * 1852, 200);
+                                }, false),
+                                material: new Cesium.ColorMaterialProperty(
+                                    new Cesium.CallbackProperty(() => {
+                                        const pulse = 0.08 + 0.07 * Math.abs(Math.sin(Date.now() / 800));
+                                        return color.cesium.withAlpha(pulse);
+                                    }, false)
+                                ),
+                                outline: true,
+                                outlineColor: color.cesium.withAlpha(0.5),
+                                outlineWidth: 1
+                            }
+                        });
+                    }
+                }
             });
         }
 
@@ -3184,7 +3441,7 @@
                 row.addEventListener('click', () => {
                     const lat = parseFloat(row.dataset.lat);
                     const lng = parseFloat(row.dataset.lng);
-                    viewer.camera.flyTo({
+                    smoothFlyTo({
                         destination: Cesium.Cartesian3.fromDegrees(lng, lat, 50000)
                     });
                 });
@@ -3576,7 +3833,7 @@
                     const lngB = parseFloat(card.dataset.lngB);
                     const midLat = (latA + latB) / 2;
                     const midLng = (lngA + lngB) / 2;
-                    viewer.camera.flyTo({
+                    smoothFlyTo({
                         destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, 30000)
                     });
 
@@ -3723,9 +3980,8 @@
                                     const mmsi = alert.mmsi;
 
                                     // 먼저 위치로 이동, 이동 완료 후 엔티티 찾기
-                                    viewer.camera.flyTo({
+                                    smoothFlyTo({
                                         destination: Cesium.Cartesian3.fromDegrees(alert.lng, alert.lat, 50000.0),
-                                        duration: 1.5,
                                         complete: () => {
                                             // 이동 완료 후 엔티티 찾기 (이제 뷰포트 안에 있음)
                                             // 엔티티 ID 타입이 숫자/문자열 모두 가능하므로 둘 다 시도
@@ -4039,9 +4295,8 @@
                             const horizonAngle = Math.acos(6371 / (6371 + pos.altKm));
                             const footprintRadiusKm = 6371 * horizonAngle;
                             const viewAlt = Math.max(footprintRadiusKm * 4 * 1000, 8000000);
-                            viewer.camera.flyTo({
-                                destination: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, viewAlt),
-                                duration: 1.5
+                            smoothFlyTo({
+                                destination: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, viewAlt)
                             });
                         }
                     }

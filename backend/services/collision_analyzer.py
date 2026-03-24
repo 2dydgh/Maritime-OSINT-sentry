@@ -94,6 +94,57 @@ def _compute_tcpa_dcpa(lat1, lon1, sog1, cog1, lat2, lon2, sog2, cog2):
     return tcpa, dcpa
 
 
+def _bearing_between(lat1, lon1, lat2, lon2):
+    """A에서 B를 바라보는 방위각(도) 계산."""
+    rlat1, rlon1 = _to_radians(lat1), _to_radians(lon1)
+    rlat2, rlon2 = _to_radians(lat2), _to_radians(lon2)
+    dlon = rlon2 - rlon1
+    x = math.sin(dlon) * math.cos(rlat2)
+    y = math.cos(rlat1) * math.sin(rlat2) - math.sin(rlat1) * math.cos(rlat2) * math.cos(dlon)
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+
+def _angle_diff(a, b):
+    """두 각도 사이의 최소 차이 (0~180)."""
+    d = abs((a - b + 180) % 360 - 180)
+    return d
+
+
+def _is_collision_candidate(lat1, lon1, sog1, cog1, lat2, lon2, sog2, cog2):
+    """충돌 후보인지 판별: 접근 중 + 최소 한 척은 상대방을 향하고 있어야 함.
+
+    1) range rate < 0 (거리가 줄어들고 있음)
+    2) 최소 한 척의 COG가 상대방 방향과 90도 이내
+       — head-on, crossing, overtaking 모두 커버
+    """
+    avg_lat_rad = _to_radians((lat1 + lat2) / 2.0)
+    cos_lat = math.cos(avg_lat_rad)
+
+    # 상대 위치 벡터 (A → B, nm)
+    rx = (lon2 - lon1) * 60.0 * cos_lat
+    ry = (lat2 - lat1) * 60.0
+    rng = math.sqrt(rx * rx + ry * ry)
+    if rng < 1e-6:
+        return True
+
+    # 1) range rate 체크
+    vx1, vy1 = _sog_cog_to_velocity(sog1, cog1)
+    vx2, vy2 = _sog_cog_to_velocity(sog2, cog2)
+    dvx = vx2 - vx1
+    dvy = vy2 - vy1
+    range_rate = (rx * dvx + ry * dvy) / rng
+    if range_rate >= 0:
+        return False  # 멀어지는 중
+
+    # 2) 최소 한 척은 상대방을 향하고 있어야 함 (COG vs 베어링, 90도 이내)
+    bearing_a_to_b = _bearing_between(lat1, lon1, lat2, lon2)
+    bearing_b_to_a = (bearing_a_to_b + 180) % 360
+    a_faces_b = _angle_diff(cog1, bearing_a_to_b) <= 90
+    b_faces_a = _angle_diff(cog2, bearing_b_to_a) <= 90
+
+    return a_faces_b or b_faces_a
+
+
 def _build_grid(vessels):
     """선박들을 공간 그리드에 배치. O(n) 시간."""
     grid = {}
@@ -150,6 +201,13 @@ def _build_proximity_pairs(vessels: list[dict]) -> list[dict]:
                 # 육지 차폐 필터: 두 선박 사이에 육지가 있으면 스킵
                 if land_filter.is_land_between(
                     v["lat"], v["lng"], other["lat"], other["lng"]
+                ):
+                    continue
+
+                # 충돌 후보 판별: 접근 중 + 최소 한 척이 상대를 향해야 통과
+                if not _is_collision_candidate(
+                    v["lat"], v["lng"], v["sog"], v["cog"],
+                    other["lat"], other["lng"], other["sog"], other["cog"],
                 ):
                     continue
 
