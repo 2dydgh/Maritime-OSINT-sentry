@@ -8,7 +8,7 @@
 import pytest
 from unittest.mock import patch
 from shapely.geometry import Polygon
-from shapely import prepared
+from shapely import STRtree
 
 from backend.services import land_filter
 
@@ -23,9 +23,9 @@ def mock_land():
         (127.0, 34.0), (126.0, 34.0),
         (126.0, 33.0),
     ])
-    fake_prepared = prepared.prep(fake_land)
-    with patch.object(land_filter, '_land_geom', fake_land), \
-         patch.object(land_filter, '_prepared_land', fake_prepared), \
+    fake_tree = STRtree([fake_land])
+    with patch.object(land_filter, '_land_geom', [fake_land]), \
+         patch.object(land_filter, '_land_tree', fake_tree), \
          patch.object(land_filter, '_loaded', True):
         yield
 
@@ -50,7 +50,7 @@ def test_unloaded_returns_false():
 
 # --- 통합 테스트: 실제 shapefile이 있을 때만 실행 ---
 
-SHAPEFILE_PATH = "backend/data/land/ne_10m_land.shp"
+SHAPEFILE_PATH = "backend/data/land/GSHHS_h_L1.shp"
 
 
 @pytest.fixture
@@ -63,17 +63,15 @@ def real_land():
     yield
     # 테스트 후 상태 초기화
     land_filter._land_geom = None
-    land_filter._prepared_land = None
+    land_filter._land_tree = None
     land_filter._loaded = False
 
 
 def test_real_korea_peninsula_blocks(real_land):
     """서해 ↔ 동해 직선은 한반도를 관통해야 함."""
-    # 서해 (인천 앞바다) → 동해 (울산 앞바다)
     assert land_filter.is_land_between(36.0, 125.5, 36.0, 130.0) is True
 
 
 def test_real_open_sea_clear(real_land):
     """남해 열린 바다 직선은 육지를 관통하지 않아야 함."""
-    # 남해 먼바다 두 지점 (위도 31도 — 일본 열도 남쪽 열린 바다)
     assert land_filter.is_land_between(31.0, 127.0, 31.0, 129.0) is False

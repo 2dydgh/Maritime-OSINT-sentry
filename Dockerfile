@@ -10,11 +10,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download Natural Earth land shapefile for collision land obstruction filter
+# Download GSHHG high-resolution coastline for land obstruction filter
 RUN mkdir -p backend/data/land && \
-    curl -L -o /tmp/ne_10m_land.zip "https://naciscdn.org/naturalearth/10m/physical/ne_10m_land.zip" && \
-    unzip -o /tmp/ne_10m_land.zip -d backend/data/land/ && \
-    rm /tmp/ne_10m_land.zip
+    curl -L -o /tmp/gshhg.zip "https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip" && \
+    unzip -o /tmp/gshhg.zip "GSHHS_shp/h/GSHHS_h_L1.*" -d /tmp/ && \
+    cp /tmp/GSHHS_shp/h/GSHHS_h_L1.* backend/data/land/ && \
+    rm -rf /tmp/gshhg.zip /tmp/GSHHS_shp
 
 # Application code
 COPY backend/ backend/
