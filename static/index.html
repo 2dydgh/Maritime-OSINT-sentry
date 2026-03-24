@@ -3200,12 +3200,12 @@
             if (section) section.style.display = 'none';
         }
 
+        let _proximityRunning = false;
         async function updateProximity() {
             if (!selectedProximityMmsi || timeMode !== 'live') {
                 clearProximity();
                 return;
             }
-            // Tolerate 2 consecutive misses before clearing (spec requirement)
             if (!latestWsShipsMmsis.has(selectedProximityMmsi)) {
                 proximityMissCount++;
                 if (proximityMissCount >= 2) {
@@ -3213,10 +3213,20 @@
                 }
                 return;
             }
-            proximityMissCount = 0; // reset on successful match
-            const nearby = await findNearbyVessels(selectedProximityMmsi, PROXIMITY_RADIUS_NM, PROXIMITY_MAX_COUNT);
-            renderProximityLines(selectedProximityMmsi, nearby);
-            renderNearbyPanel(nearby);
+            proximityMissCount = 0;
+            // 이전 호출이 아직 진행 중이면 스킵 (race condition 방지)
+            if (_proximityRunning) return;
+            _proximityRunning = true;
+            try {
+                const mmsi = selectedProximityMmsi;
+                const nearby = await findNearbyVessels(mmsi, PROXIMITY_RADIUS_NM, PROXIMITY_MAX_COUNT);
+                // async 동안 선택이 바뀌었으면 렌더링 스킵
+                if (mmsi !== selectedProximityMmsi) return;
+                renderProximityLines(mmsi, nearby);
+                renderNearbyPanel(nearby);
+            } finally {
+                _proximityRunning = false;
+            }
         }
         // ── End Vessel Proximity Distance ────────────────────────────────────
 
