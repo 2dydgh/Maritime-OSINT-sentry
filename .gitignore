@@ -41,5 +41,13 @@ uvicorn_modular.log
 # Production secrets
 deploy/.env.prod
 
+# Land shapefile data
+backend/data/land/*.shp
+backend/data/land/*.shx
+backend/data/land/*.dbf
+backend/data/land/*.prj
+backend/data/land/*.cpg
+
 # Large Media (excluded if > 100MB)
 
+.superpowers/
