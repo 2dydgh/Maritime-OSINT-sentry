@@ -75,5 +75,5 @@ def test_real_korea_peninsula_blocks(real_land):
 
 def test_real_open_sea_clear(real_land):
     """남해 열린 바다 직선은 육지를 관통하지 않아야 함."""
-    # 남해 먼바다 두 지점
-    assert land_filter.is_land_between(32.0, 127.0, 32.0, 129.0) is False
+    # 남해 먼바다 두 지점 (위도 31도 — 일본 열도 남쪽 열린 바다)
+    assert land_filter.is_land_between(31.0, 127.0, 31.0, 129.0) is False
