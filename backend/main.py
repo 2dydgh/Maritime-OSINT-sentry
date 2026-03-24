@@ -1,3 +1,4 @@
+import os
 import logging
 import asyncio
 from contextlib import asynccontextmanager
@@ -9,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import database, config, websocket
 from .services import ais_stream, data_fetcher, history_writer
 from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision
-from .services import collision_analyzer
+from .services import collision_analyzer, land_filter
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -31,6 +32,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize history writer: {e}")
         # 실패해도 실시간 기능은 계속 동작
+
+    # Load land shapefile for collision analysis land obstruction filter
+    land_shapefile = os.path.join(
+        os.path.dirname(__file__), "data", "land", "ne_10m_land.shp"
+    )
+    land_filter.load_land_index(land_shapefile)
+    if land_filter.is_loaded():
+        logger.info("Land obstruction filter: ACTIVE")
+    else:
+        logger.warning("Land obstruction filter: INACTIVE (shapefile not found)")
 
     # Start AIS Stream Background Task
     ais_stream.start_ais_stream()
@@ -71,7 +82,7 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(10)
             try:
                 vessels = ais_stream.get_ais_vessels()
-                collision_analyzer.update_collision_cache(vessels)
+                await collision_analyzer.update_collision_cache(vessels)
             except Exception as e:
                 logger.error(f"Collision analysis error: {e}")
 
