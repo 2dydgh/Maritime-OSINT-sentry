@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Download GSHHG high-resolution coastline for land obstruction filter
 RUN mkdir -p backend/data/land && \
     curl -L -o /tmp/gshhg.zip "https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip" && \
-    unzip -o /tmp/gshhg.zip "GSHHS_shp/h/GSHHS_h_L1.*" -d /tmp/ && \
-    cp /tmp/GSHHS_shp/h/GSHHS_h_L1.* backend/data/land/ && \
+    unzip -o /tmp/gshhg.zip "GSHHS_shp/i/GSHHS_i_L1.*" -d /tmp/ && \
+    cp /tmp/GSHHS_shp/i/GSHHS_i_L1.* backend/data/land/ && \
     rm -rf /tmp/gshhg.zip /tmp/GSHHS_shp
 
 # Application code

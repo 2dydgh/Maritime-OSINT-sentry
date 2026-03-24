@@ -969,6 +969,45 @@
             z-index: 9998;
         }
 
+        /* Map Navigation Controls */
+        #mapNavControls {
+            position: fixed;
+            bottom: 120px;
+            right: 20px;
+            z-index: 9998;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .map-nav-btn {
+            width: 36px;
+            height: 36px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            color: var(--text-main);
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s, border-color 0.15s;
+            user-select: none;
+        }
+        .map-nav-btn:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: var(--accent);
+        }
+        .map-nav-btn:active {
+            background: rgba(255,255,255,0.15);
+        }
+        .map-nav-divider {
+            height: 1px;
+            background: var(--panel-border);
+            margin: 2px 4px;
+        }
+
         /* Shared draggable panel styles */
         .drag-panel {
             display: flex;
@@ -1220,6 +1259,17 @@
 <body>
     <!-- Background 3D Globe -->
     <div id="cesiumContainer"></div>
+
+    <!-- Map Navigation Controls -->
+    <div id="mapNavControls">
+        <button class="map-nav-btn" id="navZoomIn" title="Zoom In (+)"><i class="fa-solid fa-plus"></i></button>
+        <button class="map-nav-btn" id="navZoomOut" title="Zoom Out (-)"><i class="fa-solid fa-minus"></i></button>
+        <div class="map-nav-divider"></div>
+        <button class="map-nav-btn" id="navUp" title="Pan Up (↑)"><i class="fa-solid fa-chevron-up"></i></button>
+        <button class="map-nav-btn" id="navDown" title="Pan Down (↓)"><i class="fa-solid fa-chevron-down"></i></button>
+        <button class="map-nav-btn" id="navLeft" title="Pan Left (←)"><i class="fa-solid fa-chevron-left"></i></button>
+        <button class="map-nav-btn" id="navRight" title="Pan Right (→)"><i class="fa-solid fa-chevron-right"></i></button>
+    </div>
 
     <!-- Top Header -->
     <header class="glass-panel">
@@ -1520,18 +1570,67 @@
             }
         });
 
-        // ── OSM Buildings 3D Tileset ────────────────────────────────────────
-        let osmBuildingsTileset = null;
-        Cesium.createOsmBuildingsAsync().then(tileset => {
-            osmBuildingsTileset = viewer.scene.primitives.add(tileset);
-            osmBuildingsTileset.show = false; // 초기엔 숨김, 줌인 시 표시
+        // 카메라 높이 변경 리스너
+        viewer.camera.changed.addEventListener(() => {
+            const height = viewer.camera.positionCartographic.height;
         });
 
-        // 카메라 높이에 따라 3D 건물 표시/숨김 (50km 이하에서 표시)
-        viewer.camera.changed.addEventListener(() => {
-            if (!osmBuildingsTileset) return;
+        // ── Map Navigation: Zoom/Pan buttons + Keyboard shortcuts ────────────
+        const NAV_PAN_PIXELS = 200;
+        const NAV_ZOOM_FACTOR = 0.4;
+
+        function navZoom(direction) {
             const height = viewer.camera.positionCartographic.height;
-            osmBuildingsTileset.show = height < 50000;
+            const delta = height * NAV_ZOOM_FACTOR;
+            if (direction > 0) {
+                viewer.camera.zoomIn(delta);
+            } else {
+                viewer.camera.zoomOut(delta);
+            }
+        }
+
+        function navPan(dx, dy) {
+            const ellipsoid = viewer.scene.globe.ellipsoid;
+            const cam = viewer.camera;
+            const width = viewer.canvas.clientWidth;
+            const height = viewer.canvas.clientHeight;
+            const centerX = width / 2;
+            const centerY = height / 2;
+
+            const startRay = cam.getPickRay(new Cesium.Cartesian2(centerX, centerY));
+            const endRay = cam.getPickRay(new Cesium.Cartesian2(centerX - dx, centerY - dy));
+            if (!startRay || !endRay) return;
+
+            const startPos = viewer.scene.globe.pick(startRay, viewer.scene);
+            const endPos = viewer.scene.globe.pick(endRay, viewer.scene);
+            if (!startPos || !endPos) return;
+
+            const diff = Cesium.Cartesian3.subtract(endPos, startPos, new Cesium.Cartesian3());
+            const camPos = cam.positionWC;
+            cam.position = Cesium.Cartesian3.add(camPos, diff, new Cesium.Cartesian3());
+        }
+
+        // Button handlers
+        document.getElementById('navZoomIn').addEventListener('click', () => navZoom(1));
+        document.getElementById('navZoomOut').addEventListener('click', () => navZoom(-1));
+        document.getElementById('navUp').addEventListener('click', () => navPan(0, NAV_PAN_PIXELS));
+        document.getElementById('navDown').addEventListener('click', () => navPan(0, -NAV_PAN_PIXELS));
+        document.getElementById('navLeft').addEventListener('click', () => navPan(NAV_PAN_PIXELS, 0));
+        document.getElementById('navRight').addEventListener('click', () => navPan(-NAV_PAN_PIXELS, 0));
+
+        // Keyboard shortcuts (arrow keys + plus/minus)
+        document.addEventListener('keydown', (e) => {
+            // Skip if user is typing in an input field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+            switch (e.key) {
+                case 'ArrowUp':    e.preventDefault(); navPan(0, NAV_PAN_PIXELS); break;
+                case 'ArrowDown':  e.preventDefault(); navPan(0, -NAV_PAN_PIXELS); break;
+                case 'ArrowLeft':  e.preventDefault(); navPan(NAV_PAN_PIXELS, 0); break;
+                case 'ArrowRight': e.preventDefault(); navPan(-NAV_PAN_PIXELS, 0); break;
+                case '+': case '=': e.preventDefault(); navZoom(1); break;
+                case '-': case '_': e.preventDefault(); navZoom(-1); break;
+            }
         });
 
         // ── Globe appearance: tactical dark style ─────────────────────────────
@@ -2899,35 +2998,83 @@
             return { selected, results: results.slice(0, maxCount) };
         }
 
+        // 육지 차폐 캐시: "mmsi_a:mmsi_b" → { blocked: bool, ts: number }
+        const _landCache = new Map();
+        const LAND_CACHE_TTL_MS = 30000; // 30초 캐시
+
         async function findNearbyVessels(mmsi, radiusNm, maxCount) {
             const { selected, results } = findNearbyVesselsCandidates(mmsi, radiusNm, maxCount);
             if (!selected || results.length === 0) return results;
 
-            // 육지 차폐 배치 검사
-            try {
-                const pairs = results.map(nv => ({
-                    lat1: selected.lat, lon1: selected.lng,
-                    lat2: nv.lat, lon2: nv.lng
-                }));
-                const resp = await fetch('/api/v1/collision/land-check-batch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(pairs)
-                });
-                if (resp.ok) {
-                    const { results: blocked } = await resp.json();
-                    return results.filter((_, i) => !blocked[i]);
+            const now = Date.now();
+            const unchecked = []; // 캐시에 없거나 만료된 항목
+            const uncheckedIdx = [];
+
+            // 캐시 확인
+            for (let i = 0; i < results.length; i++) {
+                const key = mmsi < results[i].mmsi
+                    ? `${mmsi}:${results[i].mmsi}`
+                    : `${results[i].mmsi}:${mmsi}`;
+                const cached = _landCache.get(key);
+                if (cached && (now - cached.ts) < LAND_CACHE_TTL_MS) {
+                    continue; // 캐시 유효
                 }
-            } catch (e) {
-                console.warn('Land check failed, showing all:', e);
+                unchecked.push(results[i]);
+                uncheckedIdx.push(i);
             }
-            return results;
+
+            // 캐시에 없는 항목만 API 호출
+            if (unchecked.length > 0) {
+                try {
+                    const pairs = unchecked.map(nv => ({
+                        lat1: selected.lat, lon1: selected.lng,
+                        lat2: nv.lat, lon2: nv.lng
+                    }));
+                    const resp = await fetch('/api/v1/collision/land-check-batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(pairs)
+                    });
+                    if (resp.ok) {
+                        const { results: blocked } = await resp.json();
+                        for (let j = 0; j < unchecked.length; j++) {
+                            const key = mmsi < unchecked[j].mmsi
+                                ? `${mmsi}:${unchecked[j].mmsi}`
+                                : `${unchecked[j].mmsi}:${mmsi}`;
+                            _landCache.set(key, { blocked: blocked[j], ts: now });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Land check failed, showing all:', e);
+                }
+            }
+
+            // 캐시 기반 필터링
+            return results.filter(nv => {
+                const key = mmsi < nv.mmsi
+                    ? `${mmsi}:${nv.mmsi}`
+                    : `${nv.mmsi}:${mmsi}`;
+                const cached = _landCache.get(key);
+                return !cached || !cached.blocked;
+            });
         }
 
         function proximityColor(distNm) {
             if (distNm < 2) return { css: '#ef4444', cesium: Cesium.Color.fromCssColorString('#ef4444') };
             if (distNm < 5) return { css: '#eab308', cesium: Cesium.Color.fromCssColorString('#eab308') };
             return { css: '#10b981', cesium: Cesium.Color.fromCssColorString('#10b981') };
+        }
+
+        // ML risk_level 0~3 → 색상
+        const ML_RISK_COLORS = {
+            3: '#f43f5e',  // 위험 — 빨강
+            2: '#f97316',  // 경고 — 주황
+            1: '#eab308',  // 주의 — 노랑
+            0: '#10b981',  // 안전 — 초록
+        };
+        function mlRiskColor(riskLevel) {
+            const css = ML_RISK_COLORS[riskLevel] || '#10b981';
+            return { css, cesium: Cesium.Color.fromCssColorString(css) };
         }
 
         function renderProximityLines(selectedMmsi, nearbyVessels) {
@@ -2939,10 +3086,13 @@
 
             nearbyVessels.forEach(nv => {
                 const isCollisionTarget = collisionTargetMmsi != null && (nv.mmsi == collisionTargetMmsi);
-                const color = isCollisionTarget
-                    ? { css: '#f43f5e', cesium: Cesium.Color.fromCssColorString('#f43f5e') }
-                    : proximityColor(nv.distance);
-                const isHighlight = isCollisionTarget || nv.mmsi === closestMmsi;
+                const isMlPair = nv.mlRiskLevel != null;
+                const color = isMlPair
+                    ? mlRiskColor(nv.mlRiskLevel)
+                    : isCollisionTarget
+                        ? { css: '#f43f5e', cesium: Cesium.Color.fromCssColorString('#f43f5e') }
+                        : proximityColor(nv.distance);
+                const isHighlight = isMlPair || isCollisionTarget || nv.mmsi === closestMmsi;
 
                 // Polyline
                 proximityDataSource.entities.add({
@@ -2956,14 +3106,15 @@
                                 sel.lng, sel.lat, tgt.lng, tgt.lat
                             ]);
                         }, false),
-                        width: isCollisionTarget ? 4 : isHighlight ? 3 : 2,
+                        width: isMlPair ? 4 : isCollisionTarget ? 4 : isHighlight ? 3 : 2,
                         material: isHighlight
                             ? new Cesium.PolylineGlowMaterialProperty({
                                 color: new Cesium.CallbackProperty(() => {
-                                    const alpha = 0.4 + 0.6 * Math.abs(Math.sin(Date.now() / (isCollisionTarget ? 300 : 500)));
+                                    const speed = isMlPair ? 300 : isCollisionTarget ? 300 : 500;
+                                    const alpha = 0.4 + 0.6 * Math.abs(Math.sin(Date.now() / speed));
                                     return color.cesium.withAlpha(alpha);
                                 }, false),
-                                glowPower: isCollisionTarget ? 0.5 : 0.3
+                                glowPower: isMlPair ? 0.5 : isCollisionTarget ? 0.5 : 0.3
                             })
                             : new Cesium.ColorMaterialProperty(color.cesium.withAlpha(0.6)),
                         clampToGround: false
@@ -2988,7 +3139,8 @@
                             const tgt = shipDataMap[nv.mmsi];
                             if (!sel || !tgt) return '';
                             const d = haversineNm(sel.lat, sel.lng, tgt.lat, tgt.lng);
-                            return (isCollisionTarget ? '⚠ ' : '') + d.toFixed(1) + ' nm';
+                            const prefix = isMlPair ? '⚠ ' : isCollisionTarget ? '⚠ ' : '';
+                            return prefix + d.toFixed(1) + ' nm';
                         }, false),
                         font: isCollisionTarget ? 'bold 14px JetBrains Mono' : '12px JetBrains Mono',
                         fillColor: color.cesium,
@@ -3353,7 +3505,8 @@
                     ? '<div class="collision-empty">해당 등급의 위험이 없습니다</div>'
                     : filtered.map(r => `
                     <div class="collision-card" data-mmsi-a="${r.ship_a.mmsi}" data-mmsi-b="${r.ship_b.mmsi}"
-                         data-lat-a="${r.ship_a.lat}" data-lng-a="${r.ship_a.lng}" data-lat-b="${r.ship_b.lat}" data-lng-b="${r.ship_b.lng}">
+                         data-lat-a="${r.ship_a.lat}" data-lng-a="${r.ship_a.lng}" data-lat-b="${r.ship_b.lat}" data-lng-b="${r.ship_b.lng}"
+                         data-risk-level="${r.risk_level}">
                         <div class="card-top">
                             ${mlRiskBadge(r.risk_level, r.risk_label)}
                         </div>
@@ -3404,7 +3557,7 @@
                 });
             }
 
-            // Click → fly to midpoint + activate proximity for ship_a
+            // Click → fly to midpoint + draw line between the pair
             list.querySelectorAll('.collision-card').forEach(card => {
                 card.addEventListener('click', () => {
                     const latA = parseFloat(card.dataset.latA);
@@ -3417,23 +3570,39 @@
                         destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, 30000)
                     });
 
-                    // Activate proximity visualization for ship_a, highlight ship_b
-                    const mmsiNum = Number(card.dataset.mmsiA);
-                    collisionTargetMmsi = Number(card.dataset.mmsiB);
+                    const mmsiA = Number(card.dataset.mmsiA);
+                    const mmsiB = Number(card.dataset.mmsiB);
 
-                    if (shipDataMap[mmsiNum] || shipDataMap[card.dataset.mmsiA]) {
-                        selectedProximityMmsi = mmsiNum;
+                    if (collisionActiveTab === 'ml') {
+                        // ML 탭: 해당 쌍만 선 1개 표시 (nearby 전체 스캔 안 함)
+                        selectedProximityMmsi = null;
+                        collisionTargetMmsi = null;
+                        const distNm = haversineNm(latA, lngA, latB, lngB);
+                        const riskLevel = parseInt(card.dataset.riskLevel) || 1;
+                        renderProximityLines(mmsiA, [{
+                            mmsi: mmsiB,
+                            lat: latB,
+                            lng: lngB,
+                            distance: distNm,
+                            mlRiskLevel: riskLevel
+                        }]);
+                        // nearby 패널 숨기기
+                        renderNearbyPanel([]);
+                    } else {
+                        // 거리기반 탭: 기존 동작 (주변 선박 전체 표시)
+                        collisionTargetMmsi = mmsiB;
+                        selectedProximityMmsi = mmsiA;
                         proximityMissCount = 0;
                         updateProximity();
+                    }
 
-                        // Show ship info panel — search through ship DataSources by type
-                        for (const type in shipDataSources) {
-                            const entity = shipDataSources[type].entities.getById(mmsiNum)
-                                        || shipDataSources[type].entities.getById(String(mmsiNum));
-                            if (entity) {
-                                showShipInfo(entity);
-                                break;
-                            }
+                    // Show ship info panel
+                    for (const type in shipDataSources) {
+                        const entity = shipDataSources[type].entities.getById(mmsiA)
+                                    || shipDataSources[type].entities.getById(String(mmsiA));
+                        if (entity) {
+                            showShipInfo(entity);
+                            break;
                         }
                     }
                 });

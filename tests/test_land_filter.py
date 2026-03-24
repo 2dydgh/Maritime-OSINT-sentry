@@ -50,7 +50,7 @@ def test_unloaded_returns_false():
 
 # --- 통합 테스트: 실제 shapefile이 있을 때만 실행 ---
 
-SHAPEFILE_PATH = "backend/data/land/GSHHS_h_L1.shp"
+SHAPEFILE_PATH = "backend/data/land/GSHHS_i_L1.shp"
 
 
 @pytest.fixture

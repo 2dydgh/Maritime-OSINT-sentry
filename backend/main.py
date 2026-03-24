@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
 
     # Load land shapefile for collision analysis land obstruction filter
     land_shapefile = os.path.join(
-        os.path.dirname(__file__), "data", "land", "GSHHS_h_L1.shp"
+        os.path.dirname(__file__), "data", "land", "GSHHS_i_L1.shp"
     )
     land_filter.load_land_index(land_shapefile)
     if land_filter.is_loaded():
