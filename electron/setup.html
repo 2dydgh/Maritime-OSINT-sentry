@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    font-family: 'Segoe UI', 'SF Pro', system-ui, sans-serif;
+    color: #e0e0e0;
+    display: flex; flex-direction: column;
+    min-height: 100vh;
+    -webkit-app-region: drag;
+  }
+
+  .header {
+    padding: 32px 32px 0;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 28px; font-weight: 700;
+    letter-spacing: 4px; color: #00ff88;
+    text-shadow: 0 0 15px rgba(0,255,136,0.3);
+  }
+  .header p {
+    margin-top: 6px;
+    font-size: 11px; letter-spacing: 2px;
+    color: #555; text-transform: uppercase;
+  }
+
+  .content {
+    flex: 1; padding: 28px 32px;
+    overflow-y: auto;
+    -webkit-app-region: no-drag;
+  }
+
+  .field { margin-bottom: 20px; }
+  .field label {
+    display: block;
+    font-size: 12px; font-weight: 600;
+    color: #888; letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .field .hint {
+    font-size: 11px; color: #555;
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%; padding: 10px 14px;
+    background: #141414;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 14px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field input:focus {
+    border-color: #00ff88;
+    box-shadow: 0 0 0 2px rgba(0,255,136,0.1);
+  }
+  .field input::placeholder { color: #333; }
+
+  .optional-tag {
+    display: inline-block;
+    font-size: 9px; font-weight: 600;
+    color: #555; letter-spacing: 1px;
+    background: #1a1a1a;
+    padding: 2px 6px; border-radius: 3px;
+    margin-left: 6px;
+    text-transform: uppercase;
+  }
+
+  .footer {
+    padding: 0 32px 28px;
+    display: flex; gap: 10px;
+    justify-content: flex-end;
+    -webkit-app-region: no-drag;
+  }
+  .btn {
+    padding: 10px 24px;
+    border: none; border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: #00ff88; color: #0a0a0a;
+  }
+  .btn-primary:hover { background: #00cc6a; }
+  .btn-primary:disabled {
+    background: #1a3a2a; color: #335; cursor: not-allowed;
+  }
+  .btn-secondary {
+    background: #1a1a1a; color: #888;
+    border: 1px solid #2a2a2a;
+  }
+  .btn-secondary:hover { border-color: #444; color: #aaa; }
+
+  .status {
+    padding: 0 32px 16px;
+    font-size: 11px; color: #ff4444;
+    min-height: 24px;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>4DWAR</h1>
+    <p>Initial Setup</p>
+  </div>
+
+  <div class="content">
+    <div class="field">
+      <label>AIS API KEY <span style="color:#ff4444">*</span></label>
+      <div class="hint">
+        Get your free key at <a href="#" onclick="openExternal('https://aisstream.io')" style="color:#00ff88;text-decoration:none">aisstream.io</a>
+      </div>
+      <input type="text" id="aisKey" placeholder="your-ais-api-key-here" spellcheck="false" />
+    </div>
+
+    <div class="field">
+      <label>COLLISION MODEL URL <span class="optional-tag">Optional</span></label>
+      <div class="hint">ML collision model endpoint. Leave blank to use distance-only analysis.</div>
+      <input type="text" id="collisionUrl" placeholder="http://localhost:5050" spellcheck="false" />
+    </div>
+
+    <div class="field">
+      <label>SPACE-TRACK LOGIN <span class="optional-tag">Optional</span></label>
+      <div class="hint">For satellite tracking. Register at <a href="#" onclick="openExternal('https://www.space-track.org')" style="color:#00ff88;text-decoration:none">space-track.org</a></div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="stUser" placeholder="email" spellcheck="false" style="flex:1" />
+        <input type="password" id="stPass" placeholder="password" style="flex:1" />
+      </div>
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="footer">
+    <button class="btn btn-secondary" onclick="skip()">Skip</button>
+    <button class="btn btn-primary" id="saveBtn" onclick="save()">Save & Launch</button>
+  </div>
+
+  <script>
+    function openExternal(url) {
+      if (window.setupAPI) window.setupAPI.openExternal(url);
+    }
+
+    function save() {
+      const aisKey = document.getElementById('aisKey').value.trim();
+      if (!aisKey) {
+        document.getElementById('status').textContent = 'AIS API Key is required for ship tracking.';
+        return;
+      }
+
+      const config = {
+        AIS_API_KEY: aisKey,
+      };
+
+      const collisionUrl = document.getElementById('collisionUrl').value.trim();
+      if (collisionUrl) config.COLLISION_MODEL_URL = collisionUrl;
+
+      const stUser = document.getElementById('stUser').value.trim();
+      const stPass = document.getElementById('stPass').value.trim();
+      if (stUser) config.SPACETRACK_USER = stUser;
+      if (stPass) config.SPACETRACK_PASS = stPass;
+
+      if (window.setupAPI) {
+        window.setupAPI.saveConfig(config);
+      }
+    }
+
+    function skip() {
+      if (window.setupAPI) {
+        window.setupAPI.saveConfig({});
+      }
+    }
+
+    // Auto-focus first field
+    document.getElementById('aisKey').focus();
+
+    // Enter key submits
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') save();
+      if (e.key === 'Escape') skip();
+    });
+  </script>
+</body>
+</html>

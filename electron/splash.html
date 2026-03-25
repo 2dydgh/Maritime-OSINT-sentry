@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 420px; height: 300px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(10, 10, 10, 0.95);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    border-radius: 16px;
+    font-family: 'Segoe UI', 'SF Pro', system-ui, sans-serif;
+    color: #e0e0e0;
+    -webkit-app-region: drag;
+    overflow: hidden;
+  }
+  .title {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: 6px;
+    color: #00ff88;
+    text-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+  }
+  .loader {
+    width: 200px; height: 2px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 1px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .loader-bar {
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, #00ff88, transparent);
+    animation: slide 1.2s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+  .status {
+    font-size: 11px;
+    color: #555;
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+  <div class="title">4DWAR</div>
+  <div class="subtitle">Maritime OSINT Sentry</div>
+  <div class="loader"><div class="loader-bar"></div></div>
+  <div class="status">Starting backend server...</div>
+</body>
+</html>

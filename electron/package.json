@@ -1,0 +1,69 @@
+{
+  "name": "4dwar",
+  "version": "1.0.0",
+  "description": "Maritime OSINT Sentry — Desktop Edition",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:backend": "cd .. && ./venv/bin/pyinstaller electron/backend.spec --distpath electron/dist --workpath electron/build --clean -y",
+    "dist": "npm run build:backend && electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "npm run build:backend && electron-builder --linux",
+    "dist:mac": "npm run build:backend && electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.4dwar.desktop",
+    "productName": "4DWAR",
+    "files": [
+      "main.js",
+      "preload.js",
+      "preload-setup.js",
+      "splash.html",
+      "setup.html",
+      "icons/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "app",
+        "filter": ["**/*", "!__pycache__/**", "!*.pyc"]
+      },
+      {
+        "from": "../static",
+        "to": "app/static"
+      },
+      {
+        "from": "../backend/ais_proxy.js",
+        "to": "app/backend/ais_proxy.js"
+      },
+      {
+        "from": "../requirements-lite.txt",
+        "to": "app/requirements-lite.txt"
+      }
+    ],
+    "linux": {
+      "target": ["AppImage"],
+      "icon": "icons/icon.png",
+      "category": "Utility"
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "icons/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "icons/icon.icns"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
