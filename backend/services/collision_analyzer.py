@@ -29,6 +29,12 @@ MIN_SOG_KTS = 0.5            # 2단계 정지 선박 제외 기준
 DCPA_DANGER_NM = 0.5         # 위험: DCPA < 0.5nm
 DCPA_WARNING_NM = 1.0        # 경고: DCPA < 1.0nm
 TCPA_MAX_MIN = 20            # TCPA 20분 이내만 관심
+TCPA_MIN_MIN = 1.0           # TCPA 1분 미만은 이미 해소 직전 → 스킵
+
+# 조우 유형별 DCPA 임계값 (head-on은 정상 교행이 많아 엄격하게)
+HEAD_ON_ANGLE = 30.0         # COG 차이 150~210도 → head-on 판정
+DCPA_DANGER_HEAD_ON_NM = 0.3 # head-on 위험: DCPA < 0.3nm
+DCPA_WARNING_HEAD_ON_NM = 0.5  # head-on 경고: DCPA < 0.5nm
 
 # 그리드 셀 크기 (도 단위, ~5nm ≈ 0.083도)
 GRID_CELL_DEG = 0.1
@@ -110,12 +116,28 @@ def _angle_diff(a, b):
     return d
 
 
+def _classify_encounter(cog1, cog2):
+    """두 선박의 COG로 조우 유형 판별.
+
+    Returns:
+        "head-on"   — 반항 (COG 차이 ≈ 180°)
+        "overtaking" — 추월 (COG 차이 ≈ 0°)
+        "crossing"  — 횡단 (그 외)
+    """
+    diff = _angle_diff(cog1, cog2)
+    if diff >= (180 - HEAD_ON_ANGLE):   # 150~180도
+        return "head-on"
+    if diff <= HEAD_ON_ANGLE:           # 0~30도
+        return "overtaking"
+    return "crossing"
+
+
 def _is_collision_candidate(lat1, lon1, sog1, cog1, lat2, lon2, sog2, cog2):
-    """충돌 후보인지 판별: 접근 중 + 최소 한 척은 상대방을 향하고 있어야 함.
+    """충돌 후보인지 판별: 접근 중 + 양 선박이 실제 위험 기하를 형성해야 함.
 
     1) range rate < 0 (거리가 줄어들고 있음)
-    2) 최소 한 척의 COG가 상대방 방향과 90도 이내
-       — head-on, crossing, overtaking 모두 커버
+    2) 베어링 체크 — head-on/crossing은 양쪽 모두 상대를 향해야 하고,
+       overtaking은 한 척만 향하면 됨 (뒤에서 따라잡는 선박)
     """
     avg_lat_rad = _to_radians((lat1 + lat2) / 2.0)
     cos_lat = math.cos(avg_lat_rad)
@@ -136,13 +158,17 @@ def _is_collision_candidate(lat1, lon1, sog1, cog1, lat2, lon2, sog2, cog2):
     if range_rate >= 0:
         return False  # 멀어지는 중
 
-    # 2) 최소 한 척은 상대방을 향하고 있어야 함 (COG vs 베어링, 90도 이내)
+    # 2) 베어링 체크 — 조우 유형에 따라 다른 기준 적용
     bearing_a_to_b = _bearing_between(lat1, lon1, lat2, lon2)
     bearing_b_to_a = (bearing_a_to_b + 180) % 360
     a_faces_b = _angle_diff(cog1, bearing_a_to_b) <= 90
     b_faces_a = _angle_diff(cog2, bearing_b_to_a) <= 90
 
-    return a_faces_b or b_faces_a
+    encounter = _classify_encounter(cog1, cog2)
+    if encounter == "overtaking":
+        return a_faces_b or b_faces_a
+    # head-on, crossing: 양쪽 모두 상대를 향해야 진짜 위험
+    return a_faces_b and b_faces_a
 
 
 def _build_grid(vessels):
@@ -216,9 +242,11 @@ def _build_proximity_pairs(vessels: list[dict]) -> list[dict]:
                     other["lat"], other["lng"], other["sog"], other["cog"],
                 )
 
-                # TCPA가 음수(이미 지나감)이거나 너무 먼 미래면 스킵
-                if tcpa < 0 or tcpa > TCPA_MAX_MIN:
+                # TCPA가 음수(이미 지나감), 해소 직전(< 1분), 너무 먼 미래면 스킵
+                if tcpa < TCPA_MIN_MIN or tcpa > TCPA_MAX_MIN:
                     continue
+
+                encounter = _classify_encounter(v["cog"], other["cog"])
 
                 pairs.append({
                     "ship_a": v,
@@ -226,6 +254,7 @@ def _build_proximity_pairs(vessels: list[dict]) -> list[dict]:
                     "tcpa_min": round(tcpa, 1),
                     "dcpa_nm": round(dcpa, 3),
                     "current_dist_nm": round(dist, 2),
+                    "encounter": encounter,
                 })
 
     return pairs
@@ -246,16 +275,26 @@ def _make_ship_info(v: dict) -> dict:
 
 
 def analyze_distance_risks(proximity_pairs: list[dict]) -> list[dict]:
-    """거리 기반 DCPA/TCPA 임계값 판정."""
+    """거리 기반 DCPA/TCPA 임계값 판정. 조우 유형별 차등 임계값 적용."""
     risks = []
     now_ts = datetime.now(timezone.utc).isoformat()
 
     for pair in proximity_pairs:
         dcpa = pair["dcpa_nm"]
-        if dcpa > DCPA_WARNING_NM:
+        encounter = pair.get("encounter", "crossing")
+
+        # head-on은 정상 교행이 많으므로 임계값을 엄격하게 적용
+        if encounter == "head-on":
+            danger_thresh = DCPA_DANGER_HEAD_ON_NM
+            warning_thresh = DCPA_WARNING_HEAD_ON_NM
+        else:
+            danger_thresh = DCPA_DANGER_NM
+            warning_thresh = DCPA_WARNING_NM
+
+        if dcpa > warning_thresh:
             continue
 
-        severity = "danger" if dcpa < DCPA_DANGER_NM else "warning"
+        severity = "danger" if dcpa < danger_thresh else "warning"
 
         risks.append({
             "ship_a": _make_ship_info(pair["ship_a"]),
@@ -264,6 +303,7 @@ def analyze_distance_risks(proximity_pairs: list[dict]) -> list[dict]:
             "dcpa_nm": pair["dcpa_nm"],
             "current_dist_nm": pair["current_dist_nm"],
             "severity": severity,
+            "encounter": encounter,
             "ts": now_ts,
         })
 

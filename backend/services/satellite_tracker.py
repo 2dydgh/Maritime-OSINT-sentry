@@ -207,38 +207,41 @@ def fetch_intel_satellites():
         # Fetch/refresh GP data from CelesTrak every 30 minutes
         now_ts = time.time()
         if _sat_gp_cache["data"] is None or (now_ts - _sat_gp_cache["last_fetch"]) > 1800:
+            # 1) 디스크 캐시를 먼저 로드 — 즉시 사용 가능하게
+            if _sat_gp_cache["data"] is None:
+                disk_data = _load_gp_cache()
+                if disk_data:
+                    _sat_gp_cache["data"] = disk_data
+                    _sat_gp_cache["last_fetch"] = now_ts
+                    logger.info("Satellites: Using disk cache while attempting online refresh")
+
+            # 2) 온라인 갱신 시도 (짧은 타임아웃, 실패해도 캐시 데이터로 동작)
+            online_success = False
             gp_urls = [
                 "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json",
                 "https://celestrak.com/NORAD/elements/gp.php?GROUP=active&FORMAT=json",
             ]
             for url in gp_urls:
                 try:
-                    response = fetch_with_curl(url, timeout=8)
+                    response = fetch_with_curl(url, timeout=5)
                     if response.status_code == 200:
                         gp_data = response.json()
                         if isinstance(gp_data, list) and len(gp_data) > 100:
                             _sat_gp_cache["data"] = gp_data
                             _sat_gp_cache["last_fetch"] = now_ts
-                            _save_gp_cache(gp_data)  # 디스크에 캐시 저장
+                            _save_gp_cache(gp_data)
                             logger.info(f"Satellites: Downloaded {len(gp_data)} GP records from {url}")
+                            online_success = True
                             break
                 except Exception as e:
                     logger.warning(f"Satellites: Failed to fetch from {url}: {e}")
 
-            # Fallback to TLE API if CelesTrak blocked
-            # _fetch_satellites_from_tle_api()가 디스크 캐시 로드 + 병합 + 저장을 자동 처리
-            if _sat_gp_cache["data"] is None:
-                logger.info("Satellites: CelesTrak unreachable, trying TLE fallback API...")
+            # 3) CelesTrak 실패 + 캐시도 없을 때만 TLE fallback
+            if not online_success and _sat_gp_cache["data"] is None:
+                logger.info("Satellites: CelesTrak unreachable and no cache, trying TLE fallback API...")
                 fallback_data = _fetch_satellites_from_tle_api()
                 if fallback_data and len(fallback_data) > 5:
                     _sat_gp_cache["data"] = fallback_data
-                    _sat_gp_cache["last_fetch"] = now_ts
-
-            # 모든 온라인 소스 실패 시 디스크 캐시에서 로드
-            if _sat_gp_cache["data"] is None:
-                disk_data = _load_gp_cache()
-                if disk_data:
-                    _sat_gp_cache["data"] = disk_data
                     _sat_gp_cache["last_fetch"] = now_ts
 
         data = _sat_gp_cache["data"]

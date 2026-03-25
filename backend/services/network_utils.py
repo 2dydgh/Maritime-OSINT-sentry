@@ -11,8 +11,9 @@ from urllib3.util.retry import Retry
 logger = logging.getLogger(__name__)
 
 # Reusable session with connection pooling and retry logic
+# connect timeout 시 재시도 1회로 축소 (서버가 아예 안 되면 반복해도 무의미)
 _session = requests.Session()
-_retry = Retry(total=2, backoff_factor=0.5, status_forcelist=[502, 503, 504])
+_retry = Retry(total=1, connect=0, backoff_factor=0.5, status_forcelist=[502, 503, 504])
 _session.mount("https://", HTTPAdapter(max_retries=_retry, pool_maxsize=20))
 _session.mount("http://", HTTPAdapter(max_retries=_retry, pool_maxsize=10))
 

@@ -20,7 +20,10 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup logic
     logger.info("Starting up OSINT 4D Backend...")
-    await database.init_db()
+    try:
+        await database.init_db()
+    except Exception as e:
+        logger.warning(f"Database init failed — running in lightweight mode: {e}")
 
     # Initialize history writer for AIS trajectory persistence
     try:
@@ -33,15 +36,12 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize history writer: {e}")
         # 실패해도 실시간 기능은 계속 동작
 
-    # Load land shapefile for collision analysis land obstruction filter
+    # Load land shapefile in background (non-blocking)
+    # 서버는 즉시 시작되고, 로딩 완료 전까지 육지 필터링은 비활성 (안전한 기본값)
     land_shapefile = os.path.join(
         os.path.dirname(__file__), "data", "land", "GSHHS_i_L1.shp"
     )
-    land_filter.load_land_index(land_shapefile)
-    if land_filter.is_loaded():
-        logger.info("Land obstruction filter: ACTIVE")
-    else:
-        logger.warning("Land obstruction filter: INACTIVE (shapefile not found)")
+    land_filter.start_land_index_loading(land_shapefile)
 
     # Start AIS Stream Background Task
     ais_stream.start_ais_stream()
@@ -142,8 +142,14 @@ app.include_router(metrics.router)
 app.include_router(collision.router, prefix="/api/v1")
 app.include_router(health.router)
 
-# Static Files
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+# Static Files — resolve path for both normal and PyInstaller frozen mode
+import sys as _sys
+if getattr(_sys, "frozen", False):
+    _base_dir = getattr(_sys, "_MEIPASS", os.path.dirname(_sys.executable))
+else:
+    _base_dir = os.path.dirname(os.path.dirname(__file__))
+_static_dir = os.path.join(_base_dir, "static")
+app.mount("/", StaticFiles(directory=_static_dir, html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn

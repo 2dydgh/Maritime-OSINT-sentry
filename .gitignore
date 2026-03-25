@@ -51,3 +51,20 @@ backend/data/land/*.cpg
 # Large Media (excluded if > 100MB)
 
 .superpowers/
+
+# Electron build artifacts
+electron/node_modules/
+electron/build/
+electron/dist/
+electron/backend.spec
+electron/backend_launcher.py
+
+# Auto-generated data
+backend/data/land/*.pkl
+backend/data/land/*.html
+backend/data/land/*.txt
+
+# Claude/Superpowers docs
+claude.md
+docs/superpowers/
+screenshots/

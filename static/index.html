@@ -291,10 +291,24 @@
             flex-shrink: 0;
         }
 
+        .feed-panel-header {
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: 1.5px;
+            border-bottom: 1px solid rgba(63, 63, 70, 0.2);
+            background: rgba(20, 184, 166, 0.03);
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
         #feedPanel h2 {
             margin: 0 0 10px 0;
-            font-size: 0.85rem;
-            color: var(--accent);
+            font-size: 0.8rem;
+            color: var(--text-main);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -533,7 +547,7 @@
             transition: transform 0.2s;
         }
         .layer-group.collapsed .lg-chevron {
-            transform: rotate(-90deg);
+            transform: rotate(180deg);
         }
 
         .layer-group-body {
@@ -731,15 +745,16 @@
 
         .collision-tabs {
             display: flex;
-            gap: 6px;
+            gap: 4px;
             margin-bottom: 10px;
+            flex-wrap: wrap;
         }
 
         .collision-tab-btn {
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid rgba(63, 63, 70, 0.3);
             color: var(--text-dim);
-            padding: 4px 10px;
+            padding: 4px 8px;
             border-radius: 6px;
             cursor: pointer;
             font-family: 'Inter', sans-serif;
@@ -909,8 +924,8 @@
         .ml-risk-summary {
             display: flex;
             gap: 6px;
-            padding: 8px 0;
-            margin-bottom: 6px;
+            padding: 6px 0 8px;
+            margin: 0;
             border-bottom: 1px solid rgba(255,255,255,0.06);
         }
         .risk-stat {
@@ -1320,30 +1335,39 @@
             </div>
             <div class="stat-item">
                 <span class="stat-value" id="stat-events">0</span>
-                <span class="stat-label">Active Events</span>
+                <span class="stat-label">활성 이벤트</span>
             </div>
             <div class="stat-item">
                 <span class="stat-value" id="stat-assets">7</span>
-                <span class="stat-label">Tracked Assets</span>
+                <span class="stat-label">추적 자산</span>
             </div>
         </div>
     </header>
 
     <!-- Left Monitor Panel (Feed + Collision) -->
     <div id="feedPanel" class="glass-panel">
-        <!-- LIVE FEED Section -->
+        <!-- Master Header -->
+        <div class="feed-panel-header">
+            <span><i class="fa-solid fa-tower-broadcast" style="margin-right: 8px;"></i> LIVE FEED</span>
+            <button class="collapse-btn" title="전체 접기/펼치기"
+                onclick="const f=document.getElementById('feedSection'),c=document.getElementById('collisionSection');const allCollapsed=f.classList.contains('collapsed')&&c.classList.contains('collapsed');if(allCollapsed){f.classList.remove('collapsed');c.classList.remove('collapsed')}else{f.classList.add('collapsed');c.classList.add('collapsed')}var nowCollapsed=f.classList.contains('collapsed');this.querySelector('i').classList.toggle('fa-chevron-up',!nowCollapsed);this.querySelector('i').classList.toggle('fa-chevron-down',nowCollapsed);">
+                <i class="fa-solid fa-chevron-up"></i>
+            </button>
+        </div>
+
+        <!-- 이상 선박 탐지 Section -->
         <div id="feedSection" class="panel-section">
             <h2>
-                <span><i class="fa-solid fa-tower-broadcast" style="margin-right: 8px;"></i> LIVE FEED</span>
+                <span><i class="fa-solid fa-ship" style="margin-right: 6px;"></i> 이상 선박 탐지</span>
                 <button class="collapse-btn"
-                    onclick="document.getElementById('feedSection').classList.toggle('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up'); this.querySelector('i').classList.toggle('fa-chevron-down');">
+                    onclick="document.getElementById('feedSection').classList.toggle('collapsed'); var c=document.getElementById('feedSection').classList.contains('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up',!c); this.querySelector('i').classList.toggle('fa-chevron-down',c);">
                     <i class="fa-solid fa-chevron-up"></i>
                 </button>
             </h2>
             <div class="feed-list" id="eventFeed">
                 <div
                     style="text-align: center; color: var(--text-dim); font-style: italic; margin-top: 20px; font-size: 0.9rem;">
-                    Awaiting intelligence data...
+                    정보 수신 대기중...
                 </div>
             </div>
         </div>
@@ -1354,19 +1378,20 @@
         <!-- COLLISION ANALYSIS Section -->
         <div id="collisionSection" class="panel-section">
             <h3>
-                <span><i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px;"></i> COLLISION ANALYSIS
+                <span><i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px;"></i> 충돌 분석
                     <span class="collision-count-badge" id="collision-count">0</span></span>
                 <button class="collapse-btn" style="margin-left:auto;"
-                    onclick="document.getElementById('collisionSection').classList.toggle('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up'); this.querySelector('i').classList.toggle('fa-chevron-down');">
+                    onclick="document.getElementById('collisionSection').classList.toggle('collapsed'); var c=document.getElementById('collisionSection').classList.contains('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up',!c); this.querySelector('i').classList.toggle('fa-chevron-down',c);">
                     <i class="fa-solid fa-chevron-up"></i>
                 </button>
             </h3>
             <div class="collision-tabs">
-                <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">DISTANCE</button>
-                <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl">ML MODEL</button>
+                <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">거리 기반</button>
+                <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl"><i class="fa-solid fa-brain" style="margin-right:4px;font-size:0.65rem;"></i>AI 분석</button>
             </div>
+            <div id="mlRiskSummaryFixed" style="display:none; flex-shrink:0;"></div>
             <div class="collision-list" id="collisionList">
-                <div class="collision-empty">Awaiting analysis data...</div>
+                <div class="collision-empty">분석 데이터 대기중...</div>
             </div>
         </div>
     </div>
@@ -1375,7 +1400,7 @@
         <div class="panel-master-header">
             <h3><i class="fa-solid fa-layer-group"></i> LAYERS</h3>
             <button class="collapse-btn"
-                onclick="this.closest('#shipFilterPanel').classList.toggle('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up'); this.querySelector('i').classList.toggle('fa-chevron-down');">
+                onclick="this.closest('#shipFilterPanel').classList.toggle('collapsed'); var c=this.closest('#shipFilterPanel').classList.contains('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up',!c); this.querySelector('i').classList.toggle('fa-chevron-down',c);">
                 <i class="fa-solid fa-chevron-up"></i>
             </button>
         </div>
@@ -1385,9 +1410,9 @@
             <div class="layer-group" id="layerGroupVessels">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
                     <div class="lg-icon" style="background: rgba(20, 184, 166, 0.1); color: var(--accent);"><i class="fa-solid fa-ship"></i></div>
-                    <span class="lg-title">Vessels</span>
+                    <span class="lg-title">선박</span>
                     <span class="lg-badge" id="total-ships">0</span>
-                    <i class="fa-solid fa-chevron-down lg-chevron"></i>
+                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
                 <div class="layer-group-body">
                     <div class="filter-item">
@@ -1428,8 +1453,8 @@
             <div class="layer-group" id="layerGroupWeather">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
                     <div class="lg-icon" style="background: rgba(59, 130, 246, 0.12); color: #3b82f6;"><i class="fa-solid fa-cloud-showers-heavy"></i></div>
-                    <span class="lg-title">Weather</span>
-                    <i class="fa-solid fa-chevron-down lg-chevron"></i>
+                    <span class="lg-title">기상</span>
+                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
                 <div class="layer-group-body">
                     <div class="filter-item">
@@ -1442,47 +1467,107 @@
             <div class="layer-group" id="layerGroupSatellites">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
                     <div class="lg-icon" style="background: rgba(167, 139, 250, 0.12); color: #a78bfa;"><i class="fa-solid fa-satellite"></i></div>
-                    <span class="lg-title">Satellites</span>
+                    <span class="lg-title">위성</span>
                     <span class="lg-badge" id="total-sats">0</span>
-                    <i class="fa-solid fa-chevron-down lg-chevron"></i>
+                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
                 <div class="layer-group-body">
                     <div class="filter-item">
                         <label><input type="checkbox" id="layer-sats"><span class="color-dot" style="background-color: #a78bfa;"></span> Intel Satellites</label>
                     </div>
                     <div id="satSubToggles" style="display:none; margin-top: 6px;">
-                        <div class="layer-sub-label">Mission Type</div>
+                        <div class="layer-sub-label">임무 유형</div>
                         <div class="filter-item">
                             <label><input type="checkbox" class="sat-mission-filter" data-mission="sar,military_sar" checked><span class="color-dot" style="background-color: #f97316;"></span> SAR</label>
+                        </div>
+                        <div class="filter-item">
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="commercial_imaging" checked><span class="color-dot" style="background-color: #94a3b8;"></span> 광학</label>
                         </div>
                         <div class="filter-item">
                             <label><input type="checkbox" class="sat-mission-filter" data-mission="sigint" checked><span class="color-dot" style="background-color: #eab308;"></span> SIGINT</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="commercial_imaging" checked><span class="color-dot" style="background-color: #94a3b8;"></span> Imaging</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="military_recon"><span class="color-dot" style="background-color: #fde047;"></span> 정찰</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="military_recon"><span class="color-dot" style="background-color: #fde047;"></span> Recon</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="navigation"><span class="color-dot" style="background-color: #10b981;"></span> 항법</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="navigation"><span class="color-dot" style="background-color: #10b981;"></span> Navigation</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="early_warning"><span class="color-dot" style="background-color: #a855f7;"></span> 조기경보</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="early_warning"><span class="color-dot" style="background-color: #a855f7;"></span> Early Warning</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="space_station"><span class="color-dot" style="background-color: #3b82f6;"></span> 우주정거장</label>
+                        </div>
+                        <div class="layer-sub-label">표시</div>
+                        <div class="filter-item">
+                            <label><input type="checkbox" id="layer-sat-orbits" checked> 3D 궤도</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="space_station"><span class="color-dot" style="background-color: #3b82f6;"></span> Space Station</label>
-                        </div>
-                        <div class="layer-sub-label">Display</div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" id="layer-sat-orbits" checked> 3D Orbit</label>
+                            <label><input type="checkbox" id="layer-sat-ground" checked> 지표 궤적</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" id="layer-sat-ground" checked> Ground Track</label>
+                            <label><input type="checkbox" id="layer-sat-footprint" checked> 관측 범위</label>
                         </div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" id="layer-sat-footprint" checked> Sensor Footprint</label>
-                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ SIGINT ═══ -->
+            <div class="layer-group collapsed" id="layerGroupSignal">
+                <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                    <div class="lg-icon" style="background: rgba(234, 179, 8, 0.12); color: #eab308;"><i class="fa-solid fa-tower-cell"></i></div>
+                    <span class="lg-title">SIGINT</span>
+                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
+                </div>
+                <div class="layer-group-body">
+                    <div class="filter-item">
+                        <label><input type="checkbox" id="layer-sigint-ais"><span class="color-dot" style="background-color: #eab308;"></span> AIS 이상 탐지</label>
+                    </div>
+                    <div class="filter-item">
+                        <label><input type="checkbox" id="layer-sigint-rf"><span class="color-dot" style="background-color: #f97316;"></span> RF 신호 감지</label>
+                    </div>
+                    <div class="filter-item">
+                        <label><input type="checkbox" id="layer-sigint-darkship"><span class="color-dot" style="background-color: #ef4444;"></span> Dark Ship 탐지</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ NEWS ═══ -->
+            <div class="layer-group collapsed" id="layerGroupNews">
+                <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                    <div class="lg-icon" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8;"><i class="fa-solid fa-newspaper"></i></div>
+                    <span class="lg-title">뉴스</span>
+                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
+                </div>
+                <div class="layer-group-body">
+                    <div class="filter-item">
+                        <label><input type="checkbox" id="layer-news-maritime"><span class="color-dot" style="background-color: #38bdf8;"></span> 해양 사건</label>
+                    </div>
+                    <div class="filter-item">
+                        <label><input type="checkbox" id="layer-news-security"><span class="color-dot" style="background-color: #ef4444;"></span> 안보 위협</label>
+                    </div>
+                    <div class="filter-item">
+                        <label><input type="checkbox" id="layer-news-trade"><span class="color-dot" style="background-color: #10b981;"></span> 무역/물류</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ BASES ═══ -->
+            <div class="layer-group collapsed" id="layerGroupBases">
+                <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                    <div class="lg-icon" style="background: rgba(239, 68, 68, 0.12); color: #ef4444;"><i class="fa-solid fa-shield-halved"></i></div>
+                    <span class="lg-title">주요 기지</span>
+                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
+                </div>
+                <div class="layer-group-body">
+                    <div class="filter-item">
+                        <label><input type="checkbox" id="layer-base-naval"><span class="color-dot" style="background-color: #6366f1;"></span> 해군 기지</label>
+                    </div>
+                    <div class="filter-item">
+                        <label><input type="checkbox" id="layer-base-port"><span class="color-dot" style="background-color: #10b981;"></span> 주요 항구</label>
+                    </div>
+                    <div class="filter-item">
+                        <label><input type="checkbox" id="layer-base-chokepoint"><span class="color-dot" style="background-color: #f97316;"></span> 전략 요충지</label>
                     </div>
                 </div>
             </div>
@@ -1498,7 +1583,7 @@
         </div>
         <div id="shipInfoBody" class="drag-panel-body"></div>
         <div id="nearbyVesselsSection">
-            <div class="section-title">NEARBY VESSELS</div>
+            <div class="section-title">NEARBY VESSELS <span id="nearbyMlIndicator" style="display:none;font-size:0.55rem;color:var(--accent);margin-left:6px;font-weight:400;"><i class="fa-solid fa-brain"></i> AI</span></div>
             <div id="nearbyVesselsList"></div>
         </div>
     </div>
@@ -1506,7 +1591,7 @@
 
     <!-- Centered Loader -->
     <div id="loading" class="glass-panel">
-        <i class="fa-solid fa-circle-notch fa-spin"></i> INITIALIZING SYSTEM
+        <i class="fa-solid fa-circle-notch fa-spin"></i> 시스템 초기화중
     </div>
 
     <!-- Time Control Bar -->
@@ -1560,15 +1645,23 @@
         });
 
         // ── Hybrid Map: 위성사진(기본) + 다크 타일(고줌 폴백) ────────────────
+        // 기본 위성사진 레이어 밝기/채도 조절 — 중간 톤 (너무 밝지도 어둡지도 않게)
+        const baseLayer = viewer.imageryLayers.get(0);
+        baseLayer.brightness = 0.6;
+        baseLayer.saturation = 0.5;
+        baseLayer.contrast = 1.1;
+
         const fallbackLayer = viewer.imageryLayers.addImageryProvider(
             new Cesium.UrlTemplateImageryProvider({
-                url: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+                url: 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
                 credit: '© CartoDB © OpenStreetMap contributors',
                 minimumLevel: 0,
                 maximumLevel: 20
             })
         );
         fallbackLayer.alpha = 0;
+        fallbackLayer.brightness = 0.5;
+        fallbackLayer.saturation = 0.3;
 
         // 10km 이하에서 점진적 페이드인 (더 넓은 범위로 부드러운 전환)
         viewer.camera.changed.addEventListener(() => {
@@ -1919,97 +2012,12 @@
 
             const c = colorHex;
             const gid = c.slice(1) + (missionType || 'def');
-            let body = '';
-            switch (missionType) {
-                case 'sar': // SAR — dominant huge dish pointing down, tiny body
-                    body = `
-                        <path d='M8 14 Q24 2 40 14' fill='none' stroke='${c}' stroke-width='2.5' opacity='0.9'/>
-                        <path d='M12 14 Q24 6 36 14' fill='${c}' opacity='0.15'/>
-                        <line x1='24' y1='14' x2='24' y2='26' stroke='${c}' stroke-width='1.5'/>
-                        <rect x='20' y='26' width='8' height='6' rx='1.5' fill='${c}' opacity='0.6' stroke='${c}' stroke-width='1'/>
-                        <rect x='12' y='28' width='7' height='4' rx='0.5' fill='${c}' opacity='0.25' stroke='${c}' stroke-width='0.7'/>
-                        <rect x='29' y='28' width='7' height='4' rx='0.5' fill='${c}' opacity='0.25' stroke='${c}' stroke-width='0.7'/>`;
-                    break;
-                case 'sigint': // SIGINT — star-burst of 5 long antenna spikes
-                    body = `
-                        <circle cx='24' cy='24' r='5' fill='${c}' opacity='0.5' stroke='${c}' stroke-width='1'/>
-                        <line x1='24' y1='24' x2='24' y2='4' stroke='${c}' stroke-width='1.5' opacity='0.8'/>
-                        <line x1='24' y1='24' x2='6' y2='16' stroke='${c}' stroke-width='1.5' opacity='0.8'/>
-                        <line x1='24' y1='24' x2='42' y2='16' stroke='${c}' stroke-width='1.5' opacity='0.8'/>
-                        <line x1='24' y1='24' x2='10' y2='38' stroke='${c}' stroke-width='1.5' opacity='0.8'/>
-                        <line x1='24' y1='24' x2='38' y2='38' stroke='${c}' stroke-width='1.5' opacity='0.8'/>
-                        <circle cx='24' cy='4' r='2' fill='${c}' opacity='0.6'/>
-                        <circle cx='6' cy='16' r='2' fill='${c}' opacity='0.6'/>
-                        <circle cx='42' cy='16' r='2' fill='${c}' opacity='0.6'/>
-                        <circle cx='10' cy='38' r='2' fill='${c}' opacity='0.6'/>
-                        <circle cx='38' cy='38' r='2' fill='${c}' opacity='0.6'/>`;
-                    break;
-                case 'imaging': // Imaging — big circular lens dominates
-                case 'commercial_imaging':
-                    body = `
-                        <circle cx='24' cy='24' r='12' fill='none' stroke='${c}' stroke-width='2' opacity='0.7'/>
-                        <circle cx='24' cy='24' r='8' fill='none' stroke='${c}' stroke-width='1.2' opacity='0.4'/>
-                        <circle cx='24' cy='24' r='3' fill='${c}' opacity='0.8'/>
-                        <rect x='4' y='21' width='8' height='6' rx='1' fill='${c}' opacity='0.3' stroke='${c}' stroke-width='0.7'/>
-                        <rect x='36' y='21' width='8' height='6' rx='1' fill='${c}' opacity='0.3' stroke='${c}' stroke-width='0.7'/>`;
-                    break;
-                case 'recon': // Recon — angular diamond/stealth shape
-                    body = `
-                        <polygon points='24,6 40,24 24,42 8,24' fill='${c}' opacity='0.35' stroke='${c}' stroke-width='1.8'/>
-                        <polygon points='24,14 32,24 24,34 16,24' fill='${c}' opacity='0.25'/>
-                        <circle cx='24' cy='24' r='3' fill='${c}' opacity='0.7'/>
-                        <line x1='24' y1='6' x2='24' y2='3' stroke='${c}' stroke-width='1'/>
-                        <circle cx='24' cy='2' r='1.5' fill='${c}' opacity='0.5'/>`;
-                    break;
-                case 'navigation': // Navigation — circle with concentric signal rings
-                    body = `
-                        <circle cx='24' cy='24' r='5' fill='${c}' opacity='0.7'/>
-                        <circle cx='24' cy='24' r='10' fill='none' stroke='${c}' stroke-width='1.2' opacity='0.4' stroke-dasharray='3 2'/>
-                        <circle cx='24' cy='24' r='16' fill='none' stroke='${c}' stroke-width='0.8' opacity='0.25' stroke-dasharray='4 3'/>
-                        <circle cx='24' cy='24' r='22' fill='none' stroke='${c}' stroke-width='0.5' opacity='0.15' stroke-dasharray='5 4'/>
-                        <line x1='24' y1='2' x2='24' y2='8' stroke='${c}' stroke-width='1.2'/>
-                        <circle cx='24' cy='1' r='1.5' fill='${c}' opacity='0.5'/>`;
-                    break;
-                case 'early_warning': // Early Warning — upward-facing dome/mushroom shape
-                    body = `
-                        <path d='M10 26 Q10 10 24 8 Q38 10 38 26' fill='${c}' opacity='0.3' stroke='${c}' stroke-width='1.8'/>
-                        <ellipse cx='24' cy='26' rx='14' ry='3' fill='${c}' opacity='0.4' stroke='${c}' stroke-width='1'/>
-                        <rect x='21' y='29' width='6' height='10' rx='1' fill='${c}' opacity='0.5' stroke='${c}' stroke-width='1'/>
-                        <circle cx='24' cy='18' r='3' fill='${c}' opacity='0.5'/>
-                        <line x1='24' y1='39' x2='20' y2='44' stroke='${c}' stroke-width='0.8' opacity='0.4'/>
-                        <line x1='24' y1='39' x2='28' y2='44' stroke='${c}' stroke-width='0.8' opacity='0.4'/>`;
-                    break;
-                case 'space_station': // Space Station — wide H-shape truss + huge panels
-                    body = `
-                        <line x1='2' y1='24' x2='46' y2='24' stroke='${c}' stroke-width='2.5' opacity='0.6'/>
-                        <rect x='20' y='20' width='8' height='8' rx='2' fill='${c}' opacity='0.7' stroke='${c}' stroke-width='1'/>
-                        <rect x='2' y='14' width='14' height='20' rx='1' fill='${c}' opacity='0.2' stroke='${c}' stroke-width='1'/>
-                        <line x1='6' y1='14' x2='6' y2='34' stroke='${c}' stroke-width='0.5' opacity='0.3'/>
-                        <line x1='10' y1='14' x2='10' y2='34' stroke='${c}' stroke-width='0.5' opacity='0.3'/>
-                        <line x1='2' y1='20' x2='16' y2='20' stroke='${c}' stroke-width='0.5' opacity='0.3'/>
-                        <line x1='2' y1='28' x2='16' y2='28' stroke='${c}' stroke-width='0.5' opacity='0.3'/>
-                        <rect x='32' y='14' width='14' height='20' rx='1' fill='${c}' opacity='0.2' stroke='${c}' stroke-width='1'/>
-                        <line x1='36' y1='14' x2='36' y2='34' stroke='${c}' stroke-width='0.5' opacity='0.3'/>
-                        <line x1='42' y1='14' x2='42' y2='34' stroke='${c}' stroke-width='0.5' opacity='0.3'/>
-                        <line x1='32' y1='20' x2='46' y2='20' stroke='${c}' stroke-width='0.5' opacity='0.3'/>
-                        <line x1='32' y1='28' x2='46' y2='28' stroke='${c}' stroke-width='0.5' opacity='0.3'/>`;
-                    break;
-                default: // Generic — classic solar panel + body
-                    body = `
-                        <rect x='5' y='19' width='12' height='10' rx='1' fill='${c}' opacity='0.3' stroke='${c}' stroke-width='0.8'/>
-                        <line x1='8' y1='19' x2='8' y2='29' stroke='${c}' stroke-width='0.4' opacity='0.5'/>
-                        <line x1='14' y1='19' x2='14' y2='29' stroke='${c}' stroke-width='0.4' opacity='0.5'/>
-                        <line x1='5' y1='23' x2='17' y2='23' stroke='${c}' stroke-width='0.4' opacity='0.5'/>
-                        <rect x='18' y='19' width='12' height='10' rx='2' fill='${c}' opacity='0.6' stroke='${c}' stroke-width='1.2'/>
-                        <circle cx='24' cy='24' r='2.5' fill='${c}'/>
-                        <rect x='31' y='19' width='12' height='10' rx='1' fill='${c}' opacity='0.3' stroke='${c}' stroke-width='0.8'/>
-                        <line x1='34' y1='19' x2='34' y2='29' stroke='${c}' stroke-width='0.4' opacity='0.5'/>
-                        <line x1='40' y1='19' x2='40' y2='29' stroke='${c}' stroke-width='0.4' opacity='0.5'/>
-                        <line x1='31' y1='23' x2='43' y2='23' stroke='${c}' stroke-width='0.4' opacity='0.5'/>
-                        <line x1='24' y1='19' x2='24' y2='12' stroke='${c}' stroke-width='1'/>
-                        <circle cx='24' cy='11' r='1.5' fill='none' stroke='${c}' stroke-width='0.8'/>`;
-                    break;
-            }
+            // Bracket-corner rectangle icon for all satellite types (wider)
+            const body = `
+                <polyline points='4,20 4,12 14,12' fill='none' stroke='${c}' stroke-width='2' stroke-linecap='round' opacity='0.9'/>
+                <polyline points='34,12 44,12 44,20' fill='none' stroke='${c}' stroke-width='2' stroke-linecap='round' opacity='0.9'/>
+                <polyline points='44,28 44,36 34,36' fill='none' stroke='${c}' stroke-width='2' stroke-linecap='round' opacity='0.9'/>
+                <polyline points='14,36 4,36 4,28' fill='none' stroke='${c}' stroke-width='2' stroke-linecap='round' opacity='0.9'/>`;
 
             const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'>
                 <defs>
@@ -3201,6 +3209,35 @@
             return { css, cesium: Cesium.Color.fromCssColorString(css) };
         }
 
+        const ML_RISK_LABELS = { 3: '위험', 2: '경고', 1: '주의' };
+
+        /**
+         * 선택된 선박의 MMSI로 캐시된 ML 결과에서 매칭되는 위험도를 찾아
+         * nearby 선박 배열에 mlRiskLevel/mlRiskLabel을 주입한다.
+         */
+        function enrichNearbyWithMlRisk(selectedMmsi, nearbyVessels) {
+            const mlRisks = (collisionData.ml && collisionData.ml.risks) || [];
+            if (mlRisks.length === 0) return;
+
+            // 선택 MMSI가 포함된 ML 쌍을 빠르게 조회할 맵 생성
+            const riskMap = {};
+            mlRisks.forEach(r => {
+                if (r.ship_a.mmsi == selectedMmsi) {
+                    riskMap[r.ship_b.mmsi] = r;
+                } else if (r.ship_b.mmsi == selectedMmsi) {
+                    riskMap[r.ship_a.mmsi] = r;
+                }
+            });
+
+            nearbyVessels.forEach(nv => {
+                const match = riskMap[nv.mmsi];
+                if (match) {
+                    nv.mlRiskLevel = match.risk_level;
+                    nv.mlRiskLabel = match.risk_label || ML_RISK_LABELS[match.risk_level] || '';
+                }
+            });
+        }
+
         function renderProximityLines(selectedMmsi, nearbyVessels) {
             proximityDataSource.entities.removeAll();
             const selected = shipDataMap[selectedMmsi];
@@ -3421,18 +3458,31 @@
             }
 
             section.style.display = 'block';
+            const hasMlMatches = nearbyVessels.some(nv => nv.mlRiskLevel != null && nv.mlRiskLevel > 0);
+            const mlIndicator = document.getElementById('nearbyMlIndicator');
+            if (mlIndicator) mlIndicator.style.display = hasMlMatches ? 'inline' : 'none';
             list.innerHTML = nearbyVessels.map(nv => {
                 const isCollisionTarget = collisionTargetMmsi != null && (nv.mmsi == collisionTargetMmsi);
-                const color = isCollisionTarget
-                    ? { css: '#f43f5e' }
-                    : proximityColor(nv.distance);
-                const highlight = isCollisionTarget
-                    ? 'background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.3);border-radius:6px;'
+                const hasMlRisk = nv.mlRiskLevel != null && nv.mlRiskLevel > 0;
+                const mlColor = hasMlRisk ? ML_RISK_COLORS[nv.mlRiskLevel] : null;
+                const color = hasMlRisk
+                    ? { css: mlColor }
+                    : isCollisionTarget
+                        ? { css: '#f43f5e' }
+                        : proximityColor(nv.distance);
+                const highlight = hasMlRisk
+                    ? `background:${mlColor}15;border:1px solid ${mlColor}40;border-radius:6px;`
+                    : isCollisionTarget
+                        ? 'background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.3);border-radius:6px;'
+                        : '';
+                const mlBadge = hasMlRisk
+                    ? `<span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${mlColor}25;color:${mlColor};font-weight:600;flex-shrink:0;">${nv.mlRiskLabel}</span>`
                     : '';
                 return `<div class="nearby-row" data-mmsi="${nv.mmsi}" data-lat="${nv.lat}" data-lng="${nv.lng}" style="${highlight}">
                     <span class="nearby-dot" style="background:${color.css}"></span>
-                    <span class="nearby-name">${isCollisionTarget ? '⚠ ' : ''}${nv.name}</span>
-                    <span class="nearby-dist" style="${isCollisionTarget ? 'color:#f43f5e;font-weight:700;' : ''}">${nv.distance.toFixed(1)} nm</span>
+                    <span class="nearby-name">${(hasMlRisk || isCollisionTarget) ? '⚠ ' : ''}${nv.name}</span>
+                    ${mlBadge}
+                    <span class="nearby-dist" style="${(hasMlRisk || isCollisionTarget) ? `color:${color.css};font-weight:700;` : ''}">${nv.distance.toFixed(1)} nm</span>
                 </div>`;
             }).join('');
 
@@ -3479,6 +3529,7 @@
                 const nearby = await findNearbyVessels(mmsi, PROXIMITY_RADIUS_NM, PROXIMITY_MAX_COUNT);
                 // async 동안 선택이 바뀌었으면 렌더링 스킵
                 if (mmsi !== selectedProximityMmsi) return;
+                enrichNearbyWithMlRisk(mmsi, nearby);
                 renderProximityLines(mmsi, nearby);
                 renderNearbyPanel(nearby);
             } finally {
@@ -3583,6 +3634,18 @@
                                     const s = shipDataMap[mmsiKey] || ship;
                                     return Cesium.Math.toRadians(-(s.heading || 0));
                                 }, false)
+                            },
+                            label: {
+                                text: ship.name || '',
+                                font: '11px Inter, sans-serif',
+                                fillColor: Cesium.Color.fromCssColorString(SHIP_COLORS[type] || '#6b7280'),
+                                outlineColor: Cesium.Color.BLACK,
+                                outlineWidth: 3,
+                                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                                pixelOffset: new Cesium.Cartesian2(0, -18),
+                                scaleByDistance: new Cesium.NearFarScalar(5e5, 1.0, 5e6, 0.4),
+                                distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3e6),
+                                disableDepthTestDistance: Number.POSITIVE_INFINITY
                             }
                         });
                     } else {
@@ -3628,7 +3691,7 @@
             ws.onopen = () => {
                 console.log("WebSocket connected!");
                 const loadingEl = document.getElementById('loading');
-                if (loadingEl && loadingEl.innerHTML.includes('INITIALIZING')) {
+                if (loadingEl && loadingEl.innerHTML.includes('초기화')) {
                     loadingEl.style.display = 'none';
                 }
             };
@@ -3690,7 +3753,7 @@
             renderCollisionList();
         }
 
-        // Bind collision tab buttons (can't use inline onclick since buttons exist before <script>)
+        // Bind collision tab buttons
         document.getElementById('collisionTabDistance').addEventListener('click', () => switchCollisionTab('distance'));
         document.getElementById('collisionTabMl').addEventListener('click', () => switchCollisionTab('ml'));
 
@@ -3709,11 +3772,18 @@
 
         function renderCollisionList() {
             const list = document.getElementById('collisionList');
+            const fixedSummary = document.getElementById('mlRiskSummaryFixed');
             const data = collisionActiveTab === 'distance' ? collisionData.distance : collisionData.ml;
             const risks = data.risks || [];
 
+            // 탭 전환 시 고정 요약 바 숨기기/보이기
+            if (collisionActiveTab !== 'ml') {
+                fixedSummary.style.display = 'none';
+                fixedSummary.innerHTML = '';
+            }
+
             if (risks.length === 0) {
-                list.innerHTML = '<div class="collision-empty">No collision risks detected</div>';
+                list.innerHTML = '<div class="collision-empty">충돌 위험 없음</div>';
                 return;
             }
 
@@ -3736,14 +3806,20 @@
                     </div>
                 `).join('');
             } else {
-                // ML Model: 요약 바 (클릭 필터) + 카드 표시
+                // ML Model: 요약 바를 고정 컨테이너에, 카드만 스크롤 리스트에
                 const countByLevel = {1: 0, 2: 0, 3: 0};
                 risks.forEach(r => { if (countByLevel[r.risk_level] !== undefined) countByLevel[r.risk_level]++; });
 
                 const isActive = (lvl) => mlRiskFilter === lvl ? 'active' : '';
                 const isDefaultActive = mlRiskFilter === null ? 'active' : '';
 
-                const summaryHtml = `
+                // 고정 요약 바 렌더링
+                fixedSummary.style.display = 'block';
+                fixedSummary.innerHTML = `
+                    <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;margin-bottom:4px;">
+                        <i class="fa-solid fa-brain" style="color:var(--accent);font-size:0.65rem;"></i>
+                        <span style="font-size:0.6rem;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">XGBoost · 14 features · 10s 주기</span>
+                    </div>
                     <div class="ml-risk-summary">
                         <div class="risk-stat ${isActive(3)}" data-risk-filter="3" style="--stat-color: #f43f5e; --stat-bg: rgba(244,63,94,0.15);">
                             <span class="risk-stat-count">${countByLevel[3]}</span>
@@ -3763,12 +3839,26 @@
                         </div>
                     </div>`;
 
+                // 요약 바 클릭 → 필터 전환
+                fixedSummary.querySelectorAll('.risk-stat[data-risk-filter]').forEach(stat => {
+                    stat.addEventListener('click', () => {
+                        const val = stat.dataset.riskFilter;
+                        if (val === 'all') {
+                            mlRiskFilter = null;
+                        } else {
+                            const lvl = parseInt(val);
+                            mlRiskFilter = mlRiskFilter === lvl ? null : lvl;
+                        }
+                        renderCollisionList();
+                    });
+                });
+
                 // 필터 적용: null(기본)=2+3, 숫자=해당 레벨만
                 const filtered = mlRiskFilter === null
                     ? risks.filter(r => r.risk_level >= 2)
                     : risks.filter(r => r.risk_level === mlRiskFilter);
 
-                const cardsHtml = filtered.length === 0
+                list.innerHTML = filtered.length === 0
                     ? '<div class="collision-empty">해당 등급의 위험이 없습니다</div>'
                     : filtered.map(r => `
                     <div class="collision-card" data-mmsi-a="${r.ship_a.mmsi}" data-mmsi-b="${r.ship_b.mmsi}"
@@ -3803,28 +3893,12 @@
                         </div>
                     </div>
                 `).join('');
-
-                list.innerHTML = summaryHtml + cardsHtml;
-
-                // 요약 바 클릭 → 필터 전환
-                list.querySelectorAll('.risk-stat[data-risk-filter]').forEach(stat => {
-                    stat.addEventListener('click', () => {
-                        const val = stat.dataset.riskFilter;
-                        if (val === 'all') {
-                            mlRiskFilter = mlRiskFilter === null ? null : null; // reset to default
-                            // 이미 기본이면 아무것도 안 함
-                            if (mlRiskFilter === null && stat.classList.contains('active')) return;
-                            mlRiskFilter = null;
-                        } else {
-                            const lvl = parseInt(val);
-                            mlRiskFilter = mlRiskFilter === lvl ? null : lvl; // 토글
-                        }
-                        renderCollisionList();
-                    });
-                });
             }
 
-            // Click → fly to midpoint + draw line between the pair
+            _bindCollisionCardClicks(list);
+        }
+
+        function _bindCollisionCardClicks(list) {
             list.querySelectorAll('.collision-card').forEach(card => {
                 card.addEventListener('click', () => {
                     const latA = parseFloat(card.dataset.latA);
@@ -3834,14 +3908,14 @@
                     const midLat = (latA + latB) / 2;
                     const midLng = (lngA + lngB) / 2;
                     smoothFlyTo({
-                        destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, 30000)
+                        destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, 5000)
                     });
 
                     const mmsiA = Number(card.dataset.mmsiA);
                     const mmsiB = Number(card.dataset.mmsiB);
 
                     if (collisionActiveTab === 'ml') {
-                        // ML 탭: 해당 쌍만 선 1개 표시 (nearby 전체 스캔 안 함)
+                        // ML 탭: 해당 쌍만 선 1개 표시
                         selectedProximityMmsi = null;
                         collisionTargetMmsi = null;
                         const distNm = haversineNm(latA, lngA, latB, lngB);
@@ -3853,10 +3927,9 @@
                             distance: distNm,
                             mlRiskLevel: riskLevel
                         }]);
-                        // nearby 패널 숨기기
                         renderNearbyPanel([]);
                     } else {
-                        // 거리기반 탭: 기존 동작 (주변 선박 전체 표시)
+                        // 거리기반: 주변 선박 전체 표시
                         collisionTargetMmsi = mmsiB;
                         selectedProximityMmsi = mmsiA;
                         proximityMissCount = 0;
@@ -3981,7 +4054,7 @@
 
                                     // 먼저 위치로 이동, 이동 완료 후 엔티티 찾기
                                     smoothFlyTo({
-                                        destination: Cesium.Cartesian3.fromDegrees(alert.lng, alert.lat, 50000.0),
+                                        destination: Cesium.Cartesian3.fromDegrees(alert.lng, alert.lat, 5000.0),
                                         complete: () => {
                                             // 이동 완료 후 엔티티 찾기 (이제 뷰포트 안에 있음)
                                             // 엔티티 ID 타입이 숫자/문자열 모두 가능하므로 둘 다 시도
@@ -4033,7 +4106,7 @@
                 console.error("Error fetching map data:", error);
                 document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> SYSTEM ERROR';
             } finally {
-                if (document.getElementById('loading').innerHTML.includes('INITIALIZING')) {
+                if (document.getElementById('loading').innerHTML.includes('초기화')) {
                     document.getElementById('loading').style.display = 'none';
                 }
             }
