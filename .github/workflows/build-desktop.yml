@@ -23,9 +23,7 @@ jobs:
 
       - name: Build Windows installer
         working-directory: electron
-        run: npx electron-builder --win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --publish never
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -49,9 +47,7 @@ jobs:
 
       - name: Build Linux AppImage
         working-directory: electron
-        run: npx electron-builder --linux
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --linux --publish never
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4

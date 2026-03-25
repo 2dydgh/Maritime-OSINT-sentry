@@ -2,6 +2,7 @@
   "name": "4dwar",
   "version": "1.0.0",
   "description": "Maritime OSINT Sentry — Desktop Edition",
+  "repository": "github:2dydgh/Maritime-OSINT-Sentry",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
