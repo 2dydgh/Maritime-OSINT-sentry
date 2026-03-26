@@ -31,10 +31,14 @@ function initCharts() {
     if (shipTypeBarChart) shipTypeBarChart.setOption(buildShipTypeOption({}));
 
     // Resize on window resize
+    var _resizeTimer;
     window.addEventListener('resize', function() {
-        if (gaugeChart) gaugeChart.resize();
-        if (radarChart) radarChart.resize();
-        if (shipTypeBarChart) shipTypeBarChart.resize();
+        clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(function() {
+            if (gaugeChart) gaugeChart.resize();
+            if (radarChart) radarChart.resize();
+            if (shipTypeBarChart) shipTypeBarChart.resize();
+        }, 300);
     });
 }
 window.initCharts = initCharts;
@@ -292,7 +296,11 @@ function _updateMlCharts(chartsRow) {
 }
 window.updateCollisionCharts = updateCollisionCharts;
 
+var _lastShipTypeChartUpdate = 0;
 function updateShipTypeChart(ships) {
+    var now = Date.now();
+    if (now - _lastShipTypeChartUpdate < 5000) return;
+    _lastShipTypeChartUpdate = now;
     var chartEl = document.getElementById('shipTypeChart');
     if (!chartEl || !shipTypeBarChart) return;
 
