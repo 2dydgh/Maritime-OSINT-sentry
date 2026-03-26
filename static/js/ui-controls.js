@@ -286,7 +286,6 @@ async function loadHistoryWindow(centerDate, opts) {
         historyInterpolationLoaded = true;
 
         document.getElementById('total-ships').textContent = shipCount.toLocaleString();
-        document.getElementById('stat-assets').textContent = shipCount;
 
         if (!silent) {
             document.getElementById('loading').style.display = 'none';
@@ -515,7 +514,6 @@ async function fetchData() {
         var eventsResponse = await fetch('/api/v1/events');
         var eventsJson = await eventsResponse.json();
         var features = eventsJson.features || [];
-        document.getElementById('stat-events').textContent = features.length;
 
         var eventsSrc = await Cesium.GeoJsonDataSource.load(eventsJson, {
             markerSymbol: 'cross',
@@ -792,24 +790,62 @@ document.getElementById('shipInfoClose').addEventListener('click', function() {
 });
 
 // Show custom ship info panel when entity is clicked
-function showShipInfo(entity) {
+function showShipInfo(entityOrMmsi) {
     var panel = document.getElementById('shipInfoPanel');
     var title = document.getElementById('shipInfoTitle');
     var body = document.getElementById('shipInfoBody');
 
-    var name = entity.name || 'UNKNOWN';
-    title.textContent = name;
-
-    var descHtml = '';
-    if (entity.description) {
-        if (entity.description.getValue) {
-            descHtml = entity.description.getValue(viewer.clock.currentTime);
-        } else {
-            descHtml = entity.description;
+    // Entity 객체 또는 mmsi 문자열 둘 다 지원 (히스토리 모드 호환)
+    var s;
+    if (typeof entityOrMmsi === 'object' && entityOrMmsi !== null) {
+        // Entity 객체 (히스토리 모드)
+        var entityId = entityOrMmsi.id !== undefined ? entityOrMmsi.id : entityOrMmsi;
+        s = shipDataMap[entityId];
+        if (!s) {
+            // 히스토리 모드 Entity — 기존 description 로직
+            var name = entityOrMmsi.name || 'UNKNOWN';
+            title.textContent = name;
+            var descHtml = '';
+            if (entityOrMmsi.description) {
+                if (entityOrMmsi.description.getValue) {
+                    descHtml = entityOrMmsi.description.getValue(viewer.clock.currentTime);
+                } else {
+                    descHtml = entityOrMmsi.description;
+                }
+            }
+            body.innerHTML = descHtml || '<p style="color:var(--text-dim);font-size:0.8rem;">No details available</p>';
+            panel.classList.add('visible');
+            return;
         }
+    } else {
+        s = shipDataMap[entityOrMmsi];
     }
 
-    body.innerHTML = descHtml || '<p style="color:var(--text-dim);font-size:0.8rem;">No details available</p>';
+    if (!s) {
+        body.innerHTML = '<p style="color:var(--text-dim);font-size:0.8rem;">No details available</p>';
+        panel.classList.add('visible');
+        return;
+    }
+
+    title.textContent = s.name || 'UNKNOWN';
+
+    var rows = '\
+        <tr><th>Name</th><td>' + (s.name || 'UNKNOWN') + '</td></tr>\
+        <tr><th>MMSI</th><td>' + s.mmsi + '</td></tr>\
+        <tr><th>Type</th><td>' + (s.type || 'unknown') + '</td></tr>\
+        <tr><th>Country</th><td>' + (s.country || 'UNKNOWN') + '</td></tr>\
+        <tr><th>SOG</th><td>' + (s.sog || 0) + ' kts</td></tr>\
+        <tr><th>COG</th><td>' + (s.cog || 0) + '\u00b0</td></tr>\
+        <tr><th>Heading</th><td>' + (s.heading || 0) + '\u00b0</td></tr>';
+    if (s.length) rows += '<tr><th>Length</th><td>' + s.length + ' m</td></tr>';
+    if (s.beam) rows += '<tr><th>Beam</th><td>' + s.beam + ' m</td></tr>';
+    if (s.draught) rows += '<tr><th>Draught</th><td>' + s.draught + ' m</td></tr>';
+    if (s.destination && s.destination !== 'UNKNOWN') rows += '<tr><th>Destination</th><td>' + s.destination + '</td></tr>';
+    if (s.eta) rows += '<tr><th>ETA</th><td>' + s.eta + '</td></tr>';
+    if (s.callsign) rows += '<tr><th>Callsign</th><td>' + s.callsign + '</td></tr>';
+    if (s.imo) rows += '<tr><th>IMO</th><td>' + s.imo + '</td></tr>';
+
+    body.innerHTML = '<table class="cesium-infoBox-defaultTable"><tbody>' + rows + '</tbody></table>';
     panel.classList.add('visible');
 }
 window.showShipInfo = showShipInfo;
@@ -818,42 +854,60 @@ window.showShipInfo = showShipInfo;
 var handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 handler.setInputAction(function(click) {
     var picked = viewer.scene.pick(click.position);
-    if (Cesium.defined(picked) && picked.id) {
-        var entityId = picked.id.id !== undefined ? picked.id.id : picked.id;
 
-        // Satellite click -> footprint toggle + camera move
-        if (_satRecCache[entityId]) {
-            _toggleSatFootprint(entityId);
-            if (_activeFootprintSatId === entityId) {
-                var pos = _getSatRealTimePosition(entityId);
-                if (pos) {
-                    var horizonAngle = Math.acos(6371 / (6371 + pos.altKm));
-                    var footprintRadiusKm = 6371 * horizonAngle;
-                    var viewAlt = Math.max(footprintRadiusKm * 4 * 1000, 8000000);
-                    smoothFlyTo({
-                        destination: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, viewAlt)
-                    });
+    if (Cesium.defined(picked)) {
+        // Case 1: Entity (위성, 히스토리 모드 선박)
+        if (picked.id) {
+            var entityId = picked.id.id !== undefined ? picked.id.id : picked.id;
+
+            // Satellite click
+            if (_satRecCache[entityId]) {
+                _toggleSatFootprint(entityId);
+                if (_activeFootprintSatId === entityId) {
+                    var pos = _getSatRealTimePosition(entityId);
+                    if (pos) {
+                        var horizonAngle = Math.acos(6371 / (6371 + pos.altKm));
+                        var footprintRadiusKm = 6371 * horizonAngle;
+                        var viewAlt = Math.max(footprintRadiusKm * 4 * 1000, 8000000);
+                        smoothFlyTo({
+                            destination: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, viewAlt)
+                        });
+                    }
                 }
+                return;
+            }
+
+            // 히스토리 모드 Entity 선박
+            showShipInfo(picked.id);
+            if (shipDataMap[entityId]) {
+                selectedProximityMmsi = entityId;
+                collisionTargetMmsi = null;
+                proximityMissCount = 0;
+                updateProximity();
+            } else {
+                clearProximity();
             }
             return;
         }
 
-        showShipInfo(picked.id);
-        if (shipDataMap[entityId]) {
-            selectedProximityMmsi = entityId;
+        // Case 2: Primitive billboard (라이브 모드 선박)
+        if (picked.primitive && picked.primitive._mmsi) {
+            var mmsi = picked.primitive._mmsi;
+            showShipInfo(mmsi);
+            selectedProximityMmsi = mmsi;
             collisionTargetMmsi = null;
             proximityMissCount = 0;
             updateProximity();
-        } else {
-            clearProximity();
+            return;
         }
-    } else {
-        document.getElementById('shipInfoPanel').classList.remove('visible');
-        clearProximity();
-        if (_activeFootprintSatId) {
-            var old = satDataSource.entities.getById('footprint-' + _activeFootprintSatId);
-            if (old) satDataSource.entities.remove(old);
-            _activeFootprintSatId = null;
-        }
+    }
+
+    // 빈 공간 클릭 — 패널 닫기
+    document.getElementById('shipInfoPanel').classList.remove('visible');
+    clearProximity();
+    if (_activeFootprintSatId) {
+        var old = satDataSource.entities.getById('footprint-' + _activeFootprintSatId);
+        if (old) satDataSource.entities.remove(old);
+        _activeFootprintSatId = null;
     }
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
