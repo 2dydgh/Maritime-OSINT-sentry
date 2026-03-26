@@ -455,6 +455,19 @@ async function updateProximity() {
     _proximityRunning = true;
     try {
         var mmsi = selectedProximityMmsi;
+
+        // 1단계: 후보를 즉시 렌더링 (land-check 없이)
+        var candidates = findNearbyVesselsCandidates(mmsi, PROXIMITY_RADIUS_NM, PROXIMITY_MAX_COUNT);
+        if (!candidates.selected || candidates.results.length === 0) {
+            renderProximityLines(mmsi, []);
+            renderNearbyPanel([]);
+            return;
+        }
+        enrichNearbyWithMlRisk(mmsi, candidates.results);
+        renderProximityLines(mmsi, candidates.results);
+        renderNearbyPanel(candidates.results);
+
+        // 2단계: land-check 비동기 후처리 (육지 차단 쌍 제거)
         var nearby = await findNearbyVessels(mmsi, PROXIMITY_RADIUS_NM, PROXIMITY_MAX_COUNT);
         if (mmsi !== selectedProximityMmsi) return;
         enrichNearbyWithMlRisk(mmsi, nearby);
