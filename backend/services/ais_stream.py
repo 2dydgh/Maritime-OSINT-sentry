@@ -39,9 +39,11 @@ def classify_vessel(ais_type: int, mmsi: int) -> str:
     if mmsi_str.startswith("3380") or mmsi_str.startswith("3381"):
         return "military_vessel"  # US Navy
     if ais_type in (30, 31, 32, 33, 34):
-        return "other"         # Fishing, towing, dredging, diving, etc.
-    if ais_type in (50, 51, 52, 53, 54, 55, 56, 57, 58, 59):
-        return "other"         # Pilot, SAR, tug, port tender, etc.
+        return "fishing"       # Fishing, towing, dredging, diving, etc.
+    if ais_type in (52,):
+        return "tug"           # Tug
+    if ais_type in (50, 51, 53, 54, 55, 56, 57, 58, 59):
+        return "other"         # Pilot, SAR, port tender, etc.
     return "unknown"            # Not yet classified — will update when ShipStaticData arrives
 
 
@@ -283,9 +285,6 @@ def get_ais_vessels() -> list[dict]:
         result = []
         for mmsi, v in _vessels.items():
             v_type = v.get("type", "unknown")
-            # Skip 'other' vessels (fishing, tug, pilot, etc.) to reduce load
-            if v_type == "other":
-                continue
             # Skip vessels without valid position
             if not v.get("lat") or not v.get("lng"):
                 continue

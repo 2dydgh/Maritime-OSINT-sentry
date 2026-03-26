@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 NM_TO_KM = 1.852
 EARTH_RADIUS_KM = 6371.0
 PROXIMITY_NM = 5.0           # 1단계 근접 필터 반경
-MIN_SOG_KTS = 0.5            # 2단계 정지 선박 제외 기준
+MIN_SOG_KTS = 1.0            # 2단계 정지/저속 선박 제외 기준 (GPS 오차 + 조류 영향 감안)
 DCPA_DANGER_NM = 0.5         # 위험: DCPA < 0.5nm
 DCPA_WARNING_NM = 1.0        # 경고: DCPA < 1.0nm
 TCPA_MAX_MIN = 20            # TCPA 20분 이내만 관심
@@ -132,11 +132,40 @@ def _classify_encounter(cog1, cog2):
     return "crossing"
 
 
+def _cog_lines_converge(x1, y1, vx1, vy1, x2, y2, vx2, vy2):
+    """두 COG 투영선이 앞쪽에서 교차하거나 수렴하는지 판별.
+
+    두 선박의 속도 벡터를 직선으로 투영했을 때:
+    - 교차점이 양쪽 모두 전방(t > 0)에 있으면 True
+    - 방향이 거의 평행(overtaking)이면 최소 거리가 줄어드는지로 판별
+
+    Returns:
+        True면 COG 경로가 수렴 → 충돌 분석 필요
+    """
+    # 투영선: P1 + t1*V1 = P2 + t2*V2 를 풀면
+    # (vx1)*t1 - (vx2)*t2 = x2 - x1
+    # (vy1)*t1 - (vy2)*t2 = y2 - y1
+    det = vx1 * (-vy2) - vy1 * (-vx2)  # = -(vx1*vy2 - vy1*vx2)
+    dx = x2 - x1
+    dy = y2 - y1
+
+    if abs(det) < 1e-9:
+        # 거의 평행 → overtaking 상황, 거리가 줄어들면 수렴
+        return True  # 평행은 _classify_encounter에서 overtaking으로 처리
+
+    t1 = (dx * (-vy2) - dy * (-vx2)) / det
+    t2 = (vx1 * dy - vy1 * dx) / det
+
+    # 양쪽 모두 전방(t > 0)에 교차점이 있어야 수렴
+    return t1 > 0 and t2 > 0
+
+
 def _is_collision_candidate(lat1, lon1, sog1, cog1, lat2, lon2, sog2, cog2):
-    """충돌 후보인지 판별: 접근 중 + 양 선박이 실제 위험 기하를 형성해야 함.
+    """충돌 후보인지 판별: 접근 중 + COG 투영선 수렴 + 위험 기하 형성.
 
     1) range rate < 0 (거리가 줄어들고 있음)
-    2) 베어링 체크 — head-on/crossing은 양쪽 모두 상대를 향해야 하고,
+    2) COG 투영선 교차/수렴 체크 (전방에서 만나는지)
+    3) 베어링 체크 — head-on/crossing은 양쪽 모두 상대를 향해야 하고,
        overtaking은 한 척만 향하면 됨 (뒤에서 따라잡는 선박)
     """
     avg_lat_rad = _to_radians((lat1 + lat2) / 2.0)
@@ -158,7 +187,15 @@ def _is_collision_candidate(lat1, lon1, sog1, cog1, lat2, lon2, sog2, cog2):
     if range_rate >= 0:
         return False  # 멀어지는 중
 
-    # 2) 베어링 체크 — 조우 유형에 따라 다른 기준 적용
+    # 2) COG 투영선 교차/수렴 체크
+    x1_nm = 0.0
+    y1_nm = 0.0
+    x2_nm = rx
+    y2_nm = ry
+    if not _cog_lines_converge(x1_nm, y1_nm, vx1, vy1, x2_nm, y2_nm, vx2, vy2):
+        return False  # 투영선이 전방에서 만나지 않음
+
+    # 3) 베어링 체크 — 조우 유형에 따라 다른 기준 적용
     bearing_a_to_b = _bearing_between(lat1, lon1, lat2, lon2)
     bearing_b_to_a = (bearing_a_to_b + 180) % 360
     a_faces_b = _angle_diff(cog1, bearing_a_to_b) <= 90
