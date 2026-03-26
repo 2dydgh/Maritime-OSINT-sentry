@@ -390,10 +390,8 @@ function initWebSocket() {
 
     ws.onopen = function() {
         console.log("WebSocket connected!");
-        var loadingEl = document.getElementById('loading');
-        if (loadingEl && loadingEl.innerHTML.includes('\uCD08\uAE30\uD654')) {
-            loadingEl.style.display = 'none';
-        }
+        var loadingText = document.getElementById('loading-text');
+        if (loadingText) loadingText.textContent = 'AIS 데이터 수신 대기...';
     };
 
     ws.onmessage = function(event) {
@@ -402,6 +400,12 @@ function initWebSocket() {
         try {
             var data = JSON.parse(event.data);
             if (data.type === "ships_update") {
+                // 첫 데이터 수신 시 로딩 숨김
+                var loadingEl = document.getElementById('loading');
+                if (loadingEl && loadingEl.style.display !== 'none') {
+                    loadingEl.style.display = 'none';
+                }
+
                 _lastShipsData = data.ships || [];
                 updateShipsLayer(_lastShipsData);
 
@@ -438,11 +442,17 @@ function initWebSocket() {
     };
 
     ws.onclose = function() {
-        console.log("WebSocket closed. Reconnecting in 5 seconds...");
+        console.log("WebSocket closed. Reconnecting in 2 seconds...");
+        var loadingEl = document.getElementById('loading');
+        if (loadingEl) {
+            loadingEl.style.display = '';
+            var loadingText = document.getElementById('loading-text');
+            if (loadingText) loadingText.textContent = '재연결 중...';
+        }
         if (currentMapMode === '2d' && leafletMap) {
             Object.values(leafletShipMarkers).forEach(function(m) { m.setStyle({ opacity: 0.3, fillOpacity: 0.3 }); });
         }
-        setTimeout(initWebSocket, 5000);
+        setTimeout(initWebSocket, 2000);
     };
 }
 window.initWebSocket = initWebSocket;

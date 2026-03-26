@@ -22,7 +22,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Application Styles -->
-    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/main.css?v=3">
     <!-- ECharts for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 </head>
@@ -67,13 +67,16 @@
                     </div>
                 </div>
             </div>
-            <div class="stat-item">
-                <span class="stat-value" id="stat-events">0</span>
-                <span class="stat-label">활성 이벤트</span>
+            <div class="stat-item" id="statCollisionWrap">
+                <span class="stat-value" id="stat-collision-risks" style="display:flex;align-items:center;gap:4px;">
+                    <span class="header-risk-dot danger">0</span>
+                    <span class="header-risk-dot warning">0</span>
+                </span>
+                <span class="stat-label">충돌 분석</span>
             </div>
-            <div class="stat-item">
-                <span class="stat-value" id="stat-assets">7</span>
-                <span class="stat-label">추적 자산</span>
+            <div class="stat-item" id="statLatencyWrap">
+                <span class="stat-value" id="stat-latency">--</span>
+                <span class="stat-label">데이터 지연</span>
             </div>
             <!-- Vision Mode Filter Toggle -->
             <div class="vision-mode-group">
@@ -436,13 +439,13 @@
 
     <!-- Centered Loader -->
     <div id="loading" class="glass-panel">
-        <i class="fa-solid fa-circle-notch fa-spin"></i> 시스템 초기화중
+        <i class="fa-solid fa-circle-notch fa-spin"></i> <span id="loading-text">서버 연결 중...</span>
     </div>
 
     <!-- Application Scripts (load order matters) -->
     <script src="js/app.js"></script>
     <script src="js/map-cesium.js"></script>
-    <script src="js/map-leaflet.js"></script>
+    <script src="js/map-leaflet.js?v=2"></script>
     <script src="js/satellite.js"></script>
     <script src="js/proximity.js"></script>
     <script src="js/collision.js"></script>
