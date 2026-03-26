@@ -252,20 +252,23 @@ function updateShipsLayer(ships) {
 
             typeRenderedCount++;
             totalRendered++;
-            seenMmsis.add(ship.mmsi);
+            seenMmsis.add(String(ship.mmsi));
 
             var position = Cesium.Cartesian3.fromDegrees(ship.lng, ship.lat);
             var heading = Cesium.Math.toRadians(-(ship.heading || 0));
 
-            var existingBb = shipBillboardMap[ship.mmsi];
+            var existingBb = shipBillboardMap[String(ship.mmsi)];
             if (existingBb) {
                 // 기존 billboard 업데이트 — 직접 세팅, Property 평가 없음
                 existingBb.position = position;
                 existingBb.rotation = heading;
                 // 라벨도 업데이트
-                var existingLabel = shipLabelMap[ship.mmsi];
+                var existingLabel = shipLabelMap[String(ship.mmsi)];
                 if (existingLabel) {
                     existingLabel.position = position;
+                    if (ship.name && existingLabel.text !== ship.name) {
+                        existingLabel.text = ship.name;
+                    }
                 }
             } else {
                 // 새 billboard 추가
@@ -281,7 +284,7 @@ function updateShipsLayer(ships) {
                 });
                 bb._mmsi = ship.mmsi;
                 bb._shipType = type;
-                shipBillboardMap[ship.mmsi] = bb;
+                shipBillboardMap[String(ship.mmsi)] = bb;
 
                 // 새 라벨 추가
                 var lbl = labels.add({
@@ -298,7 +301,7 @@ function updateShipsLayer(ships) {
                     disableDepthTestDistance: Number.POSITIVE_INFINITY
                 });
                 lbl._mmsi = ship.mmsi;
-                shipLabelMap[ship.mmsi] = lbl;
+                shipLabelMap[String(ship.mmsi)] = lbl;
             }
         });
 
@@ -347,9 +350,7 @@ function updateShipsLayer(ships) {
                 });
 
                 marker.on('click', function() {
-                    var ds = shipDataSources[type];
-                    var entity = ds ? ds.entities.getById(ship.mmsi) : null;
-                    if (entity) showShipInfo(entity);
+                    showShipInfo(ship.mmsi);
                     selectedProximityMmsi = ship.mmsi;
                     updateProximity();
                 });
