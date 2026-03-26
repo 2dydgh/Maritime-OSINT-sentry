@@ -426,6 +426,19 @@ satDataSource.show = false;
 proximityDataSource = new Cesium.CustomDataSource('Proximity');
 viewer.dataSources.add(proximityDataSource);
 
+// Proximity Primitive Collections
+proximityLines = viewer.scene.primitives.add(new Cesium.PolylineCollection());
+proximityLabels = viewer.scene.primitives.add(new Cesium.LabelCollection());
+proximityCogLines = viewer.scene.primitives.add(new Cesium.PolylineCollection());
+proximityCpaPoints = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
+proximityCpaLabels = viewer.scene.primitives.add(new Cesium.LabelCollection());
+
+// Ship Primitive Collections (라이브 3D용)
+SHIP_TYPES.forEach(function(type) {
+    shipBillboards[type] = viewer.scene.primitives.add(new Cesium.BillboardCollection());
+    shipLabels[type] = viewer.scene.primitives.add(new Cesium.LabelCollection());
+});
+
 SHIP_TYPES.forEach(async function(type) {
     var ds = new Cesium.CustomDataSource('Ships - ' + type);
     shipDataSources[type] = ds;
