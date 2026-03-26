@@ -446,6 +446,8 @@ SHIP_TYPES.forEach(function(type) {
     shipBillboards[type] = viewer.scene.primitives.add(new Cesium.BillboardCollection());
     shipLabels[type] = viewer.scene.primitives.add(new Cesium.LabelCollection());
 });
+// COG 방향선 Collection
+shipCogLines = viewer.scene.primitives.add(new Cesium.PolylineCollection());
 
 SHIP_TYPES.forEach(async function(type) {
     var ds = new Cesium.CustomDataSource('Ships - ' + type);

@@ -12,6 +12,8 @@ var shipBillboards = {};      // { type: BillboardCollection }
 var shipLabels = {};           // { type: LabelCollection }
 var shipBillboardMap = {};     // { mmsi: Billboard }
 var shipLabelMap = {};         // { mmsi: Label }
+var shipCogLines = null;       // PolylineCollection (COG 방향선)
+var shipCogLineMap = {};       // { mmsi: Polyline }
 var SHIP_TYPES = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
 var SHIP_COLORS = {
     cargo: '#10b981',

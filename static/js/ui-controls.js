@@ -282,6 +282,7 @@ async function loadHistoryWindow(centerDate, opts) {
         });
         shipBillboardMap = {};
         shipLabelMap = {};
+        if (shipCogLines) { shipCogLines.removeAll(); shipCogLineMap = {}; }
         newEntities.forEach(function(item) { item.ds.entities.add(item.def); });
 
         currentWindowCenter = centerDate;
@@ -382,6 +383,7 @@ async function setTimeMode(mode) {
         });
         shipBillboardMap = {};
         shipLabelMap = {};
+        if (shipCogLines) { shipCogLines.removeAll(); shipCogLineMap = {}; }
 
         currentWindowCenter = null;
         currentWindowStart = null;
@@ -417,6 +419,7 @@ async function setTimeMode(mode) {
         });
         shipBillboardMap = {};
         shipLabelMap = {};
+        if (shipCogLines) { shipCogLines.removeAll(); shipCogLineMap = {}; }
 
         var rangeLoaded = await loadHistoryRange();
 
@@ -682,13 +685,66 @@ document.body.insertAdjacentHTML('beforeend', '\
             <span class="title">\
                 <i class="fa-solid fa-satellite-dish"></i>&nbsp; SENTINEL-2 IMAGERY\
             </span>\
-            <button class="close-btn" onclick="document.getElementById(\'sentinelCard\').classList.remove(\'visible\')">&#x2715;</button>\
+            <button class="close-btn" onclick="document.getElementById(\'sentinelCard\').classList.remove(\'visible\');_removeSentinelMarker();">&#x2715;</button>\
         </div>\
         <div id="sentinelCardBody" class="drag-panel-body"></div>\
     </div>\
 ');
 
 var _sentinelLat = null, _sentinelLng = null;
+var _sentinelMarkerEntity = null;
+
+function _addSentinelMarker(lat, lng) {
+    _removeSentinelMarker();
+    _sentinelMarkerEntity = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(lng, lat),
+        billboard: {
+            image: (function() {
+                var c = document.createElement('canvas');
+                c.width = 32; c.height = 40;
+                var ctx = c.getContext('2d');
+                // Pin shape
+                ctx.beginPath();
+                ctx.arc(16, 14, 10, Math.PI, 0, false);
+                ctx.quadraticCurveTo(26, 28, 16, 38);
+                ctx.quadraticCurveTo(6, 28, 6, 14);
+                ctx.fillStyle = '#6366f1';
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                // Satellite icon (small circle)
+                ctx.beginPath();
+                ctx.arc(16, 14, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                return c.toDataURL();
+            })(),
+            width: 28,
+            height: 35,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            pixelOffset: new Cesium.Cartesian2(0, 0)
+        },
+        label: {
+            text: 'Sentinel-2',
+            font: '10px JetBrains Mono, monospace',
+            fillColor: Cesium.Color.fromCssColorString('#a5b4fc'),
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -42),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+        }
+    });
+}
+
+function _removeSentinelMarker() {
+    if (_sentinelMarkerEntity) {
+        viewer.entities.remove(_sentinelMarkerEntity);
+        _sentinelMarkerEntity = null;
+    }
+}
 
 viewer.cesiumWidget.canvas.addEventListener('contextmenu', function(e) {
     e.preventDefault();
@@ -732,6 +788,8 @@ document.getElementById('sentinelMenuBtn').addEventListener('click', async funct
             body.innerHTML = '<div style="text-align:center;color:#ef4444;font-size:0.75rem;padding:30px;">' + (data.message || data.error || 'No result') + '</div>';
             return;
         }
+
+        _addSentinelMarker(_sentinelLat, _sentinelLng);
 
         var dt = data.datetime ? new Date(data.datetime).toLocaleDateString('ko-KR') : '-';
         var cc = data.cloud_cover !== null ? data.cloud_cover + '%' : '-';

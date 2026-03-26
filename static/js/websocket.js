@@ -78,7 +78,14 @@ function getShipIcon(colorHex, shipType) {
                 <line x1=\'16\' y1=\'4\' x2=\'16\' y2=\'9\' stroke=\'white\' stroke-width=\'0.7\' opacity=\'0.5\'/>';
     }
 
-    var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 32 38\'>' + glow + hull + '</svg>';
+    // 페이딩 방향 꼬리 (선미 뒤쪽 점들)
+    var trail = '<circle cx=\'16\' cy=\'43\' r=\'3\' fill=\'' + c + '\' opacity=\'0.6\'/>\
+        <circle cx=\'16\' cy=\'52\' r=\'2.6\' fill=\'' + c + '\' opacity=\'0.45\'/>\
+        <circle cx=\'16\' cy=\'60\' r=\'2.2\' fill=\'' + c + '\' opacity=\'0.32\'/>\
+        <circle cx=\'16\' cy=\'67\' r=\'1.8\' fill=\'' + c + '\' opacity=\'0.2\'/>\
+        <circle cx=\'16\' cy=\'73\' r=\'1.4\' fill=\'' + c + '\' opacity=\'0.1\'/>';
+
+    var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 32 78\'>' + glow + hull + trail + '</svg>';
     var url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
     _shipIconCache[key] = url;
     return url;
@@ -216,7 +223,7 @@ function updateShipsLayer(ships) {
                             width: shipSize.width,
                             height: shipSize.height,
                             scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
-                            disableDepthTestDistance: Number.POSITIVE_INFINITY
+                            disableDepthTestDistance: 5e6
                         }
                     });
                 } else {
@@ -256,12 +263,14 @@ function updateShipsLayer(ships) {
 
             var position = Cesium.Cartesian3.fromDegrees(ship.lng, ship.lat);
             var heading = Cesium.Math.toRadians(-(ship.heading || 0));
+            var surfaceNormal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(position);
 
             var existingBb = shipBillboardMap[String(ship.mmsi)];
             if (existingBb) {
                 // 기존 billboard 업데이트 — 직접 세팅, Property 평가 없음
                 existingBb.position = position;
                 existingBb.rotation = heading;
+                existingBb.alignedAxis = surfaceNormal;
                 // 라벨도 업데이트
                 var existingLabel = shipLabelMap[String(ship.mmsi)];
                 if (existingLabel) {
@@ -279,8 +288,9 @@ function updateShipsLayer(ships) {
                     width: shipSize.width,
                     height: shipSize.height,
                     rotation: heading,
+                    alignedAxis: surfaceNormal,
                     scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
-                    disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    disableDepthTestDistance: 5e6
                 });
                 bb._mmsi = ship.mmsi;
                 bb._shipType = type;
@@ -298,7 +308,7 @@ function updateShipsLayer(ships) {
                     pixelOffset: new Cesium.Cartesian2(0, -18),
                     scaleByDistance: new Cesium.NearFarScalar(5e5, 1.0, 5e6, 0.4),
                     distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3e6),
-                    disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    disableDepthTestDistance: 5e6
                 });
                 lbl._mmsi = ship.mmsi;
                 shipLabelMap[String(ship.mmsi)] = lbl;
@@ -326,6 +336,7 @@ function updateShipsLayer(ships) {
 
     // 2D mode Leaflet marker update
     if (currentMapMode === '2d' && leafletMap) {
+        var newMarkersByType = {};
         ships.forEach(function(ship) {
             var type = ship.type || 'other';
             var entry = leafletShipMarkers[ship.mmsi];
@@ -362,8 +373,23 @@ function updateShipsLayer(ships) {
                         leafletShipLayerGroups[type].addTo(leafletMap);
                     }
                 }
-                leafletShipLayerGroups[type].addLayer(marker);
+                if (!newMarkersByType[type]) newMarkersByType[type] = [];
+                newMarkersByType[type].push(marker);
                 leafletShipMarkers[ship.mmsi] = { marker: marker, type: type };
+            }
+        });
+
+        // 새 마커를 타입별로 배치 추가 — 맵에서 분리 후 추가하고 다시 붙임 (Canvas 재렌더 1회)
+        Object.keys(newMarkersByType).forEach(function(type) {
+            var group = leafletShipLayerGroups[type];
+            if (group) {
+                var wasOnMap = leafletMap.hasLayer(group);
+                if (wasOnMap) leafletMap.removeLayer(group);
+                var layers = newMarkersByType[type];
+                for (var i = 0; i < layers.length; i++) {
+                    group.addLayer(layers[i]);
+                }
+                if (wasOnMap) group.addTo(leafletMap);
             }
         });
 
@@ -400,14 +426,29 @@ function initWebSocket() {
         try {
             var data = JSON.parse(event.data);
             if (data.type === "ships_update") {
-                // 첫 데이터 수신 시 로딩 숨김
                 var loadingEl = document.getElementById('loading');
-                if (loadingEl && loadingEl.style.display !== 'none') {
-                    loadingEl.style.display = 'none';
-                }
+                var loadingTextEl = document.getElementById('loading-text');
+                var isFirstLoad2d = Object.keys(leafletShipMarkers).length === 0 && currentMapMode === '2d';
 
                 _lastShipsData = data.ships || [];
-                updateShipsLayer(_lastShipsData);
+
+                if (isFirstLoad2d && loadingEl && loadingTextEl) {
+                    // 2D 첫 렌더링: 로딩 표시 → 화면 갱신 → 렌더링 → 로딩 숨김
+                    loadingTextEl.textContent = '선박 데이터 렌더링 중...';
+                    loadingEl.style.display = 'flex';
+                    requestAnimationFrame(function() {
+                        setTimeout(function() {
+                            updateShipsLayer(_lastShipsData);
+                            if (loadingEl) loadingEl.style.display = 'none';
+                        }, 0);
+                    });
+                } else {
+                    // 일반 업데이트
+                    if (loadingEl && loadingEl.style.display !== 'none') {
+                        loadingEl.style.display = 'none';
+                    }
+                    updateShipsLayer(_lastShipsData);
+                }
 
                 // Update ship type distribution chart
                 if (typeof updateShipTypeChart === 'function') updateShipTypeChart(data.ships || []);

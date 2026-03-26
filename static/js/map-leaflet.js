@@ -32,10 +32,9 @@ function initLeaflet() {
         preferCanvas: true
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         maxZoom: 19,
-        subdomains: 'abcd',
-        className: 'leaflet-tile-brighten'
+        className: 'leaflet-satellite-dark'
     }).addTo(leafletMap);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
@@ -70,9 +69,21 @@ function setMapMode(mode) {
         var firstTab = document.querySelector('.region-tab');
         if (firstTab) firstTab.classList.add('active');
 
-        if (typeof syncShipsToLeaflet === 'function') syncShipsToLeaflet();
-        if (typeof syncProximityToLeaflet === 'function') syncProximityToLeaflet();
-        if (typeof syncSatellitesToLeaflet === 'function') syncSatellitesToLeaflet();
+        // 로딩 표시 후 렌더링 — requestAnimationFrame으로 로딩 UI가 먼저 그려진 후 실행
+        var loadingEl = document.getElementById('loading');
+        var loadingTextEl = document.getElementById('loading-text');
+        if (loadingEl && loadingTextEl) {
+            loadingTextEl.textContent = '2D 지도 렌더링 중...';
+            loadingEl.style.display = 'flex';
+        }
+        requestAnimationFrame(function() {
+            setTimeout(function() {
+                if (typeof syncShipsToLeaflet === 'function') syncShipsToLeaflet();
+                if (typeof syncProximityToLeaflet === 'function') syncProximityToLeaflet();
+                if (typeof syncSatellitesToLeaflet === 'function') syncSatellitesToLeaflet();
+                if (loadingEl) loadingEl.style.display = 'none';
+            }, 0);
+        });
 
         if (timeMode === 'history' && !window._leaflet2dUpdateInterval) {
             window._leaflet2dUpdateInterval = setInterval(function() {
@@ -109,25 +120,26 @@ function syncShipsToLeaflet() {
     leafletShipLayerGroups = {};
     leafletShipMarkers = {};
 
+    // shipDataMap에서 직접 읽기 (Entity 의존 제거)
+    var shipsByType = {};
+    Object.keys(shipDataMap).forEach(function(mmsi) {
+        var ship = shipDataMap[mmsi];
+        if (ship.lat == null || ship.lng == null) return;
+        var type = ship.type || 'other';
+        if (!shipsByType[type]) shipsByType[type] = [];
+        shipsByType[type].push(ship);
+    });
+
     SHIP_TYPES.forEach(function(type) {
-        var ds = shipDataSources[type];
-        if (!ds) return;
+        var ships = shipsByType[type];
+        if (!ships || ships.length === 0) return;
 
         var lg = L.layerGroup();
         leafletShipLayerGroups[type] = lg;
 
-        ds.entities.values.forEach(function(entity) {
-            var mmsi = entity.id;
-            var shipData = shipDataMap[mmsi];
-            if (!shipData) return;
-
-            var lat = shipData.lat;
-            var lon = shipData.lng;
-            if (lat == null || lon == null) return;
-
-            var color = SHIP_COLORS[type] || '#6b7280';
-
-            var marker = L.circleMarker([lat, lon], {
+        var color = SHIP_COLORS[type] || '#6b7280';
+        ships.forEach(function(ship) {
+            var marker = L.circleMarker([ship.lat, ship.lng], {
                 radius: 4,
                 fillColor: color,
                 fillOpacity: 0.9,
@@ -136,20 +148,20 @@ function syncShipsToLeaflet() {
                 opacity: 0.7
             });
 
-            marker.bindTooltip(shipData.name || 'Unknown', {
+            marker.bindTooltip(ship.name || 'Unknown', {
                 className: 'ship-tooltip-2d',
                 direction: 'top',
                 offset: [0, -6]
             });
 
             marker.on('click', function() {
-                showShipInfo(entity);
-                selectedProximityMmsi = mmsi;
+                showShipInfo(ship.mmsi);
+                selectedProximityMmsi = ship.mmsi;
                 updateProximity();
             });
 
             lg.addLayer(marker);
-            leafletShipMarkers[mmsi] = { marker: marker, type: type };
+            leafletShipMarkers[ship.mmsi] = { marker: marker, type: type };
         });
 
         var checkbox = document.getElementById('filter-' + type);

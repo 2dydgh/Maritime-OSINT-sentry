@@ -269,23 +269,15 @@ async function fetchCollisionRisks() {
 window.fetchCollisionRisks = fetchCollisionRisks;
 
 function _updateHeaderCollisionStats() {
-    var distRisks = (collisionData.distance && collisionData.distance.risks) || [];
     var mlRisks = (collisionData.ml && collisionData.ml.risks) || [];
 
-    // Distance: danger + high = danger, warning + medium = warning
-    var distDanger = distRisks.filter(function(r) { return r.severity === 'danger' || r.severity === 'high'; }).length;
-    var distWarn = distRisks.filter(function(r) { return r.severity === 'warning' || r.severity === 'medium'; }).length;
-
-    // ML: level 3 = danger, level 2 = warning
+    // ML: level 3 = 위험, level 2 = 경고
     var mlDanger = mlRisks.filter(function(r) { return r.risk_level >= 3; }).length;
     var mlWarn = mlRisks.filter(function(r) { return r.risk_level === 2; }).length;
 
-    var totalDanger = distDanger + mlDanger;
-    var totalWarn = distWarn + mlWarn;
-
     var dots = document.querySelectorAll('#stat-collision-risks .header-risk-dot');
     if (dots.length >= 2) {
-        dots[0].textContent = totalDanger;
-        dots[1].textContent = totalWarn;
+        dots[0].textContent = mlDanger;
+        dots[1].textContent = mlWarn;
     }
 }
