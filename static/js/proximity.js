@@ -212,11 +212,20 @@ function enrichNearbyWithMlRisk(selectedMmsi, nearbyVessels) {
 window.enrichNearbyWithMlRisk = enrichNearbyWithMlRisk;
 
 function renderProximityLines(selectedMmsi, nearbyVessels) {
-    proximityDataSource.entities.removeAll();
+    // Primitive Collections 클리어
+    proximityLines.removeAll();
+    proximityLabels.removeAll();
+    proximityCogLines.removeAll();
+    proximityCpaPoints.removeAll();
+    proximityCpaLabels.removeAll();
+    proximityMap = {};
+
+    // 2D Leaflet 클리어 (기존 로직 유지)
     if (currentMapMode === '2d' && leafletMap) {
         Object.values(leafletCollisionLines).forEach(function(l) { leafletMap.removeLayer(l); });
         leafletCollisionLines = {};
     }
+
     var selected = shipDataMap[selectedMmsi];
     if (!selected || nearbyVessels.length === 0) return;
 
@@ -233,185 +242,105 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
         var isHighlight = isMlPair || isCollisionTarget || nv.mmsi === closestMmsi;
         var showCollisionViz = isMlPair || isCollisionTarget;
 
-        // Main proximity polyline
-        proximityDataSource.entities.add({
-            id: 'prox-line-' + nv.mmsi,
-            polyline: {
-                positions: new Cesium.CallbackProperty(function() {
-                    var sel = shipDataMap[selectedMmsi];
-                    var tgt = shipDataMap[nv.mmsi];
-                    if (!sel || !tgt) return [];
-                    return Cesium.Cartesian3.fromDegreesArrayHeights([
-                        sel.lng, sel.lat, 50, tgt.lng, tgt.lat, 50
-                    ]);
-                }, false),
-                width: isMlPair ? 4 : isCollisionTarget ? 4 : isHighlight ? 3 : 2,
-                material: isHighlight
-                    ? new Cesium.PolylineGlowMaterialProperty({
-                        color: new Cesium.CallbackProperty(function() {
-                            var speed = isMlPair ? 300 : isCollisionTarget ? 300 : 500;
-                            var alpha = 0.4 + 0.6 * Math.abs(Math.sin(Date.now() / speed));
-                            return color.cesium.withAlpha(alpha);
-                        }, false),
-                        glowPower: isMlPair ? 0.5 : isCollisionTarget ? 0.5 : 0.3
-                    })
-                    : new Cesium.ColorMaterialProperty(color.cesium.withAlpha(0.6)),
-                clampToGround: false
-            }
+        var sel = shipDataMap[selectedMmsi];
+        var tgt = shipDataMap[nv.mmsi];
+        if (!sel || !tgt) return;
+
+        // 근접 라인
+        var lineWidth = isMlPair ? 4 : isCollisionTarget ? 4 : isHighlight ? 3 : 2;
+        var lineColor = isHighlight ? color.cesium.withAlpha(0.8) : color.cesium.withAlpha(0.6);
+
+        var line = proximityLines.add({
+            positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+                sel.lng, sel.lat, 50, tgt.lng, tgt.lat, 50
+            ]),
+            width: lineWidth,
+            material: Cesium.Material.fromType('Color', { color: lineColor })
         });
 
-        // Label at midpoint
-        proximityDataSource.entities.add({
-            id: 'prox-label-' + nv.mmsi,
-            position: new Cesium.CallbackProperty(function() {
-                var sel = shipDataMap[selectedMmsi];
-                var tgt = shipDataMap[nv.mmsi];
-                if (!sel || !tgt) return Cesium.Cartesian3.fromDegrees(0, 0);
-                return Cesium.Cartesian3.fromDegrees(
-                    (sel.lng + tgt.lng) / 2,
-                    (sel.lat + tgt.lat) / 2
-                );
-            }, false),
-            label: {
-                text: new Cesium.CallbackProperty(function() {
-                    var sel = shipDataMap[selectedMmsi];
-                    var tgt = shipDataMap[nv.mmsi];
-                    if (!sel || !tgt) return '';
-                    var d = haversineNm(sel.lat, sel.lng, tgt.lat, tgt.lng);
-                    var prefix = isMlPair ? '\u26a0 ' : isCollisionTarget ? '\u26a0 ' : '';
-                    return prefix + d.toFixed(1) + ' nm';
-                }, false),
-                font: isCollisionTarget ? 'bold 14px JetBrains Mono' : '12px JetBrains Mono',
-                fillColor: color.cesium,
-                outlineColor: Cesium.Color.BLACK,
-                outlineWidth: 3,
-                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                pixelOffset: new Cesium.Cartesian2(0, -12),
-                disableDepthTestDistance: Number.POSITIVE_INFINITY
-            }
+        // 거리 라벨
+        var dist = haversineNm(sel.lat, sel.lng, tgt.lat, tgt.lng);
+        var prefix = (isMlPair || isCollisionTarget) ? '\u26a0 ' : '';
+        var label = proximityLabels.add({
+            position: Cesium.Cartesian3.fromDegrees(
+                (sel.lng + tgt.lng) / 2,
+                (sel.lat + tgt.lat) / 2
+            ),
+            text: prefix + dist.toFixed(1) + ' nm',
+            font: isCollisionTarget ? 'bold 14px JetBrains Mono' : '12px JetBrains Mono',
+            fillColor: color.cesium,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -12),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
         });
 
-        // Collision visualization (COG lines + CPA marker + risk zone)
+        var entry = { line: line, label: label };
+
+        // 충돌 시각화 (COG + CPA)
         if (showCollisionViz) {
-            var sel = shipDataMap[selectedMmsi];
-            var tgt = shipDataMap[nv.mmsi];
-            if (!sel || !tgt) return;
-
-            // COG projection line - selected ship
-            proximityDataSource.entities.add({
-                id: 'cog-sel-' + nv.mmsi,
-                polyline: {
-                    positions: new Cesium.CallbackProperty(function() {
-                        var s = shipDataMap[selectedMmsi];
-                        if (!s) return [];
-                        var end = projectPosition(s.lat, s.lng, s.cog || 0, Math.max((s.sog || 0) / 60 * 10, 0.5));
-                        return Cesium.Cartesian3.fromDegreesArrayHeights([s.lng, s.lat, 50, end.lng, end.lat, 50]);
-                    }, false),
-                    width: 2,
-                    material: new Cesium.PolylineDashMaterialProperty({
-                        color: color.cesium.withAlpha(0.7),
-                        dashLength: 12
-                    }),
-                    clampToGround: false
-                }
+            // COG 프로젝션 — 선택 선박
+            var selEnd = projectPosition(sel.lat, sel.lng, sel.cog || 0, Math.max((sel.sog || 0) / 60 * 10, 0.5));
+            var cogSel = proximityCogLines.add({
+                positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+                    sel.lng, sel.lat, 50, selEnd.lng, selEnd.lat, 50
+                ]),
+                width: 2,
+                material: Cesium.Material.fromType('PolylineDash', {
+                    color: color.cesium.withAlpha(0.7),
+                    dashLength: 12.0
+                })
             });
 
-            // COG projection line - target ship
-            proximityDataSource.entities.add({
-                id: 'cog-tgt-' + nv.mmsi,
-                polyline: {
-                    positions: new Cesium.CallbackProperty(function() {
-                        var t = shipDataMap[nv.mmsi];
-                        if (!t) return [];
-                        var end = projectPosition(t.lat, t.lng, t.cog || 0, Math.max((t.sog || 0) / 60 * 10, 0.5));
-                        return Cesium.Cartesian3.fromDegreesArrayHeights([t.lng, t.lat, 50, end.lng, end.lat, 50]);
-                    }, false),
-                    width: 2,
-                    material: new Cesium.PolylineDashMaterialProperty({
-                        color: color.cesium.withAlpha(0.7),
-                        dashLength: 12
-                    }),
-                    clampToGround: false
-                }
+            // COG 프로젝션 — 대상 선박
+            var tgtEnd = projectPosition(tgt.lat, tgt.lng, tgt.cog || 0, Math.max((tgt.sog || 0) / 60 * 10, 0.5));
+            var cogTgt = proximityCogLines.add({
+                positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+                    tgt.lng, tgt.lat, 50, tgtEnd.lng, tgtEnd.lat, 50
+                ]),
+                width: 2,
+                material: Cesium.Material.fromType('PolylineDash', {
+                    color: color.cesium.withAlpha(0.7),
+                    dashLength: 12.0
+                })
             });
 
-            // CPA point marker + risk zone circle
+            entry.cogSel = cogSel;
+            entry.cogTgt = cogTgt;
+
+            // CPA 마커 + 라벨
             var cpa = computeCpa(sel, tgt);
             if (cpa.tcpaMin > 0 && cpa.tcpaMin < 60) {
-                proximityDataSource.entities.add({
-                    id: 'cpa-marker-' + nv.mmsi,
-                    position: new Cesium.CallbackProperty(function() {
-                        var s = shipDataMap[selectedMmsi];
-                        var t = shipDataMap[nv.mmsi];
-                        if (!s || !t) return Cesium.Cartesian3.fromDegrees(0, 0);
-                        var c = computeCpa(s, t);
-                        return Cesium.Cartesian3.fromDegrees(c.lng, c.lat);
-                    }, false),
-                    point: {
-                        pixelSize: 10,
-                        color: color.cesium.withAlpha(0.9),
-                        outlineColor: Cesium.Color.WHITE,
-                        outlineWidth: 2,
-                        disableDepthTestDistance: Number.POSITIVE_INFINITY
-                    },
-                    label: {
-                        text: new Cesium.CallbackProperty(function() {
-                            var s = shipDataMap[selectedMmsi];
-                            var t = shipDataMap[nv.mmsi];
-                            if (!s || !t) return '';
-                            var c = computeCpa(s, t);
-                            return 'CPA ' + c.dcpaNm.toFixed(2) + 'nm\n' + c.tcpaMin.toFixed(1) + 'min';
-                        }, false),
-                        font: 'bold 11px JetBrains Mono',
-                        fillColor: Cesium.Color.WHITE,
-                        outlineColor: Cesium.Color.BLACK,
-                        outlineWidth: 3,
-                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                        pixelOffset: new Cesium.Cartesian2(0, -20),
-                        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-                        showBackground: true,
-                        backgroundColor: color.cesium.withAlpha(0.7)
-                    }
+                var cpaPoint = proximityCpaPoints.add({
+                    position: Cesium.Cartesian3.fromDegrees(cpa.lng, cpa.lat),
+                    pixelSize: 10,
+                    color: color.cesium.withAlpha(0.9),
+                    outlineColor: Cesium.Color.WHITE,
+                    outlineWidth: 2,
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY
                 });
 
-                var riskRadiusM = Math.max(cpa.dcpaNm * 1852, 200);
-                proximityDataSource.entities.add({
-                    id: 'cpa-zone-' + nv.mmsi,
-                    position: new Cesium.CallbackProperty(function() {
-                        var s = shipDataMap[selectedMmsi];
-                        var t = shipDataMap[nv.mmsi];
-                        if (!s || !t) return Cesium.Cartesian3.fromDegrees(0, 0);
-                        var c = computeCpa(s, t);
-                        return Cesium.Cartesian3.fromDegrees(c.lng, c.lat);
-                    }, false),
-                    ellipse: {
-                        semiMajorAxis: new Cesium.CallbackProperty(function() {
-                            var s = shipDataMap[selectedMmsi];
-                            var t = shipDataMap[nv.mmsi];
-                            if (!s || !t) return 200;
-                            var c = computeCpa(s, t);
-                            return Math.max(c.dcpaNm * 1852, 200);
-                        }, false),
-                        semiMinorAxis: new Cesium.CallbackProperty(function() {
-                            var s = shipDataMap[selectedMmsi];
-                            var t = shipDataMap[nv.mmsi];
-                            if (!s || !t) return 200;
-                            var c = computeCpa(s, t);
-                            return Math.max(c.dcpaNm * 1852, 200);
-                        }, false),
-                        material: new Cesium.ColorMaterialProperty(
-                            new Cesium.CallbackProperty(function() {
-                                var pulse = 0.08 + 0.07 * Math.abs(Math.sin(Date.now() / 800));
-                                return color.cesium.withAlpha(pulse);
-                            }, false)
-                        ),
-                        outline: true,
-                        outlineColor: color.cesium.withAlpha(0.5),
-                        outlineWidth: 1
-                    }
+                var cpaLabel = proximityCpaLabels.add({
+                    position: Cesium.Cartesian3.fromDegrees(cpa.lng, cpa.lat),
+                    text: 'CPA ' + cpa.dcpaNm.toFixed(2) + 'nm\n' + cpa.tcpaMin.toFixed(1) + 'min',
+                    font: 'bold 11px JetBrains Mono',
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 3,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    pixelOffset: new Cesium.Cartesian2(0, -20),
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                    showBackground: true,
+                    backgroundColor: color.cesium.withAlpha(0.7)
                 });
+
+                entry.cpaPoint = cpaPoint;
+                entry.cpaLabel = cpaLabel;
             }
         }
+
+        proximityMap[nv.mmsi] = entry;
     });
 }
 window.renderProximityLines = renderProximityLines;
@@ -487,7 +416,18 @@ function clearProximity() {
     selectedProximityMmsi = null;
     collisionTargetMmsi = null;
     proximityMissCount = 0;
-    proximityDataSource.entities.removeAll();
+
+    // Primitive Collections 클리어
+    if (proximityLines) proximityLines.removeAll();
+    if (proximityLabels) proximityLabels.removeAll();
+    if (proximityCogLines) proximityCogLines.removeAll();
+    if (proximityCpaPoints) proximityCpaPoints.removeAll();
+    if (proximityCpaLabels) proximityCpaLabels.removeAll();
+    proximityMap = {};
+
+    // 기존 DataSource도 클리어 (히스토리 모드 호환)
+    if (proximityDataSource) proximityDataSource.entities.removeAll();
+
     if (currentMapMode === '2d' && leafletMap) {
         Object.values(leafletCollisionLines).forEach(function(l) { leafletMap.removeLayer(l); });
         leafletCollisionLines = {};
