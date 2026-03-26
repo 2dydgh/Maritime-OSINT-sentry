@@ -9,6 +9,9 @@
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
     <!-- satellite.js for real-time client-side satellite orbit propagation -->
     <script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+    <!-- Leaflet 2D Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <!-- Modern Fonts & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,6 +33,61 @@
             --accent-amber: #f59e0b;
             --text-main: #fafafa;
             --text-dim: #a1a1aa;
+        }
+
+        #app-layout {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            min-width: 1024px;
+        }
+
+        #mapArea {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: var(--bg-color);
+            min-height: 0;
+        }
+
+        .panel-expand-tab {
+            display: none;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            padding: 15px 8px;
+            cursor: pointer;
+            color: var(--accent);
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-align: center;
+            height: 100%;
+            align-items: center;
+            justify-content: center;
+        }
+        .panel-collapsed .panel-expand-tab {
+            display: flex;
+        }
+
+        #feedPanel.panel-collapsed > *:not(.panel-expand-tab),
+        #shipFilterPanel.panel-collapsed > *:not(.panel-expand-tab) {
+            display: none;
+        }
+
+        .cesium-viewer-timelineContainer {
+            position: absolute !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+        }
+        .cesium-viewer-bottom {
+            position: absolute !important;
+            bottom: 0 !important;
+        }
+        .cesium-widget-credits {
+            display: none !important;
         }
 
         html,
@@ -67,15 +125,18 @@
 
         /* Top Navigation Header */
         header {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            right: 20px;
-            height: 60px;
+            height: 50px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 0 25px;
+            border-radius: 0;
+            border: none;
+            border-bottom: 1px solid var(--panel-border);
+            flex-shrink: 0;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            z-index: 100;
         }
 
         .header-brand {
@@ -230,23 +291,51 @@
             text-transform: uppercase;
         }
 
-        /* Left Sidebar: OSINT Feed */
+        /* OSINT Feed — left overlay on map */
         #feedPanel {
             position: absolute;
-            top: 100px;
-            left: 20px;
-            width: 400px;
-            bottom: 180px;
+            left: 15px;
+            top: 15px;
+            bottom: 15px;
+            width: 240px;
             display: flex;
             flex-direction: column;
             padding: 0;
-            transition: all 0.3s ease;
+            border-radius: 10px;
+            border: 1px solid var(--panel-border);
             overflow: hidden;
+            z-index: 20;
+            background: rgba(24, 24, 27, 0.92);
+            backdrop-filter: blur(12px);
+            transition: width 0.25s ease;
         }
 
-        #feedPanel:has(#feedSection.collapsed):has(#collisionSection.collapsed) {
-            bottom: auto;
+        #feedPanel.panel-collapsed {
+            width: 40px;
         }
+
+        #feedPanel.panel-collapsed .feed-panel-header,
+        #feedPanel.panel-collapsed #feedSection {
+            display: none;
+        }
+
+        #feedPanel .feed-collapse-tab {
+            display: none;
+            width: 40px;
+            height: 100%;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--accent);
+            font-size: 0.85rem;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        #feedPanel.panel-collapsed .feed-collapse-tab {
+            display: flex;
+        }
+
 
         .panel-section {
             display: flex;
@@ -269,19 +358,9 @@
             flex: 0 0 auto;
         }
 
-        #collisionSection {
-            flex: 1;
-            overflow: hidden;
-            min-height: 0;
-        }
-
-        #collisionSection.collapsed .collision-tabs,
-        #collisionSection.collapsed .collision-list {
-            display: none;
-        }
-
-        #collisionSection.collapsed {
-            flex: 0 0 auto;
+        #collisionSection .collision-tabs {
+            display: flex;
+            gap: 4px;
         }
 
         .section-divider {
@@ -336,10 +415,26 @@
         .feed-list {
             flex: 1;
             min-height: 0;
-            overflow-y: auto;
-            overflow-x: hidden;
+            overflow: hidden;
             padding-right: 5px;
         }
+
+        /* Feed: continuous vertical ticker */
+        .feed-ticker-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            animation: feedTicker var(--feed-ticker-duration, 40s) linear infinite;
+        }
+        .feed-ticker-wrap:hover {
+            animation-play-state: paused;
+        }
+        @keyframes feedTicker {
+            from { transform: translateY(0); }
+            to   { transform: translateY(-50%); }
+        }
+
+        /* Collision: horizontal scrollable with auto-advance */
 
         /* Custom Scrollbar */
         .feed-list::-webkit-scrollbar {
@@ -397,9 +492,10 @@
 
         /* Loading Overlay Overlayed */
         #loading {
-            position: absolute;
+            position: fixed;
             top: 50%;
             left: 50%;
+            z-index: 9999;
             transform: translate(-50%, -50%);
             padding: 20px 40px;
             color: var(--accent);
@@ -441,20 +537,28 @@
             display: none !important;
         }
 
-        /* Hide credits for cleaner UI */
-        /* Ship Filter Panel */
+        /* Ship Filter Panel — floating overlay on map */
         #shipFilterPanel {
             position: absolute;
-            top: 100px;
-            right: 20px;
-            width: 240px;
+            right: 15px;
+            top: 15px;
+            width: 260px;
             padding: 0;
-            z-index: 10;
-            max-height: calc(100vh - 200px);
+            z-index: 50;
+            max-height: 70vh;
             overflow-y: auto;
             overflow-x: hidden;
-            background: rgba(24, 24, 27, 0.9);
-            border: 1px solid rgba(63, 63, 70, 0.3);
+            background: rgba(24, 24, 27, 0.92);
+            border-radius: 10px;
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(12px);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        #shipFilterPanel.panel-hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(20px);
         }
 
         #shipFilterPanel::-webkit-scrollbar {
@@ -471,7 +575,7 @@
         }
 
         /* Panel master header */
-        #shipFilterPanel > .panel-master-header {
+        #shipFilterPanel>.panel-master-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -479,7 +583,8 @@
             border-bottom: 1px solid rgba(63, 63, 70, 0.2);
             background: rgba(20, 184, 166, 0.03);
         }
-        #shipFilterPanel > .panel-master-header h3 {
+
+        #shipFilterPanel>.panel-master-header h3 {
             margin: 0;
             font-size: 0.78rem;
             font-weight: 600;
@@ -500,7 +605,7 @@
         }
 
         /* Layer group — a distinct section within the panel */
-        .layer-group + .layer-group {
+        .layer-group+.layer-group {
             border-top: 1px solid rgba(63, 63, 70, 0.35);
         }
 
@@ -513,9 +618,11 @@
             user-select: none;
             transition: background 0.15s;
         }
+
         .layer-group-header:hover {
             background: rgba(255, 255, 255, 0.03);
         }
+
         .layer-group-header .lg-icon {
             width: 26px;
             height: 26px;
@@ -526,6 +633,7 @@
             font-size: 0.72rem;
             flex-shrink: 0;
         }
+
         .layer-group-header .lg-title {
             font-size: 0.78rem;
             font-weight: 600;
@@ -533,6 +641,7 @@
             color: var(--text-main);
             flex: 1;
         }
+
         .layer-group-header .lg-badge {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.65rem;
@@ -541,11 +650,13 @@
             background: rgba(255, 255, 255, 0.06);
             color: var(--text-dim);
         }
+
         .layer-group-header .lg-chevron {
             font-size: 0.6rem;
             color: var(--text-dim);
             transition: transform 0.2s;
         }
+
         .layer-group.collapsed .lg-chevron {
             transform: rotate(180deg);
         }
@@ -553,6 +664,7 @@
         .layer-group-body {
             padding: 2px 14px 10px 14px;
         }
+
         .layer-group.collapsed .layer-group-body {
             display: none;
         }
@@ -642,10 +754,10 @@
 
         /* Ship Info Panel positioning */
         #shipInfoPanel {
-            top: 100px;
-            right: 305px;
+            top: 80px;
+            right: 20px;
             width: 320px;
-            max-height: 620px;
+            max-height: calc(100vh - 120px);
             z-index: 9997;
         }
 
@@ -720,17 +832,23 @@
         }
 
         /* Collision Analysis Section */
-        #collisionSection h3 {
-            margin: 0 0 8px 0;
-            font-size: 0.82rem;
-            color: var(--text-main);
+        #collisionSection {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 0;
         }
 
-        #collisionSection.collapsed h3 {
-            margin-bottom: 0;
+        .collision-bottom-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 8px 16px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-main);
+            border-bottom: 1px solid rgba(63, 63, 70, 0.3);
+            flex-shrink: 0;
         }
 
         .collision-count-badge {
@@ -776,11 +894,12 @@
 
         .collision-list {
             overflow-y: auto;
-            flex: 1;
-            min-height: 0;
+            overflow-x: hidden;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
+            padding: 8px 16px;
+            scroll-behavior: smooth;
         }
 
         .collision-list::-webkit-scrollbar {
@@ -804,6 +923,8 @@
             padding: 8px 10px;
             cursor: pointer;
             transition: background 0.15s;
+            width: 100%;
+            flex-shrink: 0;
         }
 
         .collision-card:hover {
@@ -924,10 +1045,12 @@
         .ml-risk-summary {
             display: flex;
             gap: 6px;
-            padding: 6px 0 8px;
+            padding: 6px 16px 8px;
             margin: 0;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            flex-shrink: 0;
         }
+
         .risk-stat {
             flex: 1;
             display: flex;
@@ -940,20 +1063,24 @@
             border: 1.5px solid transparent;
             transition: border-color 0.15s, opacity 0.15s;
         }
+
         .risk-stat:hover {
             border-color: var(--stat-color);
             opacity: 0.9;
         }
+
         .risk-stat.active {
             border-color: var(--stat-color);
             box-shadow: 0 0 8px color-mix(in srgb, var(--stat-color) 30%, transparent);
         }
+
         .risk-stat-count {
             font-size: 1.1rem;
             font-weight: 700;
             color: var(--stat-color);
             font-family: 'Geist Mono', monospace;
         }
+
         .risk-stat-label {
             font-size: 0.6rem;
             color: var(--stat-color);
@@ -967,7 +1094,11 @@
             color: var(--text-dim);
             font-style: italic;
             font-size: 0.8rem;
-            padding: 20px 0;
+            padding: 20px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         /* Sentinel-2 Panel positioning */
@@ -981,10 +1112,10 @@
 
         /* Map Navigation Controls */
         #mapNavControls {
-            position: fixed;
-            bottom: 120px;
+            position: absolute;
+            bottom: 20px;
             right: 20px;
-            z-index: 9998;
+            z-index: 100;
             display: grid;
             grid-template-areas:
                 ".    up   ."
@@ -994,16 +1125,30 @@
             grid-template-rows: repeat(3, 44px);
             gap: 3px;
         }
-        #mapNavControls #navUp    { grid-area: up; }
-        #mapNavControls #navDown  { grid-area: down; }
-        #mapNavControls #navLeft  { grid-area: left; }
-        #mapNavControls #navRight { grid-area: right; }
+
+        #mapNavControls #navUp {
+            grid-area: up;
+        }
+
+        #mapNavControls #navDown {
+            grid-area: down;
+        }
+
+        #mapNavControls #navLeft {
+            grid-area: left;
+        }
+
+        #mapNavControls #navRight {
+            grid-area: right;
+        }
+
         #mapNavControls .nav-zoom-group {
             grid-area: zoom;
             display: flex;
             flex-direction: column;
             gap: 2px;
         }
+
         .map-nav-btn {
             width: 44px;
             height: 44px;
@@ -1019,13 +1164,16 @@
             transition: background 0.15s, border-color 0.15s;
             user-select: none;
         }
+
         .map-nav-btn:hover {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255, 255, 255, 0.1);
             border-color: var(--accent);
         }
+
         .map-nav-btn:active {
-            background: rgba(255,255,255,0.15);
+            background: rgba(255, 255, 255, 0.15);
         }
+
         .nav-zoom-group .map-nav-btn {
             width: 44px;
             height: 20px;
@@ -1050,6 +1198,7 @@
             pointer-events: none;
             transition: opacity 0.25s ease, transform 0.25s ease;
         }
+
         .drag-panel.visible {
             opacity: 1;
             transform: translateX(0);
@@ -1136,20 +1285,19 @@
 
         /* Time Control Bar */
         #timeControlBar {
-            position: fixed;
-            bottom: 25px;
-            left: 20px;
+            position: static;
             display: flex;
             align-items: center;
             gap: 2px;
-            background: var(--panel-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--panel-border);
+            background: transparent;
+            backdrop-filter: none;
+            border: none;
             border-radius: 10px;
             padding: 6px 10px;
             z-index: 10;
             transition: border-color 0.3s;
             min-width: 440px;
+            box-shadow: none;
         }
 
         #timeControlBar.history-active {
@@ -1278,25 +1426,293 @@
         #tcb-time-display.history {
             color: #a855f7;
         }
+
+        /* ── Vision Mode Filter Buttons ─────────────────── */
+        .vision-mode-group {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(63, 63, 70, 0.4);
+            border-radius: 8px;
+            padding: 3px;
+        }
+
+        .vmode-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .vmode-btn:hover {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-main);
+        }
+
+        .vmode-btn.active[data-mode="normal"] {
+            background: rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.15);
+        }
+
+        .vmode-btn.active[data-mode="nv"] {
+            background: rgba(0, 255, 80, 0.12);
+            color: #00ff50;
+            box-shadow: 0 0 10px rgba(0, 255, 80, 0.25);
+        }
+
+        .vmode-btn.active[data-mode="flir"] {
+            background: rgba(255, 120, 0, 0.12);
+            color: #ff7800;
+            box-shadow: 0 0 10px rgba(255, 120, 0, 0.25);
+        }
+
+        .vmode-btn.active[data-mode="crt"] {
+            background: rgba(20, 184, 166, 0.15);
+            color: var(--accent);
+            box-shadow: 0 0 10px rgba(20, 184, 166, 0.25);
+        }
+        #leafletContainer {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            background: #1a1a2e;
+            display: none;
+        }
+
+        #mapArea.mode-2d #cesiumContainer { display: none; }
+        #mapArea.mode-2d #leafletContainer { display: block; }
+        #mapArea.mode-2d #mapNavControls { display: none; }
+
+        .leaflet-tile-brighten {
+            filter: brightness(1.6) saturate(0.8);
+        }
+
+        #leafletContainer.vision-nv {
+            filter: saturate(0.3) brightness(0.7) sepia(1) hue-rotate(80deg) brightness(1.3);
+        }
+        #leafletContainer.vision-flir {
+            filter: saturate(0) brightness(0.8) contrast(1.5);
+        }
+        #leafletContainer.vision-crt {
+            filter: saturate(0.5) brightness(0.9) contrast(1.2) sepia(0.3) hue-rotate(150deg);
+        }
+
+        #mapModeToggle {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 100;
+            display: flex;
+            gap: 2px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 3px;
+            backdrop-filter: blur(12px);
+        }
+
+        .map-mode-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .map-mode-btn.active {
+            background: rgba(20, 184, 166, 0.15);
+            color: var(--accent);
+        }
+
+        .map-mode-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+        }
+
+        .ship-tooltip-2d {
+            background: var(--panel-bg) !important;
+            border: 1px solid var(--panel-border) !important;
+            color: var(--text-main) !important;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            padding: 4px 8px !important;
+            border-radius: 4px !important;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+        .ship-tooltip-2d::before {
+            border-top-color: var(--panel-border) !important;
+        }
+        .sat-icon-2d {
+            background: transparent;
+        }
+
+        /* Region Tabs for 2D Map */
+        #regionTabs {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: none;
+            gap: 2px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 3px;
+            backdrop-filter: blur(12px);
+        }
+        #mapArea.mode-2d #regionTabs { display: flex; }
+
+        .region-tab {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.68rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .region-tab.active {
+            background: rgba(20, 184, 166, 0.15);
+            color: var(--accent);
+        }
+        .region-tab:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+        }
+        .sat-dot-2d {
+            width: 8px;
+            height: 8px;
+            background: #06b6d4;
+            border: 1px solid rgba(6, 182, 212, 0.5);
+            border-radius: 2px;
+            box-shadow: 0 0 6px rgba(6, 182, 212, 0.4);
+        }
+
+        /* Collision Drawer — bottom of app-layout */
+        #collisionDrawer {
+            flex-shrink: 0;
+            height: 200px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border-top: 1px solid var(--panel-border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: height 0.3s ease;
+        }
+
+        #collisionDrawer.collapsed {
+            height: 40px;
+        }
+
+        #collisionDrawer .drawer-summary-bar {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            height: 40px;
+            cursor: pointer;
+            flex-shrink: 0;
+            font-size: 0.78rem;
+            color: var(--text-main);
+        }
+
+        #collisionDrawer.collapsed .drawer-summary-bar {
+            display: flex;
+        }
+
+        #collisionDrawer.collapsed #collisionSection {
+            display: none;
+        }
+
+        .drawer-summary-stats {
+            display: flex;
+            gap: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+        }
+
+        .drawer-summary-stats .s-danger { color: var(--accent-red); }
+        .drawer-summary-stats .s-warn { color: var(--accent-amber); }
+        .drawer-summary-stats .s-caution { color: #eab308; }
+
+        /* Filter panel toggle button on map */
+        #filterToggleBtn {
+            position: absolute;
+            right: 15px;
+            top: 15px;
+            z-index: 49;
+            width: 36px;
+            height: 36px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            color: var(--accent);
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(12px);
+            transition: background 0.15s;
+        }
+
+        #filterToggleBtn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        #shipFilterPanel.panel-hidden ~ #filterToggleBtn,
+        #filterToggleBtn.show {
+            display: flex;
+        }
+
+        .drawer-toggle-icon {
+            color: var(--text-dim);
+            font-size: 0.7rem;
+            transition: transform 0.3s;
+        }
+
+        #collisionDrawer.collapsed .drawer-toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        @media (max-width: 900px) {
+            #feedPanel { display: none; }
+        }
+
     </style>
 </head>
 
 <body>
-    <!-- Background 3D Globe -->
-    <div id="cesiumContainer"></div>
-
-    <!-- Map Navigation Controls -->
-    <div id="mapNavControls">
-        <button class="map-nav-btn" id="navUp" title="Pan Up (↑)"><i class="fa-solid fa-chevron-up"></i></button>
-        <button class="map-nav-btn" id="navLeft" title="Pan Left (←)"><i class="fa-solid fa-chevron-left"></i></button>
-        <div class="nav-zoom-group">
-            <button class="map-nav-btn" id="navZoomIn" title="Zoom In (+)"><i class="fa-solid fa-plus"></i></button>
-            <button class="map-nav-btn" id="navZoomOut" title="Zoom Out (-)"><i class="fa-solid fa-minus"></i></button>
-        </div>
-        <button class="map-nav-btn" id="navRight" title="Pan Right (→)"><i class="fa-solid fa-chevron-right"></i></button>
-        <button class="map-nav-btn" id="navDown" title="Pan Down (↓)"><i class="fa-solid fa-chevron-down"></i></button>
-    </div>
-
+    <div id="app-layout">
     <!-- Top Header -->
     <header class="glass-panel">
         <div class="header-brand">
@@ -1310,7 +1726,9 @@
                 <button class="region-toggle" id="regionToggle">
                     <i class="fa-solid fa-map-location-dot"></i>
                     <span id="regionLabel">지역 선택</span>
-                    <span id="regionChevron" style="display:inline-flex; align-items:center; padding:2px 0 2px 4px; margin-left:2px; border-left:1px solid rgba(255,255,255,0.1);"><i class="fa-solid fa-chevron-down" style="font-size:0.55rem; opacity:0.6;"></i></span>
+                    <span id="regionChevron"
+                        style="display:inline-flex; align-items:center; padding:2px 0 2px 4px; margin-left:2px; border-left:1px solid rgba(255,255,255,0.1);"><i
+                            class="fa-solid fa-chevron-down" style="font-size:0.55rem; opacity:0.6;"></i></span>
                 </button>
                 <div class="region-dropdown" id="regionDropdown">
                     <div class="region-group-label">주요 해역</div>
@@ -1341,67 +1759,98 @@
                 <span class="stat-value" id="stat-assets">7</span>
                 <span class="stat-label">추적 자산</span>
             </div>
+            <!-- Vision Mode Filter Toggle -->
+            <div class="vision-mode-group">
+                <button class="vmode-btn active" data-mode="normal" id="vmode-normal" title="Normal View">
+                    <i class="fa-solid fa-eye"></i> NORMAL
+                </button>
+                <button class="vmode-btn" data-mode="nv" id="vmode-nv" title="Night Vision">
+                    <i class="fa-solid fa-moon"></i> NV
+                </button>
+                <button class="vmode-btn" data-mode="flir" id="vmode-flir" title="FLIR Thermal">
+                    <i class="fa-solid fa-fire"></i> FLIR
+                </button>
+                <button class="vmode-btn" data-mode="crt" id="vmode-crt" title="CRT Mode">
+                    <i class="fa-solid fa-tv"></i> CRT
+                </button>
+            </div>
         </div>
     </header>
 
-    <!-- Left Monitor Panel (Feed + Collision) -->
-    <div id="feedPanel" class="glass-panel">
-        <!-- Master Header -->
-        <div class="feed-panel-header">
-            <span><i class="fa-solid fa-tower-broadcast" style="margin-right: 8px;"></i> LIVE FEED</span>
-            <button class="collapse-btn" title="전체 접기/펼치기"
-                onclick="const f=document.getElementById('feedSection'),c=document.getElementById('collisionSection');const allCollapsed=f.classList.contains('collapsed')&&c.classList.contains('collapsed');if(allCollapsed){f.classList.remove('collapsed');c.classList.remove('collapsed')}else{f.classList.add('collapsed');c.classList.add('collapsed')}var nowCollapsed=f.classList.contains('collapsed');this.querySelector('i').classList.toggle('fa-chevron-up',!nowCollapsed);this.querySelector('i').classList.toggle('fa-chevron-down',nowCollapsed);">
-                <i class="fa-solid fa-chevron-up"></i>
+    <!-- Map Area (3D Globe + Nav Controls) -->
+    <div id="mapArea">
+        <div id="cesiumContainer"></div>
+        <div id="leafletContainer"></div>
+
+        <!-- 3D/2D 토글 -->
+        <div id="mapModeToggle">
+            <button class="map-mode-btn active" data-mode="3d" onclick="setMapMode('3d')">
+                <i class="fa-solid fa-globe"></i> 3D
+            </button>
+            <button class="map-mode-btn" data-mode="2d" onclick="setMapMode('2d')">
+                <i class="fa-solid fa-map"></i> 2D
             </button>
         </div>
 
-        <!-- 이상 선박 탐지 Section -->
-        <div id="feedSection" class="panel-section">
-            <h2>
-                <span><i class="fa-solid fa-ship" style="margin-right: 6px;"></i> 이상 선박 탐지</span>
-                <button class="collapse-btn"
-                    onclick="document.getElementById('feedSection').classList.toggle('collapsed'); var c=document.getElementById('feedSection').classList.contains('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up',!c); this.querySelector('i').classList.toggle('fa-chevron-down',c);">
+        <!-- 2D 지역 탭 -->
+        <div id="regionTabs">
+            <button class="region-tab active" onclick="flyToRegion2D('world', this)">전체</button>
+            <button class="region-tab" onclick="flyToRegion2D('east-asia', this)">동아시아</button>
+            <button class="region-tab" onclick="flyToRegion2D('southeast-asia', this)">동남아</button>
+            <button class="region-tab" onclick="flyToRegion2D('europe', this)">유럽</button>
+            <button class="region-tab" onclick="flyToRegion2D('middle-east', this)">중동</button>
+            <button class="region-tab" onclick="flyToRegion2D('africa', this)">아프리카</button>
+            <button class="region-tab" onclick="flyToRegion2D('north-america', this)">북미</button>
+            <button class="region-tab" onclick="flyToRegion2D('south-america', this)">남미</button>
+        </div>
+
+        <div id="mapNavControls">
+            <button class="map-nav-btn" id="navUp" title="Pan Up (↑)"><i class="fa-solid fa-chevron-up"></i></button>
+            <button class="map-nav-btn" id="navLeft" title="Pan Left (←)"><i class="fa-solid fa-chevron-left"></i></button>
+            <div class="nav-zoom-group">
+                <button class="map-nav-btn" id="navZoomIn" title="Zoom In (+)"><i class="fa-solid fa-plus"></i></button>
+                <button class="map-nav-btn" id="navZoomOut" title="Zoom Out (-)"><i class="fa-solid fa-minus"></i></button>
+            </div>
+            <button class="map-nav-btn" id="navRight" title="Pan Right (→)"><i class="fa-solid fa-chevron-right"></i></button>
+            <button class="map-nav-btn" id="navDown" title="Pan Down (↓)"><i class="fa-solid fa-chevron-down"></i></button>
+        </div>
+
+        <!-- Feed Panel (left overlay on map) -->
+        <div id="feedPanel" class="glass-panel">
+            <div class="feed-collapse-tab" onclick="toggleLeftPanel()">
+                <i class="fa-solid fa-chevron-right"></i>
+                <span style="writing-mode: vertical-rl; font-size: 0.65rem; letter-spacing: 1px; font-weight: 600;">FEED</span>
+            </div>
+            <div class="feed-panel-header">
+                <span><i class="fa-solid fa-tower-broadcast" style="margin-right: 8px;"></i> LIVE FEED</span>
+                <button class="collapse-btn" title="접기/펼치기"
+                    onclick="const f=document.getElementById('feedSection');f.classList.toggle('collapsed');var c=f.classList.contains('collapsed');this.querySelector('i').classList.toggle('fa-chevron-up',!c);this.querySelector('i').classList.toggle('fa-chevron-down',c);">
                     <i class="fa-solid fa-chevron-up"></i>
                 </button>
-            </h2>
-            <div class="feed-list" id="eventFeed">
-                <div
-                    style="text-align: center; color: var(--text-dim); font-style: italic; margin-top: 20px; font-size: 0.9rem;">
-                    정보 수신 대기중...
+            </div>
+            <div id="feedSection" class="panel-section">
+                <h2>
+                    <span><i class="fa-solid fa-ship" style="margin-right: 6px;"></i> 이상 선박 탐지</span>
+                    <button class="collapse-btn"
+                        onclick="document.getElementById('feedSection').classList.toggle('collapsed'); var c=document.getElementById('feedSection').classList.contains('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up',!c); this.querySelector('i').classList.toggle('fa-chevron-down',c);">
+                        <i class="fa-solid fa-chevron-up"></i>
+                    </button>
+                </h2>
+                <div class="feed-list" id="eventFeed">
+                    <div style="text-align: center; color: var(--text-dim); font-style: italic; margin-top: 20px; font-size: 0.9rem;">
+                        정보 수신 대기중...
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Divider -->
-        <hr class="section-divider">
-
-        <!-- COLLISION ANALYSIS Section -->
-        <div id="collisionSection" class="panel-section">
-            <h3>
-                <span><i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px;"></i> 충돌 분석
-                    <span class="collision-count-badge" id="collision-count">0</span></span>
-                <button class="collapse-btn" style="margin-left:auto;"
-                    onclick="document.getElementById('collisionSection').classList.toggle('collapsed'); var c=document.getElementById('collisionSection').classList.contains('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up',!c); this.querySelector('i').classList.toggle('fa-chevron-down',c);">
-                    <i class="fa-solid fa-chevron-up"></i>
-                </button>
-            </h3>
-            <div class="collision-tabs">
-                <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">거리 기반</button>
-                <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl"><i class="fa-solid fa-brain" style="margin-right:4px;font-size:0.65rem;"></i>AI 분석</button>
-            </div>
-            <div id="mlRiskSummaryFixed" style="display:none; flex-shrink:0;"></div>
-            <div class="collision-list" id="collisionList">
-                <div class="collision-empty">분석 데이터 대기중...</div>
-            </div>
-        </div>
-    </div>
-
-    <div id="shipFilterPanel" class="glass-panel">
+        <!-- Filter Panel (floating overlay on map) -->
+        <button id="filterToggleBtn" onclick="toggleRightPanel()" title="레이어 패널"><i class="fa-solid fa-layer-group"></i></button>
+        <div id="shipFilterPanel" class="glass-panel">
         <div class="panel-master-header">
             <h3><i class="fa-solid fa-layer-group"></i> LAYERS</h3>
-            <button class="collapse-btn"
-                onclick="this.closest('#shipFilterPanel').classList.toggle('collapsed'); var c=this.closest('#shipFilterPanel').classList.contains('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up',!c); this.querySelector('i').classList.toggle('fa-chevron-down',c);">
-                <i class="fa-solid fa-chevron-up"></i>
+            <button class="collapse-btn" onclick="toggleRightPanel()" title="닫기">
+                <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
         <div class="filter-content">
@@ -1409,38 +1858,46 @@
             <!-- ═══ VESSELS ═══ -->
             <div class="layer-group" id="layerGroupVessels">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(20, 184, 166, 0.1); color: var(--accent);"><i class="fa-solid fa-ship"></i></div>
+                    <div class="lg-icon" style="background: rgba(20, 184, 166, 0.1); color: var(--accent);"><i
+                            class="fa-solid fa-ship"></i></div>
                     <span class="lg-title">선박</span>
                     <span class="lg-badge" id="total-ships">0</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
                 <div class="layer-group-body">
                     <div class="filter-item">
-                        <label><input type="checkbox" id="filter-cargo" checked><span class="color-dot color-cargo"></span> Cargo</label>
+                        <label><input type="checkbox" id="filter-cargo" checked><span
+                                class="color-dot color-cargo"></span> Cargo</label>
                         <span class="filter-count" id="count-cargo">0</span>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="filter-tanker" checked><span class="color-dot color-tanker"></span> Tanker</label>
+                        <label><input type="checkbox" id="filter-tanker" checked><span
+                                class="color-dot color-tanker"></span> Tanker</label>
                         <span class="filter-count" id="count-tanker">0</span>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="filter-passenger" checked><span class="color-dot color-passenger"></span> Passenger</label>
+                        <label><input type="checkbox" id="filter-passenger" checked><span
+                                class="color-dot color-passenger"></span> Passenger</label>
                         <span class="filter-count" id="count-passenger">0</span>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="filter-fishing" checked><span class="color-dot color-fishing"></span> Fishing</label>
+                        <label><input type="checkbox" id="filter-fishing" checked><span
+                                class="color-dot color-fishing"></span> Fishing</label>
                         <span class="filter-count" id="count-fishing">0</span>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="filter-military" checked><span class="color-dot color-military"></span> Military</label>
+                        <label><input type="checkbox" id="filter-military" checked><span
+                                class="color-dot color-military"></span> Military</label>
                         <span class="filter-count" id="count-military">0</span>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="filter-tug" checked><span class="color-dot color-tug"></span> Tug</label>
+                        <label><input type="checkbox" id="filter-tug" checked><span class="color-dot color-tug"></span>
+                            Tug</label>
                         <span class="filter-count" id="count-tug">0</span>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="filter-other" checked><span class="color-dot color-other"></span> Other</label>
+                        <label><input type="checkbox" id="filter-other" checked><span
+                                class="color-dot color-other"></span> Other</label>
                         <span class="filter-count" id="count-other">0</span>
                     </div>
                     <div class="layer-group-stats">
@@ -1452,13 +1909,15 @@
             <!-- ═══ WEATHER ═══ -->
             <div class="layer-group" id="layerGroupWeather">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(59, 130, 246, 0.12); color: #3b82f6;"><i class="fa-solid fa-cloud-showers-heavy"></i></div>
+                    <div class="lg-icon" style="background: rgba(59, 130, 246, 0.12); color: #3b82f6;"><i
+                            class="fa-solid fa-cloud-showers-heavy"></i></div>
                     <span class="lg-title">기상</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
                 <div class="layer-group-body">
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-clouds"><span class="color-dot" style="background-color: #3b82f6;"></span> Precipitation Radar</label>
+                        <label><input type="checkbox" id="layer-clouds"><span class="color-dot"
+                                style="background-color: #3b82f6;"></span> Precipitation Radar</label>
                     </div>
                 </div>
             </div>
@@ -1466,37 +1925,48 @@
             <!-- ═══ SATELLITES ═══ -->
             <div class="layer-group" id="layerGroupSatellites">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(167, 139, 250, 0.12); color: #a78bfa;"><i class="fa-solid fa-satellite"></i></div>
+                    <div class="lg-icon" style="background: rgba(167, 139, 250, 0.12); color: #a78bfa;"><i
+                            class="fa-solid fa-satellite"></i></div>
                     <span class="lg-title">위성</span>
                     <span class="lg-badge" id="total-sats">0</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
                 <div class="layer-group-body">
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-sats"><span class="color-dot" style="background-color: #a78bfa;"></span> Intel Satellites</label>
+                        <label><input type="checkbox" id="layer-sats"><span class="color-dot"
+                                style="background-color: #a78bfa;"></span> Intel Satellites</label>
                     </div>
                     <div id="satSubToggles" style="display:none; margin-top: 6px;">
                         <div class="layer-sub-label">임무 유형</div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="sar,military_sar" checked><span class="color-dot" style="background-color: #f97316;"></span> SAR</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="sar,military_sar"
+                                    checked><span class="color-dot" style="background-color: #f97316;"></span>
+                                SAR</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="commercial_imaging" checked><span class="color-dot" style="background-color: #94a3b8;"></span> 광학</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="commercial_imaging"
+                                    checked><span class="color-dot" style="background-color: #94a3b8;"></span>
+                                광학</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="sigint" checked><span class="color-dot" style="background-color: #eab308;"></span> SIGINT</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="sigint" checked><span
+                                    class="color-dot" style="background-color: #eab308;"></span> SIGINT</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="military_recon"><span class="color-dot" style="background-color: #fde047;"></span> 정찰</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="military_recon"><span
+                                    class="color-dot" style="background-color: #fde047;"></span> 정찰</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="navigation"><span class="color-dot" style="background-color: #10b981;"></span> 항법</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="navigation"><span
+                                    class="color-dot" style="background-color: #10b981;"></span> 항법</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="early_warning"><span class="color-dot" style="background-color: #a855f7;"></span> 조기경보</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="early_warning"><span
+                                    class="color-dot" style="background-color: #a855f7;"></span> 조기경보</label>
                         </div>
                         <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="space_station"><span class="color-dot" style="background-color: #3b82f6;"></span> 우주정거장</label>
+                            <label><input type="checkbox" class="sat-mission-filter" data-mission="space_station"><span
+                                    class="color-dot" style="background-color: #3b82f6;"></span> 우주정거장</label>
                         </div>
                         <div class="layer-sub-label">표시</div>
                         <div class="filter-item">
@@ -1515,19 +1985,23 @@
             <!-- ═══ SIGINT ═══ -->
             <div class="layer-group collapsed" id="layerGroupSignal">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(234, 179, 8, 0.12); color: #eab308;"><i class="fa-solid fa-tower-cell"></i></div>
+                    <div class="lg-icon" style="background: rgba(234, 179, 8, 0.12); color: #eab308;"><i
+                            class="fa-solid fa-tower-cell"></i></div>
                     <span class="lg-title">SIGINT</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
                 <div class="layer-group-body">
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-sigint-ais"><span class="color-dot" style="background-color: #eab308;"></span> AIS 이상 탐지</label>
+                        <label><input type="checkbox" id="layer-sigint-ais"><span class="color-dot"
+                                style="background-color: #eab308;"></span> AIS 이상 탐지</label>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-sigint-rf"><span class="color-dot" style="background-color: #f97316;"></span> RF 신호 감지</label>
+                        <label><input type="checkbox" id="layer-sigint-rf"><span class="color-dot"
+                                style="background-color: #f97316;"></span> RF 신호 감지</label>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-sigint-darkship"><span class="color-dot" style="background-color: #ef4444;"></span> Dark Ship 탐지</label>
+                        <label><input type="checkbox" id="layer-sigint-darkship"><span class="color-dot"
+                                style="background-color: #ef4444;"></span> Dark Ship 탐지</label>
                     </div>
                 </div>
             </div>
@@ -1535,19 +2009,23 @@
             <!-- ═══ NEWS ═══ -->
             <div class="layer-group collapsed" id="layerGroupNews">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8;"><i class="fa-solid fa-newspaper"></i></div>
+                    <div class="lg-icon" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8;"><i
+                            class="fa-solid fa-newspaper"></i></div>
                     <span class="lg-title">뉴스</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
                 <div class="layer-group-body">
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-news-maritime"><span class="color-dot" style="background-color: #38bdf8;"></span> 해양 사건</label>
+                        <label><input type="checkbox" id="layer-news-maritime"><span class="color-dot"
+                                style="background-color: #38bdf8;"></span> 해양 사건</label>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-news-security"><span class="color-dot" style="background-color: #ef4444;"></span> 안보 위협</label>
+                        <label><input type="checkbox" id="layer-news-security"><span class="color-dot"
+                                style="background-color: #ef4444;"></span> 안보 위협</label>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-news-trade"><span class="color-dot" style="background-color: #10b981;"></span> 무역/물류</label>
+                        <label><input type="checkbox" id="layer-news-trade"><span class="color-dot"
+                                style="background-color: #10b981;"></span> 무역/물류</label>
                     </div>
                 </div>
             </div>
@@ -1555,27 +2033,68 @@
             <!-- ═══ BASES ═══ -->
             <div class="layer-group collapsed" id="layerGroupBases">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(239, 68, 68, 0.12); color: #ef4444;"><i class="fa-solid fa-shield-halved"></i></div>
+                    <div class="lg-icon" style="background: rgba(239, 68, 68, 0.12); color: #ef4444;"><i
+                            class="fa-solid fa-shield-halved"></i></div>
                     <span class="lg-title">주요 기지</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
                 <div class="layer-group-body">
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-base-naval"><span class="color-dot" style="background-color: #6366f1;"></span> 해군 기지</label>
+                        <label><input type="checkbox" id="layer-base-naval"><span class="color-dot"
+                                style="background-color: #6366f1;"></span> 해군 기지</label>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-base-port"><span class="color-dot" style="background-color: #10b981;"></span> 주요 항구</label>
+                        <label><input type="checkbox" id="layer-base-port"><span class="color-dot"
+                                style="background-color: #10b981;"></span> 주요 항구</label>
                     </div>
                     <div class="filter-item">
-                        <label><input type="checkbox" id="layer-base-chokepoint"><span class="color-dot" style="background-color: #f97316;"></span> 전략 요충지</label>
+                        <label><input type="checkbox" id="layer-base-chokepoint"><span class="color-dot"
+                                style="background-color: #f97316;"></span> 전략 요충지</label>
                     </div>
                 </div>
             </div>
 
         </div><!-- /filter-content -->
+    </div><!-- /shipFilterPanel -->
+    </div><!-- /mapArea -->
+
+    <!-- Collision Drawer -->
+    <div id="collisionDrawer">
+        <div class="drawer-summary-bar" onclick="toggleCollisionDrawer()">
+            <span>
+                <i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px; color: var(--accent-amber);"></i>
+                충돌 분석
+                <span class="collision-count-badge" id="collision-count-summary">0</span>
+            </span>
+            <div class="drawer-summary-stats" id="drawerSummaryStats"></div>
+            <i class="fa-solid fa-chevron-down drawer-toggle-icon"></i>
+        </div>
+        <div id="collisionSection">
+            <div class="collision-bottom-header">
+                <span>
+                    <i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px;"></i> 충돌 분석
+                    <span class="collision-count-badge" id="collision-count">0</span>
+                </span>
+                <div class="collision-tabs" style="margin:0;">
+                    <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">거리 기반</button>
+                    <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl">
+                        <i class="fa-solid fa-brain" style="margin-right:4px;font-size:0.65rem;"></i>AI 분석
+                    </button>
+                </div>
+                <button class="collapse-btn" onclick="toggleCollisionDrawer()" title="접기" style="margin-left: auto;">
+                    <i class="fa-solid fa-chevron-down"></i>
+                </button>
+            </div>
+            <div id="mlRiskSummaryFixed" style="display:none; flex-shrink:0;"></div>
+            <div class="collision-list" id="collisionList">
+                <div class="collision-empty">분석 데이터 대기중...</div>
+            </div>
+        </div>
     </div>
 
-    <!-- Custom Ship Info Panel -->
+    </div><!-- /app-layout -->
+
+    <!-- Custom Ship Info Panel (overlay) -->
     <div id="shipInfoPanel" class="drag-panel">
         <div id="shipInfoHeader" class="drag-panel-header">
             <span class="title" id="shipInfoTitle">—</span>
@@ -1583,46 +2102,350 @@
         </div>
         <div id="shipInfoBody" class="drag-panel-body"></div>
         <div id="nearbyVesselsSection">
-            <div class="section-title">NEARBY VESSELS <span id="nearbyMlIndicator" style="display:none;font-size:0.55rem;color:var(--accent);margin-left:6px;font-weight:400;"><i class="fa-solid fa-brain"></i> AI</span></div>
+            <div class="section-title">NEARBY VESSELS <span id="nearbyMlIndicator"
+                    style="display:none;font-size:0.55rem;color:var(--accent);margin-left:6px;font-weight:400;"><i
+                        class="fa-solid fa-brain"></i> AI</span></div>
             <div id="nearbyVesselsList"></div>
         </div>
     </div>
-
 
     <!-- Centered Loader -->
     <div id="loading" class="glass-panel">
         <i class="fa-solid fa-circle-notch fa-spin"></i> 시스템 초기화중
     </div>
 
-    <!-- Time Control Bar -->
-    <div id="timeControlBar">
-        <div style="display:flex;gap:3px;margin-right:2px;">
-            <button id="tcb-btn-live" class="tcb-mode-btn active">
-                <i class="fa-solid fa-broadcast-tower"></i> LIVE
-            </button>
-            <button id="tcb-btn-history" class="tcb-mode-btn history">
-                <i class="fa-solid fa-clock-rotate-left"></i> HISTORY
-            </button>
-        </div>
-        <div class="tcb-divider"></div>
-        <div style="display:flex;align-items:center;gap:6px;">
-            <button id="tcb-reverse" class="tcb-play-btn" disabled title="Reverse">
-                <i class="fa-solid fa-backward"></i>
-            </button>
-            <button id="tcb-playpause" class="tcb-play-btn main" disabled title="Play/Pause">
-                <i class="fa-solid fa-play" id="tcb-playpause-icon"></i>
-            </button>
-            <button id="tcb-ff" class="tcb-play-btn" disabled title="Speed Up">
-                <i class="fa-solid fa-forward"></i>
-            </button>
-        </div>
-        <div class="tcb-divider"></div>
-        <span id="tcb-speed">1x</span>
-        <div class="tcb-divider"></div>
-        <span id="tcb-time-display">--:--:-- Z</span>
-    </div>
-
     <script>
+        // ── Panel Collapse/Expand ──
+        let currentMapMode = '3d';
+        let leafletMap = null;
+
+        function getGridColumns() { return ''; }
+
+        function toggleLeftPanel() {
+            const panel = document.getElementById('feedPanel');
+            panel.classList.toggle('panel-collapsed');
+        }
+
+        function toggleCollisionDrawer() {
+            const drawer = document.getElementById('collisionDrawer');
+            drawer.classList.toggle('collapsed');
+            setTimeout(resizeActiveMap, 350);
+        }
+
+        function toggleRightPanel() {
+            const panel = document.getElementById('shipFilterPanel');
+            const btn = document.getElementById('filterToggleBtn');
+            panel.classList.toggle('panel-hidden');
+            if (panel.classList.contains('panel-hidden')) {
+                btn.classList.add('show');
+            } else {
+                btn.classList.remove('show');
+            }
+        }
+
+        function resizeActiveMap() {
+            if (currentMapMode === '3d' && typeof viewer !== 'undefined' && viewer) {
+                viewer.resize();
+            } else if (currentMapMode === '2d' && leafletMap) {
+                leafletMap.invalidateSize();
+            }
+        }
+
+        // ── Leaflet 2D Map ──
+        let leafletInitialized = false;
+        let leafletShipMarkers = {};
+        let leafletCollisionLines = {};
+        let leafletSatMarkers = {};
+        let leafletSatTracks = {};
+
+        const REGION_VIEWS = {
+            'world':          { center: [20, 0],    zoom: 2 },
+            'east-asia':      { center: [35, 125],  zoom: 5 },
+            'southeast-asia': { center: [5, 115],   zoom: 5 },
+            'europe':         { center: [50, 15],   zoom: 4 },
+            'middle-east':    { center: [28, 48],   zoom: 5 },
+            'africa':         { center: [5, 20],    zoom: 4 },
+            'north-america':  { center: [40, -95],  zoom: 4 },
+            'south-america':  { center: [-15, -55], zoom: 4 }
+        };
+
+        function flyToRegion2D(region, btn) {
+            const view = REGION_VIEWS[region];
+            if (!view || !leafletMap) return;
+            document.querySelectorAll('.region-tab').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            leafletMap.flyTo(view.center, view.zoom, { duration: 0.8 });
+        }
+
+        function initLeaflet() {
+            if (leafletInitialized) return;
+
+            leafletMap = L.map('leafletContainer', {
+                center: [20, 0],
+                zoom: 2,
+                minZoom: 2,
+                zoomControl: false,
+                attributionControl: false
+            });
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19,
+                subdomains: 'abcd',
+                className: 'leaflet-tile-brighten'
+            }).addTo(leafletMap);
+            // 라벨 레이어를 위에 얹어서 지명 표시
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19,
+                subdomains: 'abcd',
+                pane: 'overlayPane'
+            }).addTo(leafletMap);
+
+            L.control.zoom({ position: 'bottomright' }).addTo(leafletMap);
+            leafletInitialized = true;
+        }
+
+        function setMapMode(mode) {
+            if (mode === currentMapMode) return;
+            currentMapMode = mode;
+
+            const mapArea = document.getElementById('mapArea');
+            const btns = document.querySelectorAll('.map-mode-btn');
+            btns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+
+            if (mode === '2d') {
+                initLeaflet();
+
+                mapArea.classList.add('mode-2d');
+
+                leafletMap.invalidateSize();
+                leafletMap.setView([20, 0], 2);
+
+                // 지역 탭을 '전체'로 리셋
+                document.querySelectorAll('.region-tab').forEach(b => b.classList.remove('active'));
+                document.querySelector('.region-tab')?.classList.add('active');
+
+                // sync functions will be added in Tasks 4-6
+                if (typeof syncShipsToLeaflet === 'function') syncShipsToLeaflet();
+                if (typeof syncProximityToLeaflet === 'function') syncProximityToLeaflet();
+                if (typeof syncSatellitesToLeaflet === 'function') syncSatellitesToLeaflet();
+
+                // History mode: periodic 2D marker update
+                if (timeMode === 'history' && !window._leaflet2dUpdateInterval) {
+                    window._leaflet2dUpdateInterval = setInterval(() => {
+                        if (currentMapMode === '2d') syncShipsToLeaflet();
+                    }, 2000);
+                }
+            } else {
+                const center = leafletMap.getCenter();
+                const zoom = leafletMap.getZoom();
+
+                mapArea.classList.remove('mode-2d');
+                viewer.resize();
+
+                viewer.camera.flyTo({
+                    destination: Cesium.Cartesian3.fromDegrees(center.lng, center.lat, zoomToAltitude(zoom)),
+                    duration: 0
+                });
+
+                // Clear history update timer
+                if (window._leaflet2dUpdateInterval) {
+                    clearInterval(window._leaflet2dUpdateInterval);
+                    window._leaflet2dUpdateInterval = null;
+                }
+
+                clearLeafletLayers();
+            }
+        }
+
+        function syncShipsToLeaflet() {
+            if (!leafletMap || currentMapMode !== '2d') return;
+
+            Object.values(leafletShipMarkers).forEach(m => leafletMap.removeLayer(m));
+            leafletShipMarkers = {};
+
+            SHIP_TYPES.forEach(type => {
+                const ds = shipDataSources[type];
+                if (!ds) return;
+
+                ds.entities.values.forEach(entity => {
+                    const mmsi = entity.id;
+                    const shipData = shipDataMap[mmsi];
+                    if (!shipData) return;
+
+                    const lat = shipData.lat;
+                    const lon = shipData.lng;
+                    if (lat == null || lon == null) return;
+
+                    const color = SHIP_COLORS[type] || '#6b7280';
+
+                    const marker = L.circleMarker([lat, lon], {
+                        radius: 4,
+                        fillColor: color,
+                        fillOpacity: 0.9,
+                        color: color,
+                        weight: 1,
+                        opacity: 0.7
+                    }).addTo(leafletMap);
+
+                    marker.bindTooltip(shipData.name || 'Unknown', {
+                        className: 'ship-tooltip-2d',
+                        direction: 'top',
+                        offset: [0, -6]
+                    });
+
+                    marker.on('click', () => {
+                        showShipInfo(entity);
+                        selectedProximityMmsi = mmsi;
+                        updateProximity();
+                    });
+
+                    leafletShipMarkers[mmsi] = marker;
+                });
+            });
+        }
+
+        function syncProximityToLeaflet() {
+            if (!leafletMap || currentMapMode !== '2d') return;
+
+            // Clear existing
+            Object.values(leafletCollisionLines).forEach(l => leafletMap.removeLayer(l));
+            leafletCollisionLines = {};
+
+            if (!proximityDataSource) return;
+
+            proximityDataSource.entities.values.forEach(entity => {
+                // Handle polyline entities (proximity lines, COG projections)
+                if (entity.polyline) {
+                    try {
+                        const positions = entity.polyline.positions.getValue(viewer.clock.currentTime);
+                        if (!positions || positions.length < 2) return;
+
+                        const latLngs = positions.map(p => {
+                            const c = Cesium.Cartographic.fromCartesian(p);
+                            return [Cesium.Math.toDegrees(c.latitude), Cesium.Math.toDegrees(c.longitude)];
+                        });
+
+                        // Determine color from entity ID
+                        let color = '#f59e0b';
+                        const id = entity.id || '';
+                        if (id.includes('cog-')) color = '#f43f5e';
+
+                        const isDashed = id.startsWith('cog-');
+                        const line = L.polyline(latLngs, {
+                            color: color,
+                            weight: isDashed ? 2 : 3,
+                            opacity: 0.7,
+                            dashArray: isDashed ? '8, 6' : null
+                        }).addTo(leafletMap);
+
+                        leafletCollisionLines[id] = line;
+                    } catch (e) { /* skip if positions can't be resolved */ }
+                }
+
+                // Handle point/billboard entities with position (CPA markers, labels)
+                if (entity.point && entity.position) {
+                    try {
+                        const pos = entity.position.getValue(viewer.clock.currentTime);
+                        if (!pos) return;
+
+                        const c = Cesium.Cartographic.fromCartesian(pos);
+                        const lat = Cesium.Math.toDegrees(c.latitude);
+                        const lon = Cesium.Math.toDegrees(c.longitude);
+
+                        const marker = L.circleMarker([lat, lon], {
+                            radius: 6,
+                            fillColor: '#f43f5e',
+                            fillOpacity: 0.5,
+                            color: '#f43f5e',
+                            weight: 2
+                        }).addTo(leafletMap);
+
+                        leafletCollisionLines[entity.id] = marker;
+                    } catch (e) { /* skip */ }
+                }
+            });
+        }
+
+        function syncSatellitesToLeaflet() {
+            if (!leafletMap || currentMapMode !== '2d') return;
+            if (!satDataSource || !satDataSource.show) return;
+
+            Object.values(leafletSatMarkers).forEach(m => leafletMap.removeLayer(m));
+            Object.values(leafletSatTracks).forEach(t => leafletMap.removeLayer(t));
+            leafletSatMarkers = {};
+            leafletSatTracks = {};
+
+            satDataSource.entities.values.forEach(entity => {
+                const pos = entity.position ? entity.position.getValue(viewer.clock.currentTime) : null;
+                if (!pos) return;
+
+                const carto = Cesium.Cartographic.fromCartesian(pos);
+                const lat = Cesium.Math.toDegrees(carto.latitude);
+                const lon = Cesium.Math.toDegrees(carto.longitude);
+
+                const name = entity.name || 'SAT';
+                const satId = entity.id;
+
+                const marker = L.marker([lat, lon], {
+                    icon: L.divIcon({
+                        className: 'sat-icon-2d',
+                        html: '<div class="sat-dot-2d"></div>',
+                        iconSize: [10, 10],
+                        iconAnchor: [5, 5]
+                    })
+                }).addTo(leafletMap);
+
+                marker.bindTooltip(name, {
+                    className: 'ship-tooltip-2d',
+                    direction: 'top',
+                    offset: [0, -8]
+                });
+
+                leafletSatMarkers[satId] = marker;
+
+                if (entity.polyline) {
+                    try {
+                        const positions = entity.polyline.positions.getValue(viewer.clock.currentTime);
+                        if (positions && positions.length > 0) {
+                            const latLngs = positions.map(p => {
+                                const c = Cesium.Cartographic.fromCartesian(p);
+                                return [Cesium.Math.toDegrees(c.latitude), Cesium.Math.toDegrees(c.longitude)];
+                            });
+
+                            const track = L.polyline(latLngs, {
+                                color: '#06b6d4',
+                                weight: 1,
+                                opacity: 0.4,
+                                dashArray: '4, 4'
+                            }).addTo(leafletMap);
+
+                            leafletSatTracks[satId] = track;
+                        }
+                    } catch (e) { /* skip */ }
+                }
+            });
+        }
+
+        function clearLeafletLayers() {
+            if (!leafletMap) return;
+            Object.values(leafletShipMarkers).forEach(m => leafletMap.removeLayer(m));
+            Object.values(leafletCollisionLines).forEach(l => leafletMap.removeLayer(l));
+            Object.values(leafletSatMarkers).forEach(m => leafletMap.removeLayer(m));
+            Object.values(leafletSatTracks).forEach(t => leafletMap.removeLayer(t));
+            leafletShipMarkers = {};
+            leafletCollisionLines = {};
+            leafletSatMarkers = {};
+            leafletSatTracks = {};
+        }
+
+        function altitudeToZoom(altitude) {
+            return Math.max(2, Math.min(18, Math.round(Math.log2(40000000 / altitude) + 1)));
+        }
+
+        function zoomToAltitude(zoom) {
+            return 40000000 / Math.pow(2, zoom - 1);
+        }
+
         Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzY2MxZDJjNC03MGIxLTQzZjAtODM1OS1hYzMyNDIzZWE5YjYiLCJpZCI6NDA2NDI4LCJpYXQiOjE3NzM5NzA2ODl9.1ndfOL5CbW4FcszgDSjQhZKQGK41z7xlFT4ikUEOfVk';
 
         const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -1644,12 +2467,174 @@
             }))
         });
 
+        // ResizeObserver for map area
+        const mapResizeObserver = new ResizeObserver(() => {
+            if (currentMapMode === '3d' && viewer) {
+                viewer.resize();
+            } else if (currentMapMode === '2d' && leafletMap) {
+                leafletMap.invalidateSize();
+            }
+        });
+        mapResizeObserver.observe(document.getElementById('mapArea'));
+
+        // ── Google Photorealistic 3D Tiles (항구 근접 뷰) ────────────────────
+        let google3DTileset = null;
+        (async () => {
+            try {
+                google3DTileset = await Cesium.Cesium3DTileset.fromIonAssetId(2275207);
+                google3DTileset.show = false; // 기본 숨김, 줌인 시 표시
+                viewer.scene.primitives.add(google3DTileset);
+
+                viewer.camera.changed.addEventListener(() => {
+                    const height = viewer.camera.positionCartographic.height;
+                    google3DTileset.show = height < 50000; // 50km 이하일 때만 3D 표시
+                });
+            } catch (e) {
+                console.warn('Google 3D Tiles 로드 실패 (Ion 할당량 초과 또는 네트워크 오류):', e);
+            }
+        })();
+
+        // ── Vision Mode Filters (PostProcessStage GLSL Shaders) ─────────────
+        const visionShaders = {
+            normal: null, // no post-process
+
+            nv: `
+                uniform sampler2D colorTexture;
+                in vec2 v_textureCoordinates;
+                out vec4 fragColor;
+
+                float rand(vec2 co) {
+                    return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+                }
+
+                void main() {
+                    vec2 uv = v_textureCoordinates;
+                    vec4 color = texture(colorTexture, uv);
+                    // luminance
+                    float lum = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+                    // boost and green-tint
+                    lum = pow(lum, 0.6) * 1.4;
+                    // fine grain noise
+                    float noise = (rand(uv + fract(czm_frameNumber * 0.01)) - 0.5) * 0.06;
+                    lum = clamp(lum + noise, 0.0, 1.0);
+                    // vignette
+                    vec2 p = uv * 2.0 - 1.0;
+                    float vig = 1.0 - dot(p, p) * 0.35;
+                    lum *= vig;
+                    // phosphor green
+                    fragColor = vec4(lum * 0.08, lum, lum * 0.18, 1.0);
+                }
+            `,
+
+            flir: `
+                uniform sampler2D colorTexture;
+                in vec2 v_textureCoordinates;
+                out vec4 fragColor;
+
+                vec3 flirPalette(float t) {
+                    // black -> purple -> red -> orange -> yellow -> white
+                    t = clamp(t, 0.0, 1.0);
+                    vec3 col;
+                    if (t < 0.25) {
+                        col = mix(vec3(0.0,0.0,0.0), vec3(0.4,0.0,0.5), t*4.0);
+                    } else if (t < 0.5) {
+                        col = mix(vec3(0.4,0.0,0.5), vec3(0.9,0.1,0.0), (t-0.25)*4.0);
+                    } else if (t < 0.75) {
+                        col = mix(vec3(0.9,0.1,0.0), vec3(1.0,0.7,0.0), (t-0.5)*4.0);
+                    } else {
+                        col = mix(vec3(1.0,0.7,0.0), vec3(1.0,1.0,1.0), (t-0.75)*4.0);
+                    }
+                    return col;
+                }
+
+                void main() {
+                    vec2 uv = v_textureCoordinates;
+                    vec4 color = texture(colorTexture, uv);
+                    float lum = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+                    // Boost darker areas to simulate thermal sensor
+                    lum = pow(lum, 0.75);
+                    fragColor = vec4(flirPalette(lum), 1.0);
+                }
+            `,
+
+            crt: `
+                uniform sampler2D colorTexture;
+                in vec2 v_textureCoordinates;
+                out vec4 fragColor;
+
+                void main() {
+                    vec2 uv = v_textureCoordinates;
+                    // Barrel distortion
+                    vec2 cc = uv - 0.5;
+                    float dist = dot(cc, cc);
+                    uv = uv + cc * dist * 0.12;
+                    // Clamp to screen
+                    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                        return;
+                    }
+                    vec4 color = texture(colorTexture, uv);
+                    // Scanlines (screen-space)
+                    float scanline = sin(uv.y * 800.0) * 0.5 + 0.5;
+                    float sl = mix(0.75, 1.0, scanline);
+                    // Phosphor cyan tint
+                    color.rgb *= sl;
+                    color.r  *= 0.85;
+                    color.g  *= 1.05;
+                    color.b  *= 1.10;
+                    // Slight vignette
+                    vec2 p = uv * 2.0 - 1.0;
+                    float vig = 1.0 - dot(p, p) * 0.25;
+                    color.rgb *= vig;
+                    fragColor = vec4(color.rgb, 1.0);
+                }
+            `
+        };
+
+        let currentVisionStage = null;
+        let currentVisionMode = 'normal';
+
+        function applyVisionMode(mode) {
+            // Remove existing stage
+            if (currentVisionStage) {
+                viewer.scene.postProcessStages.remove(currentVisionStage);
+                currentVisionStage = null;
+            }
+
+            if (mode !== 'normal' && visionShaders[mode]) {
+                currentVisionStage = new Cesium.PostProcessStage({
+                    fragmentShader: visionShaders[mode]
+                });
+                viewer.scene.postProcessStages.add(currentVisionStage);
+            }
+
+            // Update button states
+            document.querySelectorAll('.vmode-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === mode);
+            });
+            currentVisionMode = mode;
+
+            // Apply CSS filter for 2D mode
+            const leafletEl = document.getElementById('leafletContainer');
+            if (leafletEl) {
+                leafletEl.classList.remove('vision-nv', 'vision-flir', 'vision-crt');
+                if (mode !== 'normal') {
+                    leafletEl.classList.add('vision-' + mode);
+                }
+            }
+        }
+
+        // Bind vision mode buttons
+        document.querySelectorAll('.vmode-btn').forEach(btn => {
+            btn.addEventListener('click', () => applyVisionMode(btn.dataset.mode));
+        });
+
         // ── Hybrid Map: 위성사진(기본) + 다크 타일(고줌 폴백) ────────────────
         // 기본 위성사진 레이어 밝기/채도 조절 — 중간 톤 (너무 밝지도 어둡지도 않게)
         const baseLayer = viewer.imageryLayers.get(0);
-        baseLayer.brightness = 0.6;
-        baseLayer.saturation = 0.5;
-        baseLayer.contrast = 1.1;
+        baseLayer.brightness = 1.0;
+        baseLayer.saturation = 1.0;
+        baseLayer.contrast = 1.0;
 
         const fallbackLayer = viewer.imageryLayers.addImageryProvider(
             new Cesium.UrlTemplateImageryProvider({
@@ -1724,6 +2709,7 @@
 
         // Camera orbit rotation around the globe
         const NAV_ROTATE_DEG = 5;
+        const NAV_TILT_DEG = 5;
 
         function navOrbit(deltaLon, deltaLat) {
             const cam = viewer.camera;
@@ -1744,31 +2730,52 @@
             });
         }
 
+        // Camera tilt (pitch) control — W: look up, S: look down
+        function navTilt(deltaDeg) {
+            const cam = viewer.camera;
+            const newPitch = Cesium.Math.clamp(
+                cam.pitch + Cesium.Math.toRadians(deltaDeg),
+                Cesium.Math.toRadians(-90), // 완전 수직 (탑뷰)
+                Cesium.Math.toRadians(-25)  // 적당히 기울어진 시점 (건물 보이면서 선박 자연스러움)
+            );
+            cam.setView({
+                orientation: {
+                    heading: cam.heading,
+                    pitch: newPitch,
+                    roll: cam.roll
+                }
+            });
+        }
+
+        // 지상 가까이 접근 허용
+        viewer.scene.screenSpaceCameraController.minimumZoomDistance = 50; // 50m까지 줌인 가능
+        viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
+
         // Keyboard shortcuts
-        // Arrow keys: pan, +/-: zoom, Q/E: rotate, W/S: tilt
+        // Arrow keys: pan, +/-: zoom, A/D: rotate, W/S: tilt
         document.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
             switch (e.key) {
-                case 'ArrowUp':    e.preventDefault(); navPan(0, NAV_PAN_PIXELS); break;
-                case 'ArrowDown':  e.preventDefault(); navPan(0, -NAV_PAN_PIXELS); break;
-                case 'ArrowLeft':  e.preventDefault(); navPan(NAV_PAN_PIXELS, 0); break;
+                case 'ArrowUp': e.preventDefault(); navPan(0, NAV_PAN_PIXELS); break;
+                case 'ArrowDown': e.preventDefault(); navPan(0, -NAV_PAN_PIXELS); break;
+                case 'ArrowLeft': e.preventDefault(); navPan(NAV_PAN_PIXELS, 0); break;
                 case 'ArrowRight': e.preventDefault(); navPan(-NAV_PAN_PIXELS, 0); break;
                 case '+': case '=': e.preventDefault(); navZoom(1); break;
                 case '-': case '_': e.preventDefault(); navZoom(-1); break;
                 case 'a': case 'A': e.preventDefault(); navOrbit(-NAV_ROTATE_DEG, 0); break;
                 case 'd': case 'D': e.preventDefault(); navOrbit(NAV_ROTATE_DEG, 0); break;
-                case 'w': case 'W': e.preventDefault(); navOrbit(0, NAV_ROTATE_DEG); break;
-                case 's': case 'S': e.preventDefault(); navOrbit(0, -NAV_ROTATE_DEG); break;
+                case 'w': case 'W': e.preventDefault(); navTilt(NAV_TILT_DEG); break;
+                case 's': case 'S': e.preventDefault(); navTilt(-NAV_TILT_DEG); break;
             }
         });
 
-        // ── Globe appearance: tactical dark style ─────────────────────────────
+        // ── Globe appearance: natural satellite style ──────────────────────────
         const scene = viewer.scene;
         const globe = viewer.scene.globe;
 
-        // Enable real-time sun lighting (day/night terminator)
-        globe.enableLighting = true;
+        // Lighting off — always full daylight (no day/night terminator)
+        globe.enableLighting = false;
 
         // Sync Cesium clock to real wall-clock time so lighting is accurate
         const now = Cesium.JulianDate.now();
@@ -1776,17 +2783,8 @@
         viewer.clock.shouldAnimate = false; // Don't advance the simulation clock
         // Live clock sync is now managed by the Time Travel Mode section below
 
-        // Deep space atmosphere — more dramatic blue-violet glow
-        scene.skyAtmosphere.hueShift = -0.05;      // slight blue shift
-        scene.skyAtmosphere.saturationShift = 0.3;  // more vivid
-        scene.skyAtmosphere.brightnessShift = -0.1; // slightly dimmer
-
-        // Deep black ocean for unlit areas
-        globe.baseColor = Cesium.Color.fromCssColorString('#0a0c14');
-
-        // Minimal ambient light at night to keep dark side visible
-        globe.dynamicAtmosphereLighting = true;
-        globe.dynamicAtmosphereLightingFromSun = true;
+        // Natural ocean color for unloaded tiles
+        globe.baseColor = Cesium.Color.fromCssColorString('#1a3a5c');
 
         // Remove the Cesium default credit banner (keeps UI clean)
         viewer.cesiumWidget.creditContainer.style.display = 'none';
@@ -1809,11 +2807,11 @@
 
         // ── 지역 선택 드롭다운 ───────────────────────────────────────────────
         const REGIONS = {
-            korea:   { label: '한국 해역',        lon: 128.0,  lat: 35.5, alt: 800000,  pitch: -45 },
-            arctic:  { label: '북극항로',         lon: 100.0,  lat: 75.0, alt: 5000000, pitch: -60 },
-            somalia: { label: '소말리아 / 아덴만', lon: 48.0,   lat: 12.0, alt: 2000000, pitch: -45 },
-            malacca: { label: '말라카 해협',       lon: 101.5,  lat: 2.5,  alt: 800000,  pitch: -45 },
-            guinea:  { label: '기니만',           lon: 3.0,    lat: 3.0,  alt: 2500000, pitch: -45 },
+            korea: { label: '한국 해역', lon: 128.0, lat: 35.5, alt: 800000, pitch: -45 },
+            arctic: { label: '북극항로', lon: 100.0, lat: 75.0, alt: 5000000, pitch: -60 },
+            somalia: { label: '소말리아 / 아덴만', lon: 48.0, lat: 12.0, alt: 2000000, pitch: -45 },
+            malacca: { label: '말라카 해협', lon: 101.5, lat: 2.5, alt: 800000, pitch: -45 },
+            guinea: { label: '기니만', lon: 3.0, lat: 3.0, alt: 2500000, pitch: -45 },
         };
 
         const regionToggle = document.getElementById('regionToggle');
@@ -1911,7 +2909,8 @@
         function updateClock() {
             if (timeMode !== 'live') return; // guard: don't overwrite history time display
             const now = new Date();
-            document.getElementById('tcb-time-display').textContent = now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+            const el = document.getElementById('tcb-time-display');
+            if (el) el.textContent = now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
         }
         setInterval(updateClock, 1000);
         updateClock();
@@ -1926,17 +2925,20 @@
             _lastReverseState = isReverse;
 
             const icon = document.getElementById('tcb-playpause-icon');
-            icon.className = playing ? 'fa-solid fa-pause' : 'fa-solid fa-play';
+            if (icon) icon.className = playing ? 'fa-solid fa-pause' : 'fa-solid fa-play';
 
             const reverseBtn = document.getElementById('tcb-reverse');
-            if (isReverse) {
-                reverseBtn.classList.add('active-reverse');
-            } else {
-                reverseBtn.classList.remove('active-reverse');
+            if (reverseBtn) {
+                if (isReverse) {
+                    reverseBtn.classList.add('active-reverse');
+                } else {
+                    reverseBtn.classList.remove('active-reverse');
+                }
             }
 
             const speed = Math.abs(viewer.clock.multiplier);
-            document.getElementById('tcb-speed').textContent = speed + 'x';
+            const speedEl = document.getElementById('tcb-speed');
+            if (speedEl) speedEl.textContent = speed + 'x';
         }
 
         function forceUpdatePlaybackUI() {
@@ -1949,6 +2951,7 @@
             const btns = ['tcb-reverse', 'tcb-playpause', 'tcb-ff'];
             btns.forEach(id => {
                 const btn = document.getElementById(id);
+                if (!btn) return;
                 if (enabled) {
                     btn.disabled = false;
                     btn.classList.add('enabled');
@@ -1957,22 +2960,25 @@
                     btn.classList.remove('enabled', 'active-reverse');
                 }
             });
-            if (enabled) {
-                document.getElementById('tcb-speed').classList.add('active');
-            } else {
-                document.getElementById('tcb-speed').classList.remove('active');
-                document.getElementById('tcb-speed').textContent = '1x';
+            const speedEl = document.getElementById('tcb-speed');
+            if (speedEl) {
+                if (enabled) {
+                    speedEl.classList.add('active');
+                } else {
+                    speedEl.classList.remove('active');
+                    speedEl.textContent = '1x';
+                }
             }
         }
 
         // Play/Pause
-        document.getElementById('tcb-playpause').addEventListener('click', () => {
+        document.getElementById('tcb-playpause')?.addEventListener('click', () => {
             viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
             forceUpdatePlaybackUI();
         });
 
         // Reverse toggle
-        document.getElementById('tcb-reverse').addEventListener('click', () => {
+        document.getElementById('tcb-reverse')?.addEventListener('click', () => {
             const m = viewer.clock.multiplier;
             viewer.clock.multiplier = m < 0 ? Math.abs(m) : -Math.abs(m);
             if (!viewer.clock.shouldAnimate) {
@@ -1982,7 +2988,7 @@
         });
 
         // Fast Forward — cycle speed steps
-        document.getElementById('tcb-ff').addEventListener('click', () => {
+        document.getElementById('tcb-ff')?.addEventListener('click', () => {
             currentSpeedIndex = (currentSpeedIndex + 1) % SPEED_STEPS.length;
             const sign = viewer.clock.multiplier < 0 ? -1 : 1;
             viewer.clock.multiplier = sign * SPEED_STEPS[currentSpeedIndex];
@@ -2174,6 +3180,7 @@
                                 width: getShipSize(shipData.length, shipData.beam).width,
                                 height: getShipSize(shipData.length, shipData.beam).height,
                                 scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
+                                disableDepthTestDistance: Number.POSITIVE_INFINITY,
                                 rotation: new Cesium.CallbackProperty(() => {
                                     const heading = headingProperty.getValue(viewer.clock.currentTime);
                                     return Cesium.Math.toRadians(-(heading || 0));
@@ -2205,6 +3212,11 @@
                     document.getElementById('loading').style.display = 'none';
                 }
                 console.log('[HISTORY] Window loaded:', shipCount, 'ships');
+
+                // Sync to 2D if active
+                if (currentMapMode === '2d' && leafletMap) {
+                    syncShipsToLeaflet();
+                }
 
             } catch (err) {
                 console.error('[HISTORY] Error loading window:', err);
@@ -2332,10 +3344,10 @@
                 timeMode = 'live';
 
                 // Update UI
-                btnLive.classList.add('active');
-                btnHistory.classList.remove('active');
-                controlBar.classList.remove('history-active');
-                timeDisplay.classList.remove('history');
+                btnLive?.classList.add('active');
+                btnHistory?.classList.remove('active');
+                controlBar?.classList.remove('history-active');
+                timeDisplay?.classList.remove('history');
 
                 // Disable playback buttons in live mode
                 enablePlaybackButtons(false);
@@ -2373,10 +3385,10 @@
                 clearProximity();
 
                 // Update UI
-                btnLive.classList.remove('active');
-                btnHistory.classList.add('active');
-                controlBar.classList.add('history-active');
-                timeDisplay.classList.add('history');
+                btnLive?.classList.remove('active');
+                btnHistory?.classList.add('active');
+                controlBar?.classList.add('history-active');
+                timeDisplay?.classList.add('history');
 
                 // Enable playback buttons
                 enablePlaybackButtons(true);
@@ -2428,8 +3440,10 @@
             // Update time display in control bar
             const jsDate = Cesium.JulianDate.toDate(clock.currentTime);
             const displayTime = jsDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-            document.getElementById('tcb-time-display').textContent = displayTime;
-            document.getElementById('last-update').textContent = displayTime.substring(11, 19);
+            const tdEl = document.getElementById('tcb-time-display');
+            if (tdEl) tdEl.textContent = displayTime;
+            const luEl = document.getElementById('last-update');
+            if (luEl) luEl.textContent = displayTime.substring(11, 19);
 
             // Sync play/pause icon state
             updatePlaybackUI();
@@ -2488,8 +3502,8 @@
         });
 
         // Setup mode toggle button listeners
-        document.getElementById('tcb-btn-live').addEventListener('click', () => setTimeMode('live'));
-        document.getElementById('tcb-btn-history').addEventListener('click', () => setTimeMode('history'));
+        document.getElementById('tcb-btn-live')?.addEventListener('click', () => setTimeMode('live'));
+        document.getElementById('tcb-btn-history')?.addEventListener('click', () => setTimeMode('history'));
 
         // Initialize: Start live clock sync
         liveClockIntervalId = setInterval(() => {
@@ -2528,71 +3542,65 @@
             if (_shipIconCache[key]) return _shipIconCache[key];
 
             const c = colorHex;
+            const s = '#000'; // stroke color for contrast on bright backgrounds
             const glow = `<defs>
                 <filter id='g' x='-50%' y='-50%' width='200%' height='200%'>
-                    <feGaussianBlur stdDeviation='1.8' result='b'/>
-                    <feMerge><feMergeNode in='b'/><feMergeNode in='SourceGraphic'/></feMerge>
+                    <feDropShadow dx='0' dy='0' stdDeviation='2' flood-color='rgba(0,0,0,0.7)'/>
                 </filter>
             </defs>`;
 
             let hull;
             switch (shipType) {
                 case 'cargo':
-                    // Wide rectangular barge — flat sides, very boxy
-                    hull = `<path d='M16,3 L24,10 L24,30 L22,34 L10,34 L8,30 L8,10 Z' fill='${c}' filter='url(#g)' opacity='0.85'/>
-                        <rect x='10' y='12' width='12' height='3.5' rx='0.5' fill='white' opacity='0.22'/>
-                        <rect x='10' y='17' width='12' height='3.5' rx='0.5' fill='white' opacity='0.17'/>
-                        <rect x='10' y='22' width='12' height='3.5' rx='0.5' fill='white' opacity='0.13'/>
-                        <rect x='13' y='6' width='6' height='4' rx='0.8' fill='white' opacity='0.3'/>`;
+                    hull = `<path d='M16,3 L24,10 L24,30 L22,34 L10,34 L8,30 L8,10 Z' fill='${c}' stroke='${s}' stroke-width='1.2' filter='url(#g)'/>
+                        <rect x='10' y='12' width='12' height='3.5' rx='0.5' fill='white' opacity='0.3'/>
+                        <rect x='10' y='17' width='12' height='3.5' rx='0.5' fill='white' opacity='0.25'/>
+                        <rect x='10' y='22' width='12' height='3.5' rx='0.5' fill='white' opacity='0.2'/>
+                        <rect x='13' y='6' width='6' height='4' rx='0.8' fill='white' opacity='0.4'/>`;
                     break;
                 case 'tanker':
-                    // Fat rounded oval hull
-                    hull = `<ellipse cx='16' cy='20' rx='9' ry='15' fill='${c}' filter='url(#g)' opacity='0.85'/>
-                        <ellipse cx='16' cy='14' rx='5' ry='3' fill='white' opacity='0.12'/>
-                        <ellipse cx='16' cy='22' rx='5' ry='3' fill='white' opacity='0.1'/>
-                        <ellipse cx='16' cy='29' rx='4' ry='2.5' fill='white' opacity='0.08'/>
-                        <rect x='13' y='6' width='6' height='3' rx='1.5' fill='white' opacity='0.3'/>`;
+                    hull = `<ellipse cx='16' cy='20' rx='9' ry='15' fill='${c}' stroke='${s}' stroke-width='1.2' filter='url(#g)'/>
+                        <ellipse cx='16' cy='14' rx='5' ry='3' fill='white' opacity='0.2'/>
+                        <ellipse cx='16' cy='22' rx='5' ry='3' fill='white' opacity='0.15'/>
+                        <ellipse cx='16' cy='29' rx='4' ry='2.5' fill='white' opacity='0.12'/>
+                        <rect x='13' y='6' width='6' height='3' rx='1.5' fill='white' opacity='0.4'/>`;
                     break;
                 case 'passenger':
-                    // Tall wide cruise ship — widest of all
-                    hull = `<path d='M16,2 L26,12 L26,28 L23,34 L9,34 L6,28 L6,12 Z' fill='${c}' filter='url(#g)' opacity='0.85'/>
-                        <rect x='8' y='12' width='16' height='2' rx='0.5' fill='white' opacity='0.25'/>
-                        <rect x='8' y='15.5' width='16' height='2' rx='0.5' fill='white' opacity='0.2'/>
-                        <rect x='8' y='19' width='16' height='2' rx='0.5' fill='white' opacity='0.17'/>
-                        <rect x='8' y='22.5' width='16' height='2' rx='0.5' fill='white' opacity='0.14'/>
-                        <rect x='11' y='5' width='10' height='5' rx='1.5' fill='white' opacity='0.25'/>
-                        <circle cx='16' cy='29' r='2' fill='white' opacity='0.1'/>`;
+                    hull = `<path d='M16,2 L26,12 L26,28 L23,34 L9,34 L6,28 L6,12 Z' fill='${c}' stroke='${s}' stroke-width='1.2' filter='url(#g)'/>
+                        <rect x='8' y='12' width='16' height='2' rx='0.5' fill='white' opacity='0.35'/>
+                        <rect x='8' y='15.5' width='16' height='2' rx='0.5' fill='white' opacity='0.3'/>
+                        <rect x='8' y='19' width='16' height='2' rx='0.5' fill='white' opacity='0.25'/>
+                        <rect x='8' y='22.5' width='16' height='2' rx='0.5' fill='white' opacity='0.2'/>
+                        <rect x='11' y='5' width='10' height='5' rx='1.5' fill='white' opacity='0.35'/>
+                        <circle cx='16' cy='29' r='2' fill='white' opacity='0.15'/>`;
                     break;
                 case 'fishing':
-                    // Tiny narrow hull + big outrigger arms extending wide
-                    hull = `<path d='M16,6 L19,14 L19,28 L17,32 L15,32 L13,28 L13,14 Z' fill='${c}' filter='url(#g)' opacity='0.85'/>
-                        <line x1='16' y1='6' x2='16' y2='16' stroke='white' stroke-width='1.2' opacity='0.5'/>
-                        <line x1='16' y1='10' x2='5' y2='18' stroke='${c}' stroke-width='1.5' opacity='0.7'/>
-                        <line x1='16' y1='10' x2='27' y2='18' stroke='${c}' stroke-width='1.5' opacity='0.7'/>
-                        <line x1='5' y1='18' x2='5' y2='24' stroke='${c}' stroke-width='1' opacity='0.5'/>
-                        <line x1='27' y1='18' x2='27' y2='24' stroke='${c}' stroke-width='1' opacity='0.5'/>
-                        <circle cx='5' cy='25' r='1' fill='${c}' opacity='0.4'/>
-                        <circle cx='27' cy='25' r='1' fill='${c}' opacity='0.4'/>`;
+                    hull = `<path d='M16,6 L19,14 L19,28 L17,32 L15,32 L13,28 L13,14 Z' fill='${c}' stroke='${s}' stroke-width='1.2' filter='url(#g)'/>
+                        <line x1='16' y1='6' x2='16' y2='16' stroke='white' stroke-width='1.2' opacity='0.6'/>
+                        <line x1='16' y1='10' x2='5' y2='18' stroke='${c}' stroke-width='1.5' opacity='0.9'/>
+                        <line x1='16' y1='10' x2='27' y2='18' stroke='${c}' stroke-width='1.5' opacity='0.9'/>
+                        <line x1='5' y1='18' x2='5' y2='24' stroke='${c}' stroke-width='1' opacity='0.7'/>
+                        <line x1='27' y1='18' x2='27' y2='24' stroke='${c}' stroke-width='1' opacity='0.7'/>
+                        <circle cx='5' cy='25' r='1' fill='${c}' opacity='0.6'/>
+                        <circle cx='27' cy='25' r='1' fill='${c}' opacity='0.6'/>`;
                     break;
                 case 'military':
-                    // Very narrow, sharp angular stealth — longest & thinnest
-                    hull = `<path d='M16,0 L20,10 L21,18 L20,30 L18,36 L14,36 L12,30 L11,18 L12,10 Z' fill='${c}' filter='url(#g)' opacity='0.9'/>
-                        <path d='M14,7 L18,7 L19,11 L13,11 Z' fill='white' opacity='0.2'/>
-                        <circle cx='16' cy='15' r='1.8' fill='white' opacity='0.2'/>
-                        <rect x='14' y='20' width='4' height='1.5' rx='0.5' fill='white' opacity='0.15'/>
-                        <line x1='16' y1='0' x2='16' y2='6' stroke='white' stroke-width='0.8' opacity='0.5'/>`;
+                    hull = `<path d='M16,0 L20,10 L21,18 L20,30 L18,36 L14,36 L12,30 L11,18 L12,10 Z' fill='${c}' stroke='${s}' stroke-width='1.2' filter='url(#g)'/>
+                        <path d='M14,7 L18,7 L19,11 L13,11 Z' fill='white' opacity='0.3'/>
+                        <circle cx='16' cy='15' r='1.8' fill='white' opacity='0.3'/>
+                        <rect x='14' y='20' width='4' height='1.5' rx='0.5' fill='white' opacity='0.25'/>
+                        <line x1='16' y1='0' x2='16' y2='6' stroke='white' stroke-width='0.8' opacity='0.6'/>`;
                     break;
                 case 'tug':
-                    // Very short & wide — almost square
-                    hull = `<path d='M16,12 L22,16 L22,28 L20,32 L12,32 L10,28 L10,16 Z' fill='${c}' filter='url(#g)' opacity='0.85'/>
-                        <rect x='12' y='15' width='8' height='6' rx='1.5' fill='white' opacity='0.3'/>
-                        <line x1='16' y1='12' x2='16' y2='14' stroke='white' stroke-width='1' opacity='0.4'/>
-                        <rect x='13' y='24' width='6' height='4' rx='0.8' fill='white' opacity='0.12'/>`;
+                    hull = `<path d='M16,12 L22,16 L22,28 L20,32 L12,32 L10,28 L10,16 Z' fill='${c}' stroke='${s}' stroke-width='1.2' filter='url(#g)'/>
+                        <rect x='12' y='15' width='8' height='6' rx='1.5' fill='white' opacity='0.4'/>
+                        <line x1='16' y1='12' x2='16' y2='14' stroke='white' stroke-width='1' opacity='0.5'/>
+                        <rect x='13' y='24' width='6' height='4' rx='0.8' fill='white' opacity='0.2'/>`;
                     break;
-                default: // other — medium generic
-                    hull = `<path d='M16,4 L21,12 L21,28 L19,33 L13,33 L11,28 L11,12 Z' fill='${c}' filter='url(#g)' opacity='0.8'/>
-                        <rect x='13' y='10' width='6' height='4' rx='1' fill='white' opacity='0.25'/>
-                        <line x1='16' y1='4' x2='16' y2='9' stroke='white' stroke-width='0.7' opacity='0.4'/>`;
+                default:
+                    hull = `<path d='M16,4 L21,12 L21,28 L19,33 L13,33 L11,28 L11,12 Z' fill='${c}' stroke='${s}' stroke-width='1.2' filter='url(#g)'/>
+                        <rect x='13' y='10' width='6' height='4' rx='1' fill='white' opacity='0.35'/>
+                        <line x1='16' y1='4' x2='16' y2='9' stroke='white' stroke-width='0.7' opacity='0.5'/>`;
             }
 
             const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 38'>${glow}${hull}</svg>`;
@@ -2690,7 +3698,7 @@
                             // Respect display sub-toggles
                             const toggleId = prefix === 'orbit-' ? 'layer-sat-orbits'
                                 : prefix === 'ground-' ? 'layer-sat-ground'
-                                : 'layer-sat-footprint';
+                                    : 'layer-sat-footprint';
                             entity.show = document.getElementById(toggleId).checked;
                         } else {
                             entity.show = false;
@@ -2705,6 +3713,16 @@
             satDataSource.show = e.target.checked;
             document.getElementById('satSubToggles').style.display = e.target.checked ? 'block' : 'none';
             if (e.target.checked) _applySatMissionFilter();
+            if (currentMapMode === '2d') {
+                if (satDataSource.show) {
+                    syncSatellitesToLeaflet();
+                } else {
+                    Object.values(leafletSatMarkers).forEach(m => leafletMap.removeLayer(m));
+                    Object.values(leafletSatTracks).forEach(t => leafletMap.removeLayer(t));
+                    leafletSatMarkers = {};
+                    leafletSatTracks = {};
+                }
+            }
         });
 
         // Mission type filter change handlers
@@ -3067,7 +4085,7 @@
             const d = distNm / R;
             const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng));
             const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(lat1),
-                                            Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+                Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
             return { lat: lat2 * toDeg, lng: lon2 * toDeg };
         }
 
@@ -3216,30 +4234,51 @@
          * nearby 선박 배열에 mlRiskLevel/mlRiskLabel을 주입한다.
          */
         function enrichNearbyWithMlRisk(selectedMmsi, nearbyVessels) {
+            // ML 위험도 매칭
             const mlRisks = (collisionData.ml && collisionData.ml.risks) || [];
-            if (mlRisks.length === 0) return;
-
-            // 선택 MMSI가 포함된 ML 쌍을 빠르게 조회할 맵 생성
-            const riskMap = {};
+            const mlRiskMap = {};
             mlRisks.forEach(r => {
                 if (r.ship_a.mmsi == selectedMmsi) {
-                    riskMap[r.ship_b.mmsi] = r;
+                    mlRiskMap[r.ship_b.mmsi] = r;
                 } else if (r.ship_b.mmsi == selectedMmsi) {
-                    riskMap[r.ship_a.mmsi] = r;
+                    mlRiskMap[r.ship_a.mmsi] = r;
                 }
             });
 
+            // 거리 기반 위험도 매칭
+            const distRisks = (collisionData.distance && collisionData.distance.risks) || [];
+            const distRiskMap = {};
+            distRisks.forEach(r => {
+                if (r.ship_a.mmsi == selectedMmsi) {
+                    distRiskMap[r.ship_b.mmsi] = r;
+                } else if (r.ship_b.mmsi == selectedMmsi) {
+                    distRiskMap[r.ship_a.mmsi] = r;
+                }
+            });
+
+            const DIST_SEVERITY_LABELS = { danger: '위험', warning: '경고' };
+
             nearbyVessels.forEach(nv => {
-                const match = riskMap[nv.mmsi];
-                if (match) {
-                    nv.mlRiskLevel = match.risk_level;
-                    nv.mlRiskLabel = match.risk_label || ML_RISK_LABELS[match.risk_level] || '';
+                const mlMatch = mlRiskMap[nv.mmsi];
+                const distMatch = distRiskMap[nv.mmsi];
+                if (mlMatch) {
+                    nv.mlRiskLevel = mlMatch.risk_level;
+                    nv.mlRiskLabel = mlMatch.risk_label || ML_RISK_LABELS[mlMatch.risk_level] || '';
+                }
+                if (distMatch) {
+                    nv.distSeverity = distMatch.severity;
+                    nv.distRiskLabel = DIST_SEVERITY_LABELS[distMatch.severity] || distMatch.severity;
                 }
             });
         }
 
         function renderProximityLines(selectedMmsi, nearbyVessels) {
             proximityDataSource.entities.removeAll();
+            // Clear 2D proximity
+            if (currentMapMode === '2d' && leafletMap) {
+                Object.values(leafletCollisionLines).forEach(l => leafletMap.removeLayer(l));
+                leafletCollisionLines = {};
+            }
             const selected = shipDataMap[selectedMmsi];
             if (!selected || nearbyVessels.length === 0) return;
 
@@ -3264,8 +4303,8 @@
                             const sel = shipDataMap[selectedMmsi];
                             const tgt = shipDataMap[nv.mmsi];
                             if (!sel || !tgt) return [];
-                            return Cesium.Cartesian3.fromDegreesArray([
-                                sel.lng, sel.lat, tgt.lng, tgt.lat
+                            return Cesium.Cartesian3.fromDegreesArrayHeights([
+                                sel.lng, sel.lat, 50, tgt.lng, tgt.lat, 50
                             ]);
                         }, false),
                         width: isMlPair ? 4 : isCollisionTarget ? 4 : isHighlight ? 3 : 2,
@@ -3335,7 +4374,7 @@
                                 const s = shipDataMap[selectedMmsi];
                                 if (!s) return [];
                                 const end = projectPosition(s.lat, s.lng, s.cog || 0, Math.max((s.sog || 0) / 60 * 10, 0.5));
-                                return Cesium.Cartesian3.fromDegreesArray([s.lng, s.lat, end.lng, end.lat]);
+                                return Cesium.Cartesian3.fromDegreesArrayHeights([s.lng, s.lat, 50, end.lng, end.lat, 50]);
                             }, false),
                             width: 2,
                             material: new Cesium.PolylineDashMaterialProperty({
@@ -3354,7 +4393,7 @@
                                 const t = shipDataMap[nv.mmsi];
                                 if (!t) return [];
                                 const end = projectPosition(t.lat, t.lng, t.cog || 0, Math.max((t.sog || 0) / 60 * 10, 0.5));
-                                return Cesium.Cartesian3.fromDegreesArray([t.lng, t.lat, end.lng, end.lat]);
+                                return Cesium.Cartesian3.fromDegreesArrayHeights([t.lng, t.lat, 50, end.lng, end.lat, 50]);
                             }, false),
                             width: 2,
                             material: new Cesium.PolylineDashMaterialProperty({
@@ -3470,19 +4509,34 @@
                     : isCollisionTarget
                         ? { css: '#f43f5e' }
                         : proximityColor(nv.distance);
+                // AI 뱃지: 보라 계열로 구분
+                const ML_BADGE_COLORS = { 3: '#a855f7', 2: '#8b5cf6', 1: '#a78bfa' };
+                const mlBadgeColor = hasMlRisk ? (ML_BADGE_COLORS[nv.mlRiskLevel] || '#a855f7') : null;
+
+                const hasDistRisk = nv.distSeverity != null;
+                const DIST_SEVERITY_COLORS = { danger: '#f43f5e', warning: '#f97316' };
+                const distColor = hasDistRisk ? (DIST_SEVERITY_COLORS[nv.distSeverity] || '#f97316') : null;
                 const highlight = hasMlRisk
-                    ? `background:${mlColor}15;border:1px solid ${mlColor}40;border-radius:6px;`
-                    : isCollisionTarget
-                        ? 'background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.3);border-radius:6px;'
-                        : '';
+                    ? `background:${mlBadgeColor}15;border:1px solid ${mlBadgeColor}40;border-radius:6px;`
+                    : hasDistRisk
+                        ? `background:${distColor}15;border:1px solid ${distColor}40;border-radius:6px;`
+                        : isCollisionTarget
+                            ? 'background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.3);border-radius:6px;'
+                            : '';
                 const mlBadge = hasMlRisk
-                    ? `<span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${mlColor}25;color:${mlColor};font-weight:600;flex-shrink:0;">${nv.mlRiskLabel}</span>`
+                    ? `<span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${mlBadgeColor}25;color:${mlBadgeColor};font-weight:600;flex-shrink:0;">AI 예측 ${nv.mlRiskLabel}</span>`
                     : '';
+                // 거리 기반 뱃지: 기존 빨강/주황 유지
+                const DIST_BADGE_LABELS = { '위험': '위험', '경고': '경고' };
+                const distBadge = hasDistRisk
+                    ? `<span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:${distColor}25;color:${distColor};font-weight:600;flex-shrink:0;">거리 기반 접근 ${nv.distRiskLabel}</span>`
+                    : '';
+                const anyRisk = hasMlRisk || hasDistRisk || isCollisionTarget;
                 return `<div class="nearby-row" data-mmsi="${nv.mmsi}" data-lat="${nv.lat}" data-lng="${nv.lng}" style="${highlight}">
                     <span class="nearby-dot" style="background:${color.css}"></span>
-                    <span class="nearby-name">${(hasMlRisk || isCollisionTarget) ? '⚠ ' : ''}${nv.name}</span>
-                    ${mlBadge}
-                    <span class="nearby-dist" style="${(hasMlRisk || isCollisionTarget) ? `color:${color.css};font-weight:700;` : ''}">${nv.distance.toFixed(1)} nm</span>
+                    <span class="nearby-name">${anyRisk ? '⚠ ' : ''}${nv.name}</span>
+                    ${mlBadge}${distBadge}
+                    <span class="nearby-dist" style="${anyRisk ? `color:${color.css};font-weight:700;` : ''}">${nv.distance.toFixed(1)} nm</span>
                 </div>`;
             }).join('');
 
@@ -3496,6 +4550,11 @@
                     });
                 });
             });
+
+            // Sync to 2D map
+            if (currentMapMode === '2d') {
+                setTimeout(() => syncProximityToLeaflet(), 50);
+            }
         }
 
         function clearProximity() {
@@ -3503,6 +4562,11 @@
             collisionTargetMmsi = null;
             proximityMissCount = 0;
             proximityDataSource.entities.removeAll();
+            // Clear 2D proximity
+            if (currentMapMode === '2d' && leafletMap) {
+                Object.values(leafletCollisionLines).forEach(l => leafletMap.removeLayer(l));
+                leafletCollisionLines = {};
+            }
             const section = document.getElementById('nearbyVesselsSection');
             if (section) section.style.display = 'none';
         }
@@ -3561,13 +4625,22 @@
             // In HISTORY mode, skip viewport culling to show all ships
             // In LIVE mode, apply viewport culling for performance
             if (timeMode === 'live') {
-                const cameraRect = viewer.camera.computeViewRectangle();
-                if (cameraRect) {
-                    const buffer = 0.5; // degrees
-                    west = Cesium.Math.toDegrees(cameraRect.west) - buffer;
-                    east = Cesium.Math.toDegrees(cameraRect.east) + buffer;
-                    south = Cesium.Math.toDegrees(cameraRect.south) - buffer;
-                    north = Cesium.Math.toDegrees(cameraRect.north) + buffer;
+                if (currentMapMode === '2d' && leafletMap) {
+                    const bounds = leafletMap.getBounds();
+                    const buffer = 0.5;
+                    west = bounds.getWest() - buffer;
+                    east = bounds.getEast() + buffer;
+                    south = bounds.getSouth() - buffer;
+                    north = bounds.getNorth() + buffer;
+                } else {
+                    const cameraRect = viewer.camera.computeViewRectangle();
+                    if (cameraRect) {
+                        const buffer = 0.5;
+                        west = Cesium.Math.toDegrees(cameraRect.west) - buffer;
+                        east = Cesium.Math.toDegrees(cameraRect.east) + buffer;
+                        south = Cesium.Math.toDegrees(cameraRect.south) - buffer;
+                        north = Cesium.Math.toDegrees(cameraRect.north) + buffer;
+                    }
                 }
             }
 
@@ -3630,6 +4703,7 @@
                                 width: shipSize.width,
                                 height: shipSize.height,
                                 scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
+                                disableDepthTestDistance: Number.POSITIVE_INFINITY,
                                 rotation: new Cesium.CallbackProperty(() => {
                                     const s = shipDataMap[mmsiKey] || ship;
                                     return Cesium.Math.toRadians(-(s.heading || 0));
@@ -3676,6 +4750,51 @@
                 const countEl = document.getElementById(`count-${type}`);
                 if (countEl) countEl.textContent = typeShips.length.toLocaleString();
             });
+
+            // 2D 모드 Leaflet 마커 갱신
+            if (currentMapMode === '2d' && leafletMap) {
+                ships.forEach(ship => {
+                    if (leafletShipMarkers[ship.mmsi]) {
+                        leafletShipMarkers[ship.mmsi].setLatLng([ship.lat, ship.lng]);
+                    } else {
+                        const type = ship.type || 'other';
+                        const color = SHIP_COLORS[type] || '#6b7280';
+                        const marker = L.circleMarker([ship.lat, ship.lng], {
+                            radius: 4,
+                            fillColor: color,
+                            fillOpacity: 0.9,
+                            color: color,
+                            weight: 1,
+                            opacity: 0.7
+                        }).addTo(leafletMap);
+
+                        marker.bindTooltip(ship.name || 'Unknown', {
+                            className: 'ship-tooltip-2d',
+                            direction: 'top',
+                            offset: [0, -6]
+                        });
+
+                        marker.on('click', () => {
+                            const ds = shipDataSources[type];
+                            const entity = ds ? ds.entities.getById(ship.mmsi) : null;
+                            if (entity) showShipInfo(entity);
+                            selectedProximityMmsi = ship.mmsi;
+                            updateProximity();
+                        });
+
+                        leafletShipMarkers[ship.mmsi] = marker;
+                    }
+                });
+
+                // 삭제된 선박 마커 제거
+                const currentMmsis = new Set(ships.map(s => String(s.mmsi)));
+                Object.keys(leafletShipMarkers).forEach(mmsi => {
+                    if (!currentMmsis.has(String(mmsi))) {
+                        leafletMap.removeLayer(leafletShipMarkers[mmsi]);
+                        delete leafletShipMarkers[mmsi];
+                    }
+                });
+            }
 
         }
 
@@ -3736,6 +4855,9 @@
 
             ws.onclose = () => {
                 console.log("WebSocket closed. Reconnecting in 5 seconds...");
+                if (currentMapMode === '2d' && leafletMap) {
+                    Object.values(leafletShipMarkers).forEach(m => m.setStyle({ opacity: 0.3, fillOpacity: 0.3 }));
+                }
                 setTimeout(initWebSocket, 5000);
             };
         }
@@ -3770,6 +4892,33 @@
             return `<span class="collision-badge" style="background:${bgs[level]};color:${colors[level]}">${level} — ${label}</span>`;
         }
 
+        function _renderCollisionTicker(list, cardsHtml, count) {
+            list.innerHTML = cardsHtml;
+            // 자동 한 칸씩 넘기기 (5초 간격)
+            _startCollisionAutoScroll(list);
+        }
+
+        let _collisionScrollTimer = null;
+        let _collisionScrollPaused = false;
+        function _startCollisionAutoScroll(list) {
+            if (_collisionScrollTimer) clearInterval(_collisionScrollTimer);
+            // 마우스 올리면 멈춤
+            list.onmouseenter = () => { _collisionScrollPaused = true; };
+            list.onmouseleave = () => { _collisionScrollPaused = false; };
+            _collisionScrollTimer = setInterval(() => {
+                if (_collisionScrollPaused) return;
+                const cards = list.querySelectorAll('.collision-card');
+                if (cards.length <= 1) return;
+                // 다음 카드 위치로 세로 스크롤, 끝에 도달하면 처음으로
+                const nextTop = list.scrollTop + 120;
+                if (nextTop >= list.scrollHeight - list.clientHeight - 10) {
+                    list.scrollTo({ top: 0, behavior: 'smooth' });
+                } else {
+                    list.scrollBy({ top: 120, behavior: 'smooth' });
+                }
+            }, 5000);
+        }
+
         function renderCollisionList() {
             const list = document.getElementById('collisionList');
             const fixedSummary = document.getElementById('mlRiskSummaryFixed');
@@ -3792,9 +4941,10 @@
             function distClass(d) { return d < 1.0 ? 'danger' : d < 2.0 ? 'warn' : ''; }
 
             if (collisionActiveTab === 'distance') {
-                // Distance: 기존 심플 카드
-                list.innerHTML = risks.map(r => `
-                    <div class="collision-card" data-mmsi-a="${r.ship_a.mmsi}" data-mmsi-b="${r.ship_b.mmsi}"
+                // Distance: ticker cards
+                const cardsHtml = risks.map(r => `
+                    <div class="collision-card"
+                         data-mmsi-a="${r.ship_a.mmsi}" data-mmsi-b="${r.ship_b.mmsi}"
                          data-lat-a="${r.ship_a.lat}" data-lng-a="${r.ship_a.lng}" data-lat-b="${r.ship_b.lat}" data-lng-b="${r.ship_b.lng}">
                         <div class="pair-header">
                             ${r.ship_a.name} <span style="color:var(--accent);">↔</span> ${r.ship_b.name}
@@ -3805,9 +4955,10 @@
                         </div>
                     </div>
                 `).join('');
+                _renderCollisionTicker(list, cardsHtml, risks.length);
             } else {
                 // ML Model: 요약 바를 고정 컨테이너에, 카드만 스크롤 리스트에
-                const countByLevel = {1: 0, 2: 0, 3: 0};
+                const countByLevel = { 1: 0, 2: 0, 3: 0 };
                 risks.forEach(r => { if (countByLevel[r.risk_level] !== undefined) countByLevel[r.risk_level]++; });
 
                 const isActive = (lvl) => mlRiskFilter === lvl ? 'active' : '';
@@ -3858,41 +5009,45 @@
                     ? risks.filter(r => r.risk_level >= 2)
                     : risks.filter(r => r.risk_level === mlRiskFilter);
 
-                list.innerHTML = filtered.length === 0
-                    ? '<div class="collision-empty">해당 등급의 위험이 없습니다</div>'
-                    : filtered.map(r => `
-                    <div class="collision-card" data-mmsi-a="${r.ship_a.mmsi}" data-mmsi-b="${r.ship_b.mmsi}"
-                         data-lat-a="${r.ship_a.lat}" data-lng-a="${r.ship_a.lng}" data-lat-b="${r.ship_b.lat}" data-lng-b="${r.ship_b.lng}"
-                         data-risk-level="${r.risk_level}">
-                        <div class="card-top">
-                            ${mlRiskBadge(r.risk_level, r.risk_label)}
-                        </div>
-                        <div class="ship-row">
-                            <span class="role-tag os">OS</span>
-                            <span class="ship-name">${r.ship_a.name}</span>
-                            <span class="ship-meta">${r.ship_a.sog}kts ${r.ship_a.cog}°</span>
-                        </div>
-                        <div class="ship-row">
-                            <span class="role-tag ts">TS</span>
-                            <span class="ship-name">${r.ship_b.name}</span>
-                            <span class="ship-meta">${r.ship_b.sog}kts ${r.ship_b.cog}°</span>
-                        </div>
-                        <div class="metrics-row">
-                            <div class="metric">
-                                <span class="metric-label">TCPA</span>
-                                <span class="metric-value ${tcpaClass(r.tcpa_min)}">${r.tcpa_min}m</span>
+                if (filtered.length === 0) {
+                    list.innerHTML = '<div class="collision-empty">해당 등급의 위험이 없습니다</div>';
+                } else {
+                    const mlCardsHtml = filtered.map(r => `
+                        <div class="collision-card"
+                             data-mmsi-a="${r.ship_a.mmsi}" data-mmsi-b="${r.ship_b.mmsi}"
+                             data-lat-a="${r.ship_a.lat}" data-lng-a="${r.ship_a.lng}" data-lat-b="${r.ship_b.lat}" data-lng-b="${r.ship_b.lng}"
+                             data-risk-level="${r.risk_level}">
+                            <div class="card-top">
+                                ${mlRiskBadge(r.risk_level, r.risk_label)}
                             </div>
-                            <div class="metric">
-                                <span class="metric-label">DCPA</span>
-                                <span class="metric-value ${dcpaClass(r.dcpa_nm)}">${r.dcpa_nm}nm</span>
+                            <div class="ship-row">
+                                <span class="role-tag os">OS</span>
+                                <span class="ship-name">${r.ship_a.name}</span>
+                                <span class="ship-meta">${r.ship_a.sog}kts ${r.ship_a.cog}°</span>
                             </div>
-                            <div class="metric">
-                                <span class="metric-label">DIST</span>
-                                <span class="metric-value ${distClass(r.current_dist_nm)}">${r.current_dist_nm}nm</span>
+                            <div class="ship-row">
+                                <span class="role-tag ts">TS</span>
+                                <span class="ship-name">${r.ship_b.name}</span>
+                                <span class="ship-meta">${r.ship_b.sog}kts ${r.ship_b.cog}°</span>
+                            </div>
+                            <div class="metrics-row">
+                                <div class="metric">
+                                    <span class="metric-label">TCPA</span>
+                                    <span class="metric-value ${tcpaClass(r.tcpa_min)}">${r.tcpa_min}m</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">DCPA</span>
+                                    <span class="metric-value ${dcpaClass(r.dcpa_nm)}">${r.dcpa_nm}nm</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">DIST</span>
+                                    <span class="metric-value ${distClass(r.current_dist_nm)}">${r.current_dist_nm}nm</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `).join('');
+                    `).join('');
+                    _renderCollisionTicker(list, mlCardsHtml, filtered.length);
+                }
             }
 
             _bindCollisionCardClicks(list);
@@ -3901,6 +5056,9 @@
         function _bindCollisionCardClicks(list) {
             list.querySelectorAll('.collision-card').forEach(card => {
                 card.addEventListener('click', () => {
+                    // 맵 영역으로 스크롤
+                    document.getElementById('mapArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
                     const latA = parseFloat(card.dataset.latA);
                     const lngA = parseFloat(card.dataset.lngA);
                     const latB = parseFloat(card.dataset.latB);
@@ -3939,7 +5097,7 @@
                     // Show ship info panel
                     for (const type in shipDataSources) {
                         const entity = shipDataSources[type].entities.getById(mmsiA)
-                                    || shipDataSources[type].entities.getById(String(mmsiA));
+                            || shipDataSources[type].entities.getById(String(mmsiA));
                         if (entity) {
                             showShipInfo(entity);
                             break;
@@ -4004,6 +5162,59 @@
                     return { icon: 'fa-triangle-exclamation', color: '#facc15', label: 'ALERT' };
                 }
 
+                function _rebuildFeedTicker(container) {
+                    const items = window._feedAlerts || [];
+                    if (items.length === 0) return;
+
+                    const cardsHtml = items.map(({ alert, icon, color, label, timeStr, borderColor }) => `
+                        <div class="feed-card" style="border-left: 3px solid ${borderColor}; cursor: pointer;"
+                             data-lat="${alert.lat || ''}" data-lng="${alert.lng || ''}" data-mmsi="${alert.mmsi || ''}">
+                            <div class="feed-meta" style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="color:${color};font-weight:700;font-size:0.7rem;letter-spacing:0.08em;">
+                                    <i class="fa-solid ${icon}" style="margin-right:5px;"></i>${label}
+                                </span>
+                                <span style="color:var(--text-dim);font-size:0.7rem;"><i class="fa-solid fa-clock" style="margin-right:3px;"></i>${timeStr}</span>
+                            </div>
+                            <h3 class="feed-title" style="margin:6px 0 4px;font-size:0.85rem;">${alert.name || 'UNKNOWN VESSEL'}</h3>
+                            <div style="color:var(--text-dim);font-size:0.75rem;line-height:1.5;">
+                                ${alert.message || ''}
+                                ${alert.country ? `<span style="margin-left:6px;opacity:0.7;">🏴 ${alert.country}</span>` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+
+                    // 카드 3개 이하면 정적, 4개 이상이면 세로 티커 (복제해서 무한 루프)
+                    if (items.length <= 3) {
+                        container.innerHTML = cardsHtml;
+                    } else {
+                        const dur = Math.max(20, items.length * 4);
+                        container.innerHTML = `<div class="feed-ticker-wrap" style="--feed-ticker-duration: ${dur}s;">${cardsHtml}${cardsHtml}</div>`;
+                    }
+
+                    // Bind click → fly to ship
+                    container.querySelectorAll('.feed-card[data-lat]').forEach(card => {
+                        const lat = parseFloat(card.dataset.lat);
+                        const lng = parseFloat(card.dataset.lng);
+                        const mmsi = card.dataset.mmsi;
+                        if (!lat || !lng) return;
+                        card.addEventListener('click', () => {
+                            document.getElementById('mapArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            smoothFlyTo({
+                                destination: Cesium.Cartesian3.fromDegrees(lng, lat, 5000.0),
+                                complete: () => {
+                                    setTimeout(() => {
+                                        for (const type in shipDataSources) {
+                                            const ds = shipDataSources[type];
+                                            const entity = ds.entities.getById(mmsi) || ds.entities.getById(String(mmsi)) || ds.entities.getById(Number(mmsi));
+                                            if (entity) { viewer.selectedEntity = entity; showShipInfo(entity); break; }
+                                        }
+                                    }, 500);
+                                }
+                            });
+                        });
+                    });
+                }
+
                 async function fetchAndRenderAlerts() {
                     try {
                         const resp = await fetch('/api/v1/alerts?limit=50');
@@ -4014,11 +5225,11 @@
                         const feedContainer = document.getElementById('eventFeed');
 
                         // Remove placeholder if present
-                        const placeholder = feedContainer.querySelector('div[style]');
+                        const placeholder = feedContainer.querySelector('div[style]:not(.feed-ticker-wrap)');
                         if (placeholder) placeholder.remove();
 
                         let newCount = 0;
-                        // Prepend newest alerts that we haven't shown yet
+                        // Collect new alerts
                         for (const alert of alerts) {
                             if (seenAlertIds.has(alert.id)) continue;
                             seenAlertIds.add(alert.id);
@@ -4029,61 +5240,19 @@
                             const severity = alert.severity || 'medium';
                             const borderColor = severity === 'high' ? '#ef4444' : severity === 'medium' ? '#f97316' : '#a78bfa';
 
-                            const card = document.createElement('div');
-                            card.className = 'feed-card';
-                            card.style.cssText = `border-left: 3px solid ${borderColor}; animation: feedCardIn 0.4s ease;`;
-                            card.innerHTML = `
-                                <div class="feed-meta" style="display:flex;justify-content:space-between;align-items:center;">
-                                    <span style="color:${color};font-weight:700;font-size:0.7rem;letter-spacing:0.08em;">
-                                        <i class="fa-solid ${icon}" style="margin-right:5px;"></i>${label}
-                                    </span>
-                                    <span style="color:var(--text-dim);font-size:0.7rem;"><i class="fa-solid fa-clock" style="margin-right:3px;"></i>${timeStr}</span>
-                                </div>
-                                <h3 class="feed-title" style="margin:6px 0 4px;font-size:0.85rem;">${alert.name || 'UNKNOWN VESSEL'}</h3>
-                                <div style="color:var(--text-dim);font-size:0.75rem;line-height:1.5;">
-                                    ${alert.message || ''}
-                                    ${alert.country ? `<span style="margin-left:6px;opacity:0.7;">🏴 ${alert.country}</span>` : ''}
-                                </div>
-                            `;
-
-                            // Click to fly to vessel location and select the entity
-                            if (alert.lat && alert.lng) {
-                                card.style.cursor = 'pointer';
-                                card.addEventListener('click', () => {
-                                    const mmsi = alert.mmsi;
-
-                                    // 먼저 위치로 이동, 이동 완료 후 엔티티 찾기
-                                    smoothFlyTo({
-                                        destination: Cesium.Cartesian3.fromDegrees(alert.lng, alert.lat, 5000.0),
-                                        complete: () => {
-                                            // 이동 완료 후 엔티티 찾기 (이제 뷰포트 안에 있음)
-                                            // 엔티티 ID 타입이 숫자/문자열 모두 가능하므로 둘 다 시도
-                                            setTimeout(() => {
-                                                let found = false;
-                                                for (const type in shipDataSources) {
-                                                    const ds = shipDataSources[type];
-                                                    const entity = ds.entities.getById(mmsi) || ds.entities.getById(String(mmsi)) || ds.entities.getById(Number(mmsi));
-                                                    if (entity) {
-                                                        viewer.selectedEntity = entity;
-                                                        showShipInfo(entity);
-                                                        found = true;
-                                                        break;
-                                                    }
-                                                }
-                                            }, 500); // WebSocket 업데이트 대기
-                                        }
-                                    });
-                                });
-                            }
-
-                            // Prepend so newest is on top
-                            feedContainer.insertBefore(card, feedContainer.firstChild);
+                            // Store alert data for ticker rebuild
+                            if (!window._feedAlerts) window._feedAlerts = [];
+                            window._feedAlerts.unshift({ alert, icon, color, label, timeStr, borderColor });
                         }
 
-                        // Keep feed from growing too large (max 80 cards)
-                        const allCards = feedContainer.querySelectorAll('.feed-card');
-                        if (allCards.length > 80) {
-                            for (let i = 80; i < allCards.length; i++) allCards[i].remove();
+                        // Cap stored alerts
+                        if (window._feedAlerts && window._feedAlerts.length > 50) {
+                            window._feedAlerts = window._feedAlerts.slice(0, 50);
+                        }
+
+                        // Rebuild ticker if new alerts arrived
+                        if (newCount > 0 && window._feedAlerts && window._feedAlerts.length > 0) {
+                            _rebuildFeedTicker(feedContainer);
                         }
                     } catch (e) {
                         console.warn('Alert fetch failed:', e);
