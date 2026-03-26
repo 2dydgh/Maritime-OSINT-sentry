@@ -7,6 +7,11 @@ var leafletMap = null;
 var viewer = null; // set in map-cesium.js
 var shipDataMap = {};
 var shipDataSources = {};
+// Primitive Collection 참조 (신규)
+var shipBillboards = {};      // { type: BillboardCollection }
+var shipLabels = {};           // { type: LabelCollection }
+var shipBillboardMap = {};     // { mmsi: Billboard }
+var shipLabelMap = {};         // { mmsi: Label }
 var SHIP_TYPES = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
 var SHIP_COLORS = {
     cargo: '#10b981',
@@ -32,6 +37,13 @@ var SAT_COLORS = {
 };
 
 var proximityDataSource = null; // set in map-cesium.js
+// Proximity Primitive Collections (신규)
+var proximityLines = null;     // PolylineCollection
+var proximityLabels = null;    // LabelCollection
+var proximityCogLines = null;  // PolylineCollection
+var proximityCpaPoints = null; // PointPrimitiveCollection
+var proximityCpaLabels = null; // LabelCollection
+var proximityMap = {};         // { targetMmsi: { line, label, cogSel, cogTgt, cpaPoint, cpaLabel } }
 var selectedProximityMmsi = null;
 var collisionTargetMmsi = null;
 var latestWsShipsMmsis = new Set();
