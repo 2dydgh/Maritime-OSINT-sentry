@@ -240,13 +240,9 @@ function _bindCollisionCardClicks(list) {
                 updateProximity();
             }
 
-            for (var type in shipDataSources) {
-                var entity = shipDataSources[type].entities.getById(mmsiA)
-                    || shipDataSources[type].entities.getById(String(mmsiA));
-                if (entity) {
-                    showShipInfo(entity);
-                    break;
-                }
+            // showShipInfo는 이제 mmsi도 받을 수 있음
+            if (shipDataMap[mmsiA] || shipDataMap[String(mmsiA)]) {
+                showShipInfo(mmsiA);
             }
         });
     });
@@ -263,8 +259,33 @@ async function fetchCollisionRisks() {
         var total = (collisionData.distance?.total || 0) + mlSerious;
         var badge = document.getElementById('collision-count');
         if (badge) badge.textContent = total;
+
+        // Update header collision risk counts
+        _updateHeaderCollisionStats();
     } catch (e) {
         console.warn('Collision fetch failed:', e);
     }
 }
 window.fetchCollisionRisks = fetchCollisionRisks;
+
+function _updateHeaderCollisionStats() {
+    var distRisks = (collisionData.distance && collisionData.distance.risks) || [];
+    var mlRisks = (collisionData.ml && collisionData.ml.risks) || [];
+
+    // Distance: danger + high = danger, warning + medium = warning
+    var distDanger = distRisks.filter(function(r) { return r.severity === 'danger' || r.severity === 'high'; }).length;
+    var distWarn = distRisks.filter(function(r) { return r.severity === 'warning' || r.severity === 'medium'; }).length;
+
+    // ML: level 3 = danger, level 2 = warning
+    var mlDanger = mlRisks.filter(function(r) { return r.risk_level >= 3; }).length;
+    var mlWarn = mlRisks.filter(function(r) { return r.risk_level === 2; }).length;
+
+    var totalDanger = distDanger + mlDanger;
+    var totalWarn = distWarn + mlWarn;
+
+    var dots = document.querySelectorAll('#stat-collision-risks .header-risk-dot');
+    if (dots.length >= 2) {
+        dots[0].textContent = totalDanger;
+        dots[1].textContent = totalWarn;
+    }
+}

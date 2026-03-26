@@ -277,7 +277,11 @@ async function loadHistoryWindow(centerDate, opts) {
             if (shipDataSources[type]) {
                 shipDataSources[type].entities.removeAll();
             }
+            if (shipBillboards[type]) shipBillboards[type].removeAll();
+            if (shipLabels[type]) shipLabels[type].removeAll();
         });
+        shipBillboardMap = {};
+        shipLabelMap = {};
         newEntities.forEach(function(item) { item.ds.entities.add(item.def); });
 
         currentWindowCenter = centerDate;
@@ -373,7 +377,11 @@ async function setTimeMode(mode) {
             if (shipDataSources[type]) {
                 shipDataSources[type].entities.removeAll();
             }
+            if (shipBillboards[type]) shipBillboards[type].removeAll();
+            if (shipLabels[type]) shipLabels[type].removeAll();
         });
+        shipBillboardMap = {};
+        shipLabelMap = {};
 
         currentWindowCenter = null;
         currentWindowStart = null;
@@ -404,7 +412,11 @@ async function setTimeMode(mode) {
             if (shipDataSources[type]) {
                 shipDataSources[type].entities.removeAll();
             }
+            if (shipBillboards[type]) shipBillboards[type].removeAll();
+            if (shipLabels[type]) shipLabels[type].removeAll();
         });
+        shipBillboardMap = {};
+        shipLabelMap = {};
 
         var rangeLoaded = await loadHistoryRange();
 
@@ -572,10 +584,10 @@ async function fetchData() {
                         destination: Cesium.Cartesian3.fromDegrees(lng, lat, 5000.0),
                         complete: function() {
                             setTimeout(function() {
-                                for (var type in shipDataSources) {
-                                    var ds = shipDataSources[type];
-                                    var entity = ds.entities.getById(mmsi) || ds.entities.getById(String(mmsi)) || ds.entities.getById(Number(mmsi));
-                                    if (entity) { viewer.selectedEntity = entity; showShipInfo(entity); break; }
+                                if (shipDataMap[mmsi] || shipDataMap[String(mmsi)]) {
+                                    showShipInfo(mmsi);
+                                    selectedProximityMmsi = mmsi;
+                                    updateProximity();
                                 }
                             }, 500);
                         }
