@@ -2119,8 +2119,6 @@
         let currentMapMode = '3d';
         let leafletMap = null;
 
-        function getGridColumns() { return ''; }
-
         function toggleLeftPanel() {
             const panel = document.getElementById('feedPanel');
             panel.classList.toggle('panel-collapsed');
@@ -2129,7 +2127,7 @@
         function toggleCollisionDrawer() {
             const drawer = document.getElementById('collisionDrawer');
             drawer.classList.toggle('collapsed');
-            setTimeout(resizeActiveMap, 350);
+            setTimeout(resizeActiveMap, 320);
         }
 
         function toggleRightPanel() {
@@ -2144,11 +2142,13 @@
         }
 
         function resizeActiveMap() {
-            if (currentMapMode === '3d' && typeof viewer !== 'undefined' && viewer) {
-                viewer.resize();
-            } else if (currentMapMode === '2d' && leafletMap) {
-                leafletMap.invalidateSize();
-            }
+            setTimeout(() => {
+                if (currentMapMode === '3d' && typeof viewer !== 'undefined' && viewer) {
+                    viewer.resize();
+                } else if (currentMapMode === '2d' && leafletMap) {
+                    leafletMap.invalidateSize();
+                }
+            }, 50);
         }
 
         // ── Leaflet 2D Map ──
@@ -4925,6 +4925,29 @@
             const data = collisionActiveTab === 'distance' ? collisionData.distance : collisionData.ml;
             const risks = data.risks || [];
 
+            // Update drawer summary bar (visible when collapsed)
+            const summaryStats = document.getElementById('drawerSummaryStats');
+            const summaryCount = document.getElementById('collision-count-summary');
+            if (summaryStats && summaryCount) {
+                summaryCount.textContent = risks.length;
+                if (collisionActiveTab === 'ml') {
+                    const countByLevel = { 1: 0, 2: 0, 3: 0 };
+                    risks.forEach(r => { if (countByLevel[r.risk_level] !== undefined) countByLevel[r.risk_level]++; });
+                    summaryStats.innerHTML =
+                        `<span class="s-danger">위험 ${countByLevel[3]}</span>` +
+                        `<span class="s-warn">경고 ${countByLevel[2]}</span>` +
+                        `<span class="s-caution">주의 ${countByLevel[1]}</span>`;
+                } else {
+                    const highCount = risks.filter(r => r.severity === 'high' || r.severity === 'danger').length;
+                    const medCount = risks.filter(r => r.severity === 'medium' || r.severity === 'warning').length;
+                    const lowCount = risks.length - highCount - medCount;
+                    summaryStats.innerHTML =
+                        `<span class="s-danger">고위험 ${highCount}</span>` +
+                        `<span class="s-warn">경고 ${medCount}</span>` +
+                        `<span class="s-caution">주의 ${lowCount}</span>`;
+                }
+            }
+
             // 탭 전환 시 고정 요약 바 숨기기/보이기
             if (collisionActiveTab !== 'ml') {
                 fixedSummary.style.display = 'none';
@@ -5056,9 +5079,6 @@
         function _bindCollisionCardClicks(list) {
             list.querySelectorAll('.collision-card').forEach(card => {
                 card.addEventListener('click', () => {
-                    // 맵 영역으로 스크롤
-                    document.getElementById('mapArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
-
                     const latA = parseFloat(card.dataset.latA);
                     const lngA = parseFloat(card.dataset.lngA);
                     const latB = parseFloat(card.dataset.latB);
@@ -5198,7 +5218,6 @@
                         const mmsi = card.dataset.mmsi;
                         if (!lat || !lng) return;
                         card.addEventListener('click', () => {
-                            document.getElementById('mapArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
                             smoothFlyTo({
                                 destination: Cesium.Cartesian3.fromDegrees(lng, lat, 5000.0),
                                 complete: () => {
