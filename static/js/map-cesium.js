@@ -321,11 +321,19 @@ function smoothFlyTo(options) {
     var destCart = Cesium.Cartographic.fromCartesian(options.destination);
     var destAlt = destCart.height;
     var maxH = Math.max(destAlt * 1.8, 800000);
+    var userComplete = options.complete;
     viewer.camera.flyTo({
         ...options,
         duration: options.duration || 2.0,
         maximumHeight: maxH,
-        easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT
+        easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
+        complete: function() {
+            // 카메라 이동 완료 후 선박 즉시 리렌더 (뷰포트 컬링 갱신)
+            if (_lastShipsData && timeMode === 'live') {
+                updateShipsLayer(_lastShipsData);
+            }
+            if (userComplete) userComplete();
+        }
     });
 }
 window.smoothFlyTo = smoothFlyTo;

@@ -402,7 +402,8 @@ function initWebSocket() {
         try {
             var data = JSON.parse(event.data);
             if (data.type === "ships_update") {
-                updateShipsLayer(data.ships || []);
+                _lastShipsData = data.ships || [];
+                updateShipsLayer(_lastShipsData);
 
                 // Update ship type distribution chart
                 if (typeof updateShipTypeChart === 'function') updateShipTypeChart(data.ships || []);
