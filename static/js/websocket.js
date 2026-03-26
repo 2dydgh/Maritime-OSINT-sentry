@@ -90,9 +90,14 @@ SHIP_TYPES.forEach(function(type) {
     var checkbox = document.getElementById('filter-' + type);
     if (checkbox) {
         checkbox.addEventListener('change', function() {
+            // Primitive Collections (라이브 3D)
+            if (shipBillboards[type]) shipBillboards[type].show = checkbox.checked;
+            if (shipLabels[type]) shipLabels[type].show = checkbox.checked;
+            // DataSource (히스토리 모드)
             if (shipDataSources[type]) {
                 shipDataSources[type].show = checkbox.checked;
             }
+            // Leaflet 2D
             if (currentMapMode === '2d' && leafletMap && leafletShipLayerGroups[type]) {
                 if (checkbox.checked) {
                     leafletShipLayerGroups[type].addTo(leafletMap);
@@ -180,12 +185,65 @@ function updateShipsLayer(ships) {
     var MAX_SHIPS_PER_TYPE = (timeMode === 'history') ? 2000 : 400;
     var totalRendered = 0;
 
+    // ── 히스토리 모드: 기존 Entity 방식 유지 ──
+    if (timeMode === 'history') {
+        SHIP_TYPES.forEach(function(type) {
+            var ds = shipDataSources[type];
+            if (!ds) return;
+
+            var typeShips = byType[type];
+            var existingIds = new Set();
+            var typeRenderedCount = 0;
+
+            typeShips.forEach(function(ship) {
+                if (typeRenderedCount >= MAX_SHIPS_PER_TYPE) return;
+                if (ship.lng < west || ship.lng > east || ship.lat < south || ship.lat > north) return;
+
+                typeRenderedCount++;
+                totalRendered++;
+                existingIds.add(ship.mmsi);
+                var entity = ds.entities.getById(ship.mmsi);
+                var position = Cesium.Cartesian3.fromDegrees(ship.lng, ship.lat);
+
+                if (!entity) {
+                    var shipSize = getShipSize(ship.length, ship.beam);
+                    ds.entities.add({
+                        id: ship.mmsi,
+                        name: ship.name,
+                        position: position,
+                        billboard: {
+                            image: getShipIcon(SHIP_COLORS[type], type),
+                            width: shipSize.width,
+                            height: shipSize.height,
+                            scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
+                            disableDepthTestDistance: Number.POSITIVE_INFINITY
+                        }
+                    });
+                } else {
+                    entity.position = position;
+                }
+            });
+
+            ds.entities.values.forEach(function(entity) {
+                if (!existingIds.has(entity.id)) {
+                    ds.entities.remove(entity);
+                }
+            });
+
+            var countEl = document.getElementById('count-' + type);
+            if (countEl) countEl.textContent = typeShips.length.toLocaleString();
+        });
+        return;
+    }
+
+    // ── 라이브 모드: Primitive Collection 방식 ──
     SHIP_TYPES.forEach(function(type) {
-        var ds = shipDataSources[type];
-        if (!ds) return;
+        var billboards = shipBillboards[type];
+        var labels = shipLabels[type];
+        if (!billboards || !labels) return;
 
         var typeShips = byType[type];
-        var existingIds = new Set();
+        var seenMmsis = new Set();
         var typeRenderedCount = 0;
 
         typeShips.forEach(function(ship) {
@@ -194,81 +252,69 @@ function updateShipsLayer(ships) {
 
             typeRenderedCount++;
             totalRendered++;
-            existingIds.add(ship.mmsi);
-            var entity = ds.entities.getById(ship.mmsi);
+            seenMmsis.add(ship.mmsi);
+
             var position = Cesium.Cartesian3.fromDegrees(ship.lng, ship.lat);
+            var heading = Cesium.Math.toRadians(-(ship.heading || 0));
 
-            if (!entity) {
-                var mmsiKey = ship.mmsi;
-                var desc = new Cesium.CallbackProperty(function() {
-                    var s = shipDataMap[mmsiKey] || ship;
-                    var rows = '\
-                            <tr><th>Name</th><td>' + s.name + '</td></tr>\
-                            <tr><th>MMSI</th><td>' + s.mmsi + '</td></tr>\
-                            <tr><th>Type</th><td>' + s.type + '</td></tr>\
-                            <tr><th>Country</th><td>' + (s.country || 'UNKNOWN') + '</td></tr>\
-                            <tr><th>SOG</th><td>' + (s.sog || 0) + ' kts</td></tr>\
-                            <tr><th>COG</th><td>' + (s.cog || 0) + '\u00b0</td></tr>\
-                            <tr><th>Heading</th><td>' + (s.heading || 0) + '\u00b0</td></tr>';
-                    if (s.length) rows += '<tr><th>Length</th><td>' + s.length + ' m</td></tr>';
-                    if (s.beam) rows += '<tr><th>Beam</th><td>' + s.beam + ' m</td></tr>';
-                    if (s.draught) rows += '<tr><th>Draught</th><td>' + s.draught + ' m</td></tr>';
-                    if (s.destination && s.destination !== 'UNKNOWN') rows += '<tr><th>Destination</th><td>' + s.destination + '</td></tr>';
-                    if (s.eta) rows += '<tr><th>ETA</th><td>' + s.eta + '</td></tr>';
-                    if (s.callsign) rows += '<tr><th>Callsign</th><td>' + s.callsign + '</td></tr>';
-                    if (s.imo) rows += '<tr><th>IMO</th><td>' + s.imo + '</td></tr>';
-                    return '<table class="cesium-infoBox-defaultTable"><tbody>' + rows + '</tbody></table>';
-                }, false);
-
-                var shipSize = getShipSize(ship.length, ship.beam);
-                ds.entities.add({
-                    id: ship.mmsi,
-                    name: ship.name,
-                    description: desc,
-                    position: position,
-                    billboard: {
-                        image: getShipIcon(SHIP_COLORS[type], type),
-                        width: shipSize.width,
-                        height: shipSize.height,
-                        scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
-                        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-                        rotation: new Cesium.CallbackProperty(function() {
-                            var s = shipDataMap[mmsiKey] || ship;
-                            return Cesium.Math.toRadians(-(s.heading || 0));
-                        }, false)
-                    },
-                    label: {
-                        text: ship.name || '',
-                        font: '11px Inter, sans-serif',
-                        fillColor: Cesium.Color.fromCssColorString(SHIP_COLORS[type] || '#6b7280'),
-                        outlineColor: Cesium.Color.BLACK,
-                        outlineWidth: 3,
-                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                        pixelOffset: new Cesium.Cartesian2(0, -18),
-                        scaleByDistance: new Cesium.NearFarScalar(5e5, 1.0, 5e6, 0.4),
-                        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3e6),
-                        disableDepthTestDistance: Number.POSITIVE_INFINITY
-                    }
-                });
+            var existingBb = shipBillboardMap[ship.mmsi];
+            if (existingBb) {
+                // 기존 billboard 업데이트 — 직접 세팅, Property 평가 없음
+                existingBb.position = position;
+                existingBb.rotation = heading;
+                // 라벨도 업데이트
+                var existingLabel = shipLabelMap[ship.mmsi];
+                if (existingLabel) {
+                    existingLabel.position = position;
+                }
             } else {
-                entity.position = position;
+                // 새 billboard 추가
+                var shipSize = getShipSize(ship.length, ship.beam);
+                var bb = billboards.add({
+                    position: position,
+                    image: getShipIcon(SHIP_COLORS[type], type),
+                    width: shipSize.width,
+                    height: shipSize.height,
+                    rotation: heading,
+                    scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY
+                });
+                bb._mmsi = ship.mmsi;
+                bb._shipType = type;
+                shipBillboardMap[ship.mmsi] = bb;
+
+                // 새 라벨 추가
+                var lbl = labels.add({
+                    position: position,
+                    text: ship.name || '',
+                    font: '11px Inter, sans-serif',
+                    fillColor: Cesium.Color.fromCssColorString(SHIP_COLORS[type] || '#6b7280'),
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 3,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    pixelOffset: new Cesium.Cartesian2(0, -18),
+                    scaleByDistance: new Cesium.NearFarScalar(5e5, 1.0, 5e6, 0.4),
+                    distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3e6),
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY
+                });
+                lbl._mmsi = ship.mmsi;
+                shipLabelMap[ship.mmsi] = lbl;
             }
         });
 
-        ds.entities.values.forEach(function(entity) {
-            var stillExists = false;
-            for (var i = 0; i < typeShips.length; i++) {
-                if (typeShips[i].mmsi === entity.id) {
-                    stillExists = true;
-                    var ship = typeShips[i];
-                    var inBounds = (ship.lng >= west && ship.lng <= east && ship.lat >= south && ship.lat <= north);
-                    entity.show = inBounds;
-                    break;
-                }
+        // 뷰포트 밖이거나 사라진 선박 제거
+        var toRemoveMmsis = [];
+        for (var mmsi in shipBillboardMap) {
+            var bb = shipBillboardMap[mmsi];
+            if (bb._shipType === type && !seenMmsis.has(mmsi)) {
+                toRemoveMmsis.push(mmsi);
             }
-            if (!stillExists) {
-                ds.entities.remove(entity);
-            }
+        }
+        toRemoveMmsis.forEach(function(mmsi) {
+            billboards.remove(shipBillboardMap[mmsi]);
+            labels.remove(shipLabelMap[mmsi]);
+            delete shipBillboardMap[mmsi];
+            delete shipLabelMap[mmsi];
         });
 
         var countEl = document.getElementById('count-' + type);
@@ -371,12 +417,14 @@ function initWebSocket() {
                 }
 
                 document.getElementById('total-ships').textContent = (data.total_tracked || data.ship_count || 0).toLocaleString();
-                document.getElementById('stat-assets').textContent = data.total_tracked || data.ship_count || 0;
 
                 if (data.timestamp) {
                     var updated = new Date(data.timestamp);
                     document.getElementById('last-update').textContent = updated.toISOString().substring(11, 19);
                 }
+
+                // Update header latency indicator
+                _lastWsReceived = Date.now();
             }
         } catch (error) {
             console.error("Error parsing WebSocket message:", error);
@@ -396,3 +444,26 @@ function initWebSocket() {
     };
 }
 window.initWebSocket = initWebSocket;
+
+// ── Header latency indicator ──
+var _lastWsReceived = 0;
+
+setInterval(function() {
+    var el = document.getElementById('stat-latency');
+    if (!el) return;
+
+    if (_lastWsReceived === 0) {
+        el.textContent = '--';
+        el.className = '';
+        return;
+    }
+
+    var ago = Math.round((Date.now() - _lastWsReceived) / 1000);
+    if (ago < 60) {
+        el.textContent = ago + 's';
+        el.className = ago <= 5 ? 'fresh' : ago <= 15 ? '' : 'stale';
+    } else {
+        el.textContent = Math.floor(ago / 60) + 'm';
+        el.className = 'dead';
+    }
+}, 1000);
