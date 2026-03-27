@@ -2,32 +2,40 @@
 
 var gaugeChart = null;
 var radarChart = null;
+var trendChart = null;
 var shipTypeBarChart = null;
+
+// 위험도 트렌드 히스토리 (최대 30개 포인트, 10초 간격 = 5분)
+var _riskTrendHistory = [];
+var _TREND_MAX = 30;
 
 var CHART_THEME = {
     bg: 'transparent',
-    text: '#94a3b8',
-    textDim: '#64748b',
-    axisLine: 'rgba(148,163,184,0.15)',
+    text: '#cbd5e1',
+    textDim: '#94a3b8',
+    axisLine: 'rgba(148,163,184,0.18)',
     danger: '#f43f5e',
     warning: '#f97316',
     caution: '#eab308',
     safe: '#10b981',
-    accent: '#14b8a6'
+    accent: '#3b82f6'
 };
 
 function initCharts() {
     var gaugeEl = document.getElementById('riskGaugeChart');
     var radarEl = document.getElementById('riskRadarChart');
+    var trendEl = document.getElementById('riskTrendChart');
     var barEl = document.getElementById('shipTypeChart');
 
     if (gaugeEl) gaugeChart = echarts.init(gaugeEl, null, { renderer: 'canvas' });
     if (radarEl) radarChart = echarts.init(radarEl, null, { renderer: 'canvas' });
+    if (trendEl) trendChart = echarts.init(trendEl, null, { renderer: 'canvas' });
     if (barEl) shipTypeBarChart = echarts.init(barEl, null, { renderer: 'canvas' });
 
     // Set initial empty state
     if (gaugeChart) gaugeChart.setOption(buildGaugeOption(0));
     if (radarChart) radarChart.setOption(buildRadarOption({}));
+    if (trendChart) trendChart.setOption(buildTrendOption([]));
     if (shipTypeBarChart) shipTypeBarChart.setOption(buildShipTypeOption({}));
 
     // Resize on window resize
@@ -37,6 +45,7 @@ function initCharts() {
         _resizeTimer = setTimeout(function() {
             if (gaugeChart) gaugeChart.resize();
             if (radarChart) radarChart.resize();
+            if (trendChart) trendChart.resize();
             if (shipTypeBarChart) shipTypeBarChart.resize();
         }, 300);
     });
@@ -77,16 +86,17 @@ function buildGaugeOption(riskScore) {
             title: {
                 show: true,
                 offsetCenter: [0, '75%'],
-                fontSize: 8,
-                color: CHART_THEME.textDim,
-                fontFamily: 'JetBrains Mono, monospace'
+                fontSize: 10,
+                color: CHART_THEME.text,
+                fontFamily: "'Pretendard Variable', 'Inter', sans-serif",
+                fontWeight: 600
             },
             detail: {
                 valueAnimation: true,
                 offsetCenter: [0, '15%'],
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: 700,
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: "'Pretendard Variable', 'Inter', sans-serif",
                 color: color,
                 formatter: '{value}'
             },
@@ -119,12 +129,13 @@ function buildRadarOption(factors) {
         radar: {
             indicator: indicators,
             shape: 'polygon',
-            radius: '58%',
+            radius: '42%',
             center: ['50%', '55%'],
             axisName: {
-                color: CHART_THEME.textDim,
-                fontSize: 8,
-                fontFamily: 'JetBrains Mono, monospace'
+                color: CHART_THEME.text,
+                fontSize: 9,
+                fontWeight: 600,
+                fontFamily: "'Pretendard Variable', 'Inter', sans-serif"
             },
             splitArea: { areaStyle: { color: 'transparent' } },
             splitLine: { lineStyle: { color: CHART_THEME.axisLine } },
@@ -135,7 +146,7 @@ function buildRadarOption(factors) {
             symbol: 'circle',
             symbolSize: 4,
             lineStyle: { width: 1.5, color: CHART_THEME.accent },
-            areaStyle: { color: 'rgba(20,184,166,0.15)' },
+            areaStyle: { color: 'rgba(59,130,246,0.15)' },
             itemStyle: { color: CHART_THEME.accent },
             data: [{ value: values }]
         }]
@@ -168,7 +179,7 @@ function buildShipTypeOption(counts) {
             axisLabel: {
                 color: CHART_THEME.textDim,
                 fontSize: 9,
-                fontFamily: 'JetBrains Mono, monospace'
+                fontFamily: "'Pretendard Variable', 'Inter', sans-serif"
             }
         },
         series: [{
@@ -182,11 +193,89 @@ function buildShipTypeOption(counts) {
                 position: 'right',
                 fontSize: 9,
                 color: CHART_THEME.text,
-                fontFamily: 'JetBrains Mono, monospace'
+                fontFamily: "'Pretendard Variable', 'Inter', sans-serif"
             },
             animationDuration: 600,
             animationEasing: 'cubicOut'
         }]
+    };
+}
+
+// ── Risk Trend Line ──
+function buildTrendOption(history) {
+    var times = history.map(function(h) {
+        var d = new Date(h.t);
+        return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+    });
+    var scores = history.map(function(h) { return h.score; });
+    var counts = history.map(function(h) { return h.count; });
+
+    return {
+        backgroundColor: CHART_THEME.bg,
+        grid: { left: 32, right: 32, top: 10, bottom: 18 },
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(15,15,20,0.9)',
+            borderColor: 'rgba(59,130,246,0.3)',
+            textStyle: { color: '#e2e8f0', fontSize: 10, fontFamily: "'Pretendard Variable', sans-serif" },
+            formatter: function(params) {
+                var s = params[0];
+                var c = params[1];
+                return s.axisValue + '<br/>' +
+                    '<span style="color:' + CHART_THEME.accent + '">\u25cf</span> 위험도 ' + s.value +
+                    '<br/><span style="color:' + CHART_THEME.danger + '">\u25cf</span> 위험 쌍 ' + (c ? c.value : 0) + '건';
+            }
+        },
+        xAxis: {
+            type: 'category',
+            data: times,
+            axisLine: { lineStyle: { color: CHART_THEME.axisLine } },
+            axisTick: { show: false },
+            axisLabel: { color: CHART_THEME.textDim, fontSize: 8, fontFamily: "'Pretendard Variable', 'Inter', sans-serif", interval: Math.max(0, Math.floor(times.length / 4) - 1) }
+        },
+        yAxis: [
+            {
+                type: 'value', min: 0, max: 100, show: false
+            },
+            {
+                type: 'value', min: 0, show: false
+            }
+        ],
+        series: [
+            {
+                name: '위험도',
+                type: 'line',
+                data: scores,
+                smooth: true,
+                symbol: 'none',
+                lineStyle: { width: 2, color: CHART_THEME.accent },
+                areaStyle: {
+                    color: {
+                        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                        colorStops: [
+                            { offset: 0, color: 'rgba(59,130,246,0.25)' },
+                            { offset: 1, color: 'rgba(59,130,246,0)' }
+                        ]
+                    }
+                },
+                yAxisIndex: 0
+            },
+            {
+                name: '위험 쌍',
+                type: 'bar',
+                data: counts,
+                barWidth: 4,
+                itemStyle: {
+                    color: function(params) {
+                        return params.value >= 3 ? CHART_THEME.danger :
+                               params.value >= 2 ? CHART_THEME.warning :
+                               'rgba(59,130,246,0.4)';
+                    },
+                    borderRadius: [2, 2, 0, 0]
+                },
+                yAxisIndex: 1
+            }
+        ]
     };
 }
 
@@ -196,15 +285,31 @@ function updateCollisionCharts() {
     var chartsRow = document.getElementById('chartsRow');
     if (!chartsRow) return;
 
+    var riskScore;
     if (collisionActiveTab === 'distance') {
-        _updateDistanceCharts(chartsRow);
+        riskScore = _updateDistanceCharts(chartsRow);
     } else {
-        _updateMlCharts(chartsRow);
+        riskScore = _updateMlCharts(chartsRow);
+    }
+
+    // 트렌드 히스토리에 현재 점수 추가
+    if (riskScore != null) {
+        var allRisks = [].concat(
+            (collisionData.distance && collisionData.distance.risks) || [],
+            (collisionData.ml && collisionData.ml.risks) || []
+        );
+        var highCount = allRisks.filter(function(r) {
+            return r.severity === 'danger' || r.severity === 'high' || r.risk_level >= 2;
+        }).length;
+        _riskTrendHistory.push({ t: Date.now(), score: riskScore, count: highCount });
+        if (_riskTrendHistory.length > _TREND_MAX) _riskTrendHistory.shift();
+        if (trendChart) trendChart.setOption(buildTrendOption(_riskTrendHistory));
     }
 
     setTimeout(function() {
         if (gaugeChart) gaugeChart.resize();
         if (radarChart) radarChart.resize();
+        if (trendChart) trendChart.resize();
     }, 100);
 }
 
@@ -214,7 +319,7 @@ function _updateDistanceCharts(chartsRow) {
 
     if (risks.length === 0) {
         chartsRow.style.display = 'none';
-        return;
+        return null;
     }
     chartsRow.style.display = 'flex';
 
@@ -246,6 +351,7 @@ function _updateDistanceCharts(chartsRow) {
         };
         radarChart.setOption(buildRadarOption(factors));
     }
+    return riskScore;
 }
 
 // ── AI분석 탭: XGBoost ML 위험도 ──
@@ -254,7 +360,7 @@ function _updateMlCharts(chartsRow) {
 
     if (risks.length === 0) {
         chartsRow.style.display = 'none';
-        return;
+        return null;
     }
     chartsRow.style.display = 'flex';
 
@@ -293,6 +399,7 @@ function _updateMlCharts(chartsRow) {
         }
         radarChart.setOption(buildRadarOption(factors));
     }
+    return riskScore;
 }
 window.updateCollisionCharts = updateCollisionCharts;
 

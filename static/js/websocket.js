@@ -463,6 +463,7 @@ function initWebSocket() {
                     }
                 }
 
+
                 document.getElementById('total-ships').textContent = (data.total_tracked || data.ship_count || 0).toLocaleString();
 
                 if (data.timestamp) {

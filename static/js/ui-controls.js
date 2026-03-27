@@ -10,9 +10,23 @@ window.toggleLeftPanel = toggleLeftPanel;
 function toggleCollisionDrawer() {
     var drawer = document.getElementById('collisionDrawer');
     drawer.classList.toggle('collapsed');
+    // 선박 정보 패널 높이를 드로어 상태에 맞춰 조정
+    _syncShipPanelHeight();
     setTimeout(resizeActiveMap, 320);
 }
 window.toggleCollisionDrawer = toggleCollisionDrawer;
+
+function _syncShipPanelHeight() {
+    var panel = document.getElementById('shipInfoPanel');
+    var drawer = document.getElementById('collisionDrawer');
+    if (!panel || !drawer) return;
+    if (drawer.classList.contains('collapsed')) {
+        panel.classList.add('drawer-collapsed');
+    } else {
+        panel.classList.remove('drawer-collapsed');
+    }
+}
+window._syncShipPanelHeight = _syncShipPanelHeight;
 
 function toggleRightPanel() {
     var sidebar = document.getElementById('rightSidebar');
@@ -574,10 +588,36 @@ async function fetchData() {
                 container.innerHTML = cardsHtml;
             } else {
                 var dur = Math.max(20, items.length * 4);
+                // 카드 복제로 무한 흐름 + 호버 시 스크롤 모드
                 container.innerHTML = '<div class="feed-ticker-wrap" style="--feed-ticker-duration: ' + dur + 's;">' + cardsHtml + cardsHtml + '</div>';
+                container.onmouseenter = function() {
+                    container.classList.add('scrolling');
+                    // 스크롤 모드: 복제 제거, overflow 활성화
+                    var wrap = container.querySelector('.feed-ticker-wrap');
+                    if (wrap && wrap._originalHtml === undefined) {
+                        wrap._originalHtml = wrap.innerHTML;
+                        wrap.innerHTML = cardsHtml; // 복제 제거
+                    }
+                };
+                container.onmouseleave = function() {
+                    container.classList.remove('scrolling');
+                    container.scrollTop = 0;
+                    // 애니메이션 모드: 복제 복원
+                    var wrap = container.querySelector('.feed-ticker-wrap');
+                    if (wrap && wrap._originalHtml !== undefined) {
+                        wrap.innerHTML = wrap._originalHtml;
+                        delete wrap._originalHtml;
+                        // 클릭 이벤트 재바인딩
+                        _bindFeedCardClicks(container);
+                    }
+                };
             }
 
-            container.querySelectorAll('.feed-card[data-lat]').forEach(function(card) {
+            _bindFeedCardClicks(container);
+        }
+
+        function _bindFeedCardClicks(el) {
+            el.querySelectorAll('.feed-card[data-lat]').forEach(function(card) {
                 var lat = parseFloat(card.dataset.lat);
                 var lng = parseFloat(card.dataset.lng);
                 var mmsi = card.dataset.mmsi;
@@ -804,7 +844,7 @@ document.getElementById('sentinelMenuBtn').addEventListener('click', async funct
             '<tr><th>\ud50c\ub7ab\ud3fc</th><td>' + (data.platform || 'Sentinel-2') + '</td></tr>' +
             '<tr><th>\uc88c\ud45c</th><td>' + _sentinelLat + '\u00b0, ' + _sentinelLng + '\u00b0</td></tr>' +
             '</table>' +
-            (href ? '<a ' + href + ' style="display:block;margin-top:16px;text-align:center;color:var(--accent);font-family:\'Inter\',sans-serif;font-size:0.8rem;text-decoration:none;border:1px solid var(--panel-border);border-radius:6px;padding:10px;background:rgba(20,184,166,0.06);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(20,184,166,0.12)\'" onmouseout="this.style.background=\'rgba(20,184,166,0.06)\'"><i class="fa-solid fa-expand"></i> \uc804\uccb4 \ud654\uc9c8\ub85c \ubdf0\uc5b4 \uc5f4\uae30</a>' : '');
+            (href ? '<a ' + href + ' style="display:block;margin-top:16px;text-align:center;color:var(--accent);font-family:\'Inter\',sans-serif;font-size:0.8rem;text-decoration:none;border:1px solid var(--panel-border);border-radius:6px;padding:10px;background:rgba(59,130,246,0.06);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(59,130,246,0.12)\'" onmouseout="this.style.background=\'rgba(59,130,246,0.06)\'"><i class="fa-solid fa-expand"></i> \uc804\uccb4 \ud654\uc9c8\ub85c \ubdf0\uc5b4 \uc5f4\uae30</a>' : '');
     } catch (err) {
         body.innerHTML = '<div style="text-align:center;color:#ef4444;font-size:0.75rem;padding:20px;">Error: ' + err.message + '</div>';
     }

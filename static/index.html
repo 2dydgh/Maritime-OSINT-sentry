@@ -19,6 +19,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
         rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Application Styles -->
@@ -195,11 +196,26 @@
                 </button>
             </div>
             <!-- ECharts 시각화 영역 -->
-            <div id="chartsRow" style="display:none; padding:10px; margin: 8px 14px 12px 14px; gap:8px; flex-shrink:0; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); box-shadow: inset 0 2px 6px rgba(0,0,0,0.3);">
-                <div id="riskGaugeChart" style="width:50%; height:90px;"></div>
-                <div id="riskRadarChart" style="width:50%; height:90px;"></div>
+            <div id="chartsRow" style="display:none; padding:6px 8px; margin: 8px 14px 12px 14px; gap:6px; flex-shrink:0; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); box-shadow: inset 0 2px 6px rgba(0,0,0,0.3);">
+                <div class="chart-cell">
+                    <span class="chart-label">위험도</span>
+                    <div id="riskGaugeChart" style="width:100%; height:80px;"></div>
+                </div>
+                <div class="chart-cell">
+                    <span class="chart-label">위험 요소</span>
+                    <div id="riskRadarChart" style="width:100%; height:80px;"></div>
+                </div>
+                <div class="chart-cell">
+                    <span class="chart-label">추이</span>
+                    <div id="riskTrendChart" style="width:100%; height:80px;"></div>
+                </div>
             </div>
             <div id="mlRiskSummaryFixed" style="display:none; flex-shrink:0;"></div>
+            <div class="collision-section-divider">
+                <span class="collision-section-line"></span>
+                <span class="collision-section-title">충돌 위험 목록</span>
+                <span class="collision-section-line"></span>
+            </div>
             <div class="collision-list" id="collisionList">
                 <div class="collision-empty">분석 데이터 대기중...</div>
             </div>
@@ -218,7 +234,7 @@
             <!-- ═══ VESSELS ═══ -->
             <div class="layer-group" id="layerGroupVessels">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(20, 184, 166, 0.1); color: var(--accent);"><i
+                    <div class="lg-icon" style="background: rgba(59, 130, 246, 0.1); color: var(--accent);"><i
                             class="fa-solid fa-ship"></i></div>
                     <span class="lg-title">선박</span>
                     <span class="lg-badge" id="total-ships">0</span>

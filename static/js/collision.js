@@ -1,5 +1,76 @@
 // ── Maritime OSINT Sentry — Collision Analysis Panel ──
 
+// ── 해역명 판별 (좌표 → 해역/지역명) ──
+var _seaAreas = [
+    // 한반도 주변 해역 (좁은 영역 → 넓은 영역 순서)
+    { name: '제주해협',       latMin: 33.0, latMax: 34.0, lngMin: 125.5, lngMax: 127.5 },
+    { name: '대한해협',       latMin: 33.5, latMax: 35.0, lngMin: 128.0, lngMax: 130.0 },
+    { name: '대한해협',       latMin: 33.0, latMax: 34.5, lngMin: 127.5, lngMax: 130.0 },
+    { name: '울산 앞바다',    latMin: 35.0, latMax: 36.0, lngMin: 129.2, lngMax: 130.0 },
+    { name: '부산 앞바다',    latMin: 34.8, latMax: 35.3, lngMin: 128.8, lngMax: 129.5 },
+    { name: '여수 앞바다',    latMin: 34.3, latMax: 34.9, lngMin: 127.3, lngMax: 128.0 },
+    { name: '목포 앞바다',    latMin: 34.3, latMax: 34.9, lngMin: 125.5, lngMax: 126.5 },
+    { name: '인천 앞바다',    latMin: 37.0, latMax: 37.8, lngMin: 125.5, lngMax: 126.5 },
+    { name: '남해',           latMin: 33.0, latMax: 35.0, lngMin: 126.0, lngMax: 129.5 },
+    { name: '서해 (황해)',    latMin: 33.0, latMax: 40.0, lngMin: 119.0, lngMax: 126.5 },
+    { name: '동해 (울릉도)',  latMin: 37.0, latMax: 38.0, lngMin: 130.5, lngMax: 131.5 },
+    { name: '동해 (독도)',    latMin: 37.0, latMax: 37.5, lngMin: 131.5, lngMax: 132.0 },
+    { name: '동해',           latMin: 35.0, latMax: 43.0, lngMin: 129.0, lngMax: 138.0 },
+    // 일본
+    { name: '쓰시마해협',     latMin: 33.5, latMax: 34.5, lngMin: 129.0, lngMax: 131.0 },
+    { name: '쓰가루해협',     latMin: 41.0, latMax: 42.0, lngMin: 139.0, lngMax: 141.5 },
+    { name: '도쿄만',         latMin: 35.0, latMax: 35.8, lngMin: 139.5, lngMax: 140.2 },
+    { name: '일본 동해안',    latMin: 33.0, latMax: 46.0, lngMin: 138.0, lngMax: 146.0 },
+    // 중국
+    { name: '보하이만',       latMin: 37.5, latMax: 41.0, lngMin: 117.5, lngMax: 122.0 },
+    { name: '타이완해협',     latMin: 22.0, latMax: 26.0, lngMin: 117.0, lngMax: 121.0 },
+    { name: '동중국해',       latMin: 25.0, latMax: 33.0, lngMin: 120.0, lngMax: 130.0 },
+    // 동남아
+    { name: '말라카해협',     latMin: 0.5,  latMax: 4.5,  lngMin: 99.0,  lngMax: 104.5 },
+    { name: '남중국해',       latMin: 3.0,  latMax: 23.0, lngMin: 105.0, lngMax: 121.0 },
+    { name: '필리핀해',       latMin: 5.0,  latMax: 20.0, lngMin: 121.0, lngMax: 135.0 },
+    // 중동
+    { name: '호르무즈해협',   latMin: 25.5, latMax: 27.0, lngMin: 55.5,  lngMax: 57.0 },
+    { name: '페르시아만',     latMin: 24.0, latMax: 30.5, lngMin: 48.0,  lngMax: 56.5 },
+    { name: '아덴만',         latMin: 11.0, latMax: 15.5, lngMin: 43.0,  lngMax: 51.0 },
+    { name: '홍해',           latMin: 12.5, latMax: 30.0, lngMin: 32.0,  lngMax: 44.0 },
+    { name: '수에즈운하',     latMin: 29.8, latMax: 31.3, lngMin: 32.2,  lngMax: 32.6 },
+    { name: '아라비아해',     latMin: 8.0,  latMax: 25.0, lngMin: 51.0,  lngMax: 75.0 },
+    // 유럽
+    { name: '영국해협',       latMin: 49.5, latMax: 51.5, lngMin: -2.0,  lngMax: 2.0 },
+    { name: '지브롤터해협',   latMin: 35.5, latMax: 36.5, lngMin: -6.0,  lngMax: -5.0 },
+    { name: '지중해',         latMin: 30.0, latMax: 46.0, lngMin: -6.0,  lngMax: 36.0 },
+    { name: '발트해',         latMin: 53.0, latMax: 66.0, lngMin: 10.0,  lngMax: 30.0 },
+    { name: '북해',           latMin: 51.0, latMax: 62.0, lngMin: -5.0,  lngMax: 10.0 },
+    // 대양
+    { name: '북태평양',       latMin: 0.0,  latMax: 60.0, lngMin: 120.0, lngMax: 180.0 },
+    { name: '북태평양',       latMin: 0.0,  latMax: 60.0, lngMin: -180.0,lngMax: -100.0 },
+    { name: '남태평양',       latMin: -60.0,latMax: 0.0,  lngMin: 120.0, lngMax: 180.0 },
+    { name: '인도양',         latMin: -40.0,latMax: 25.0, lngMin: 20.0,  lngMax: 120.0 },
+    { name: '대서양',         latMin: -60.0,latMax: 65.0, lngMin: -80.0, lngMax: 0.0 },
+];
+
+function getSeaAreaName(lat, lng) {
+    for (var i = 0; i < _seaAreas.length; i++) {
+        var a = _seaAreas[i];
+        if (lat >= a.latMin && lat <= a.latMax && lng >= a.lngMin && lng <= a.lngMax) {
+            return a.name;
+        }
+    }
+    // 폴백: 위도/경도 기반 일반 표기
+    var ns = lat >= 0 ? 'N' : 'S';
+    var ew = lng >= 0 ? 'E' : 'W';
+    return Math.abs(lat).toFixed(0) + '\u00b0' + ns + ' ' + Math.abs(lng).toFixed(0) + '\u00b0' + ew + ' 해역';
+}
+
+function collisionLocationHtml(latA, lngA, latB, lngB) {
+    var midLat = (latA + latB) / 2;
+    var midLng = (lngA + lngB) / 2;
+    var area = getSeaAreaName(midLat, midLng);
+    var coord = midLat.toFixed(2) + ', ' + midLng.toFixed(2);
+    return '<div class="collision-location"><i class="fa-solid fa-location-dot"></i> ' + area + ' <span class="loc-coord">(' + coord + ')</span></div>';
+}
+
 function switchCollisionTab(tab) {
     collisionActiveTab = tab;
     document.querySelectorAll('.collision-tab-btn').forEach(function(b) {
@@ -27,27 +98,37 @@ function mlRiskBadge(level, label) {
 }
 
 function _renderCollisionTicker(list, cardsHtml, count) {
+    // 콘텐츠가 동일하면 DOM 재구성 건너뛰기 (깜빡임 방지)
+    if (list._prevHtml === cardsHtml) return;
+    list._prevHtml = cardsHtml;
+
+    // 스크롤 위치 보존
+    var prevScroll = list.scrollTop;
     list.innerHTML = cardsHtml;
-    _startCollisionAutoScroll(list);
+    list.scrollTop = prevScroll;
+
+    // 이미 auto-scroll이 돌고 있으면 다시 시작하지 않음
+    if (!_collisionScrollRaf) {
+        _startCollisionAutoScroll(list);
+    }
 }
 
-var _collisionScrollTimer = null;
+var _collisionScrollRaf = null;
 var _collisionScrollPaused = false;
 function _startCollisionAutoScroll(list) {
-    if (_collisionScrollTimer) clearInterval(_collisionScrollTimer);
+    if (_collisionScrollRaf) cancelAnimationFrame(_collisionScrollRaf);
     list.onmouseenter = function() { _collisionScrollPaused = true; };
     list.onmouseleave = function() { _collisionScrollPaused = false; };
-    _collisionScrollTimer = setInterval(function() {
-        if (_collisionScrollPaused) return;
-        var cards = list.querySelectorAll('.collision-card');
-        if (cards.length <= 1) return;
-        var nextTop = list.scrollTop + 120;
-        if (nextTop >= list.scrollHeight - list.clientHeight - 10) {
-            list.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-            list.scrollBy({ top: 120, behavior: 'smooth' });
+    function tick() {
+        if (!_collisionScrollPaused && list.scrollHeight > list.clientHeight) {
+            list.scrollTop += 0.3;
+            if (list.scrollTop >= list.scrollHeight - list.clientHeight) {
+                list.scrollTop = 0;
+            }
         }
-    }, 5000);
+        _collisionScrollRaf = requestAnimationFrame(tick);
+    }
+    _collisionScrollRaf = requestAnimationFrame(tick);
 }
 
 function renderCollisionList() {
@@ -102,6 +183,7 @@ function renderCollisionList() {
                     ' + r.ship_a.name + ' <span style="color:var(--accent);">\u2194</span> ' + r.ship_b.name + '\
                     ' + collisionSeverityBadge(r.severity) + '\
                 </div>\
+                ' + collisionLocationHtml(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '\
                 <div class="pair-detail">\
                     TCPA: ' + r.tcpa_min + 'min \u00b7 DCPA: ' + r.dcpa_nm + 'nm \u00b7 DIST: ' + r.current_dist_nm + 'nm\
                 </div>\
@@ -164,6 +246,7 @@ function renderCollisionList() {
                 <div class="collision-card"\
                      data-mmsi-a="' + r.ship_a.mmsi + '" data-mmsi-b="' + r.ship_b.mmsi + '"\
                      data-lat-a="' + r.ship_a.lat + '" data-lng-a="' + r.ship_a.lng + '" data-lat-b="' + r.ship_b.lat + '" data-lng-b="' + r.ship_b.lng + '"\
+                     data-sog-a="' + r.ship_a.sog + '" data-cog-a="' + r.ship_a.cog + '" data-name-a="' + r.ship_a.name + '"\
                      data-risk-level="' + r.risk_level + '">\
                     <div class="card-top">\
                         ' + mlRiskBadge(r.risk_level, r.risk_label) + '\
@@ -178,6 +261,7 @@ function renderCollisionList() {
                         <span class="ship-name">' + r.ship_b.name + '</span>\
                         <span class="ship-meta">' + r.ship_b.sog + 'kts ' + r.ship_b.cog + '\u00b0</span>\
                     </div>\
+                    ' + collisionLocationHtml(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '\
                     <div class="metrics-row">\
                         <div class="metric">\
                             <span class="metric-label">TCPA</span>\
@@ -207,46 +291,117 @@ function renderCollisionList() {
 function _bindCollisionCardClicks(list) {
     list.querySelectorAll('.collision-card').forEach(function(card) {
         card.addEventListener('click', function() {
-            var latA = parseFloat(card.dataset.latA);
-            var lngA = parseFloat(card.dataset.lngA);
-            var latB = parseFloat(card.dataset.latB);
-            var lngB = parseFloat(card.dataset.lngB);
+            var mmsiA = Number(card.dataset.mmsiA);
+            var mmsiB = Number(card.dataset.mmsiB);
+
+            // 실시간 위치 우선 사용, 없으면 카드 스냅샷 사용
+            var shipA = shipDataMap[mmsiA] || shipDataMap[String(mmsiA)];
+            var shipB = shipDataMap[mmsiB] || shipDataMap[String(mmsiB)];
+            var latA = shipA ? shipA.lat : parseFloat(card.dataset.latA);
+            var lngA = shipA ? shipA.lng : parseFloat(card.dataset.lngA);
+            var latB = shipB ? shipB.lat : parseFloat(card.dataset.latB);
+            var lngB = shipB ? shipB.lng : parseFloat(card.dataset.lngB);
+
             var midLat = (latA + latB) / 2;
             var midLng = (lngA + lngB) / 2;
             smoothFlyTo({
                 destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, 5000)
             });
 
-            var mmsiA = Number(card.dataset.mmsiA);
-            var mmsiB = Number(card.dataset.mmsiB);
-
             if (collisionActiveTab === 'ml') {
+                // AI 분석 탭: 해당 두 선박만 표시 (근접 선박 전체 X)
                 selectedProximityMmsi = null;
-                collisionTargetMmsi = null;
+                collisionTargetMmsi = mmsiB;
                 var distNm = haversineNm(latA, lngA, latB, lngB);
                 var riskLevel = parseInt(card.dataset.riskLevel) || 1;
+                // shipDataMap에 선박이 없을 때를 대비해 _selData fallback 포함
+                var selFallback = { lat: latA, lng: lngA, sog: parseFloat(card.dataset.sogA) || 0, cog: parseFloat(card.dataset.cogA) || 0, name: card.dataset.nameA || '' };
                 renderProximityLines(mmsiA, [{
                     mmsi: mmsiB,
                     lat: latB,
                     lng: lngB,
                     distance: distNm,
-                    mlRiskLevel: riskLevel
+                    mlRiskLevel: riskLevel,
+                    _selData: selFallback
                 }]);
                 renderNearbyPanel([]);
             } else {
+                // 거리 기반 탭: 근접 선박 전체 표시
                 collisionTargetMmsi = mmsiB;
                 selectedProximityMmsi = mmsiA;
                 proximityMissCount = 0;
                 updateProximity();
             }
 
-            // showShipInfo는 이제 mmsi도 받을 수 있음
-            if (shipDataMap[mmsiA] || shipDataMap[String(mmsiA)]) {
+            // 충돌 쌍 자동 추적 시작 (카메라 따라가기 + 위험 해제 감지)
+            _collisionTrackingActive = true;
+            startCollisionTracking(mmsiA, mmsiB);
+
+            if (shipA) {
                 showShipInfo(mmsiA);
             }
         });
     });
 }
+
+// ── 충돌 쌍 상태 (카메라 추적과 분리) ──
+// 충돌 페어 MMSI — clearProximity()에서만 초기화됨
+var _collisionPairMmsiA = null;
+var _collisionPairMmsiB = null;
+
+// ── 충돌 쌍 자동 추적 (Auto-follow) ──
+var _collisionTrackingTimer = null;
+
+function startCollisionTracking(mmsiA, mmsiB) {
+    stopCollisionTracking();
+    _collisionPairMmsiA = mmsiA;
+    _collisionPairMmsiB = mmsiB;
+    _collisionTrackingTimer = setInterval(function() {
+        var shipA = shipDataMap[_collisionPairMmsiA] || shipDataMap[String(_collisionPairMmsiA)];
+        var shipB = shipDataMap[_collisionPairMmsiB] || shipDataMap[String(_collisionPairMmsiB)];
+        if (!shipA || !shipB) { stopCollisionTracking(); return; }
+
+        // 카메라 높이 50km 이하일 때만 자동 추적 (확대 상태)
+        var camHeight = viewer.camera.positionCartographic.height;
+        if (camHeight > 50000) return;
+
+        var midLat = (shipA.lat + shipB.lat) / 2;
+        var midLng = (shipA.lng + shipB.lng) / 2;
+
+        // 현재 카메라 중심과 선박 중점 간 거리 확인
+        var camCart = viewer.camera.positionCartographic;
+        var camLat = Cesium.Math.toDegrees(camCart.latitude);
+        var camLng = Cesium.Math.toDegrees(camCart.longitude);
+        var driftNm = haversineNm(camLat, camLng, midLat, midLng);
+
+        // 화면 기준으로 벗어났을 때만 부드럽게 이동
+        var thresholdNm = Math.max(camHeight / 1852 * 0.15, 0.3);
+        if (driftNm > thresholdNm) {
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, camHeight),
+                duration: 1.0,
+                easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT
+            });
+        }
+    }, 3000);
+}
+window.startCollisionTracking = startCollisionTracking;
+
+function stopCollisionTracking() {
+    if (_collisionTrackingTimer) {
+        clearInterval(_collisionTrackingTimer);
+        _collisionTrackingTimer = null;
+    }
+    // 카메라 추적만 중지 — 충돌 페어 MMSI는 유지
+}
+window.stopCollisionTracking = stopCollisionTracking;
+
+function clearCollisionPair() {
+    stopCollisionTracking();
+    _collisionPairMmsiA = null;
+    _collisionPairMmsiB = null;
+}
+window.clearCollisionPair = clearCollisionPair;
 
 async function fetchCollisionRisks() {
     try {
@@ -262,6 +417,9 @@ async function fetchCollisionRisks() {
 
         // Update header collision risk counts
         _updateHeaderCollisionStats();
+
+        // 추적 중인 충돌 쌍이 위험 목록에서 사라졌는지 확인
+        if (typeof checkCollisionResolution === 'function') checkCollisionResolution();
     } catch (e) {
         console.warn('Collision fetch failed:', e);
     }

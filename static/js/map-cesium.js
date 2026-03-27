@@ -20,6 +20,25 @@ viewer = new Cesium.Viewer('cesiumContainer', {
     }))
 });
 
+// ── 렌더링 최적화 ──
+// 비행 중 타일 로딩 부하 감소: SSE를 높여 저해상도 타일로 표시
+viewer.scene.globe.preloadFlightDestinations = true;
+viewer.scene.globe.tileCacheSize = 200;
+
+// 비행 시작/종료 시 타일 품질 동적 조절
+var _defaultSSE = viewer.scene.globe.maximumScreenSpaceError; // 기본값 2
+var _flying = false;
+function _onFlyStart() {
+    if (_flying) return;
+    _flying = true;
+    viewer.scene.globe.maximumScreenSpaceError = 8; // 비행 중 저해상도
+}
+function _onFlyEnd() {
+    if (!_flying) return;
+    _flying = false;
+    viewer.scene.globe.maximumScreenSpaceError = _defaultSSE; // 도착 후 고해상도 복원
+}
+
 // ResizeObserver for map area
 var mapResizeObserver = new ResizeObserver(function() {
     if (currentMapMode === '3d' && viewer) {
@@ -316,23 +335,100 @@ globe.baseColor = Cesium.Color.fromCssColorString('#1a3a5c');
 
 viewer.cesiumWidget.creditContainer.style.display = 'none';
 
+// ── 사용자 수동 카메라 조작 시 충돌 추적 해제 ──
+// 클릭이 아닌 실제 드래그/스크롤만 감지
+var _mouseDownForDrag = false;
+var _userDragged = false;
+var _cesiumInputHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+_cesiumInputHandler.setInputAction(function() {
+    _mouseDownForDrag = true; _userDragged = false;
+}, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+_cesiumInputHandler.setInputAction(function() {
+    _mouseDownForDrag = true; _userDragged = false;
+}, Cesium.ScreenSpaceEventType.MIDDLE_DOWN);
+_cesiumInputHandler.setInputAction(function() {
+    _mouseDownForDrag = true; _userDragged = false;
+}, Cesium.ScreenSpaceEventType.RIGHT_DOWN);
+_cesiumInputHandler.setInputAction(function() {
+    if (_mouseDownForDrag) _userDragged = true;
+}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+_cesiumInputHandler.setInputAction(function() { _mouseDownForDrag = false; }, Cesium.ScreenSpaceEventType.LEFT_UP);
+_cesiumInputHandler.setInputAction(function() { _mouseDownForDrag = false; }, Cesium.ScreenSpaceEventType.MIDDLE_UP);
+_cesiumInputHandler.setInputAction(function() { _mouseDownForDrag = false; }, Cesium.ScreenSpaceEventType.RIGHT_UP);
+// 마우스 휠 줌도 사용자 조작으로 간주
+_cesiumInputHandler.setInputAction(function() { _userDragged = true; }, Cesium.ScreenSpaceEventType.WHEEL);
+viewer.camera.moveEnd.addEventListener(function() {
+    if (_userDragged) {
+        _userDragged = false;
+        _mouseDownForDrag = false;
+        if (typeof stopCollisionTracking === 'function') stopCollisionTracking();
+    }
+});
+
 // ── Smooth camera transition ──
 function smoothFlyTo(options) {
     var destCart = Cesium.Cartographic.fromCartesian(options.destination);
+    var destLat = Cesium.Math.toDegrees(destCart.latitude);
+    var destLng = Cesium.Math.toDegrees(destCart.longitude);
     var destAlt = destCart.height;
-    var maxH = Math.max(destAlt * 1.8, 800000);
+
+    // 현재 카메라 위치에서 목적지까지 거리 계산
+    var camCart = viewer.camera.positionCartographic;
+    var camLat = Cesium.Math.toDegrees(camCart.latitude);
+    var camLng = Cesium.Math.toDegrees(camCart.longitude);
+    var camAlt = camCart.height;
+
+    // 지표면 거리 (대략적 계산, km)
+    var dLat = (destLat - camLat) * 111;
+    var dLng = (destLng - camLng) * 111 * Math.cos(camCart.latitude);
+    var surfaceDist = Math.sqrt(dLat * dLat + dLng * dLng);
+
+    // 거리 기반 maximumHeight: 가까우면 낮게, 멀면 높게
+    var maxH;
+    if (surfaceDist < 50) {
+        // 50km 이내: 현재 고도와 목적지 고도 중 큰 값의 1.3배
+        maxH = Math.max(camAlt, destAlt) * 1.3;
+    } else if (surfaceDist < 500) {
+        // 50~500km: 거리에 비례하여 적당히
+        maxH = Math.max(destAlt * 2, surfaceDist * 300);
+    } else {
+        // 500km+: 장거리 이동
+        maxH = Math.min(surfaceDist * 500, 5000000);
+    }
+    // 최소한 목적지 고도보다는 높아야 함
+    maxH = Math.max(maxH, destAlt * 1.2);
+
+    // 거리 기반 duration: 가까우면 짧게, 멀면 길게
+    var duration = options.duration;
+    if (!duration) {
+        if (surfaceDist < 20) {
+            duration = 1.2;
+        } else if (surfaceDist < 200) {
+            duration = 1.8;
+        } else if (surfaceDist < 1000) {
+            duration = 2.5;
+        } else {
+            duration = 3.0;
+        }
+    }
+
     var userComplete = options.complete;
+    _onFlyStart();
     viewer.camera.flyTo({
         ...options,
-        duration: options.duration || 2.0,
+        duration: duration,
         maximumHeight: maxH,
         easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
         complete: function() {
+            _onFlyEnd();
             // 카메라 이동 완료 후 선박 즉시 리렌더 (뷰포트 컬링 갱신)
             if (_lastShipsData && timeMode === 'live') {
                 updateShipsLayer(_lastShipsData);
             }
             if (userComplete) userComplete();
+        },
+        cancel: function() {
+            _onFlyEnd();
         }
     });
 }

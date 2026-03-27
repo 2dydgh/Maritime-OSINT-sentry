@@ -1,5 +1,27 @@
 // ── Maritime OSINT Sentry — Vessel Proximity & CPA ──
 
+function _showCollisionToast(title, message) {
+    var container = document.getElementById('cesiumContainer') || document.body;
+    // cesiumContainer가 relative/absolute가 아닐 수 있으므로 보장
+    if (container.id === 'cesiumContainer' && getComputedStyle(container).position === 'static') {
+        container.style.position = 'relative';
+    }
+    var el = document.createElement('div');
+    el.style.cssText = 'position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:99999;' +
+        'background:rgba(16,185,129,0.92);color:#fff;padding:6px 14px;border-radius:6px;' +
+        'font:500 11px/1.3 "Pretendard Variable","Inter",sans-serif;box-shadow:0 2px 12px rgba(0,0,0,0.3);' +
+        'backdrop-filter:blur(8px);pointer-events:none;opacity:0;transition:opacity 0.3s;max-width:360px;text-align:center;';
+    el.innerHTML = '<div>' + title + '</div>' +
+        '<div style="font-weight:400;opacity:0.85;">' + message + '</div>';
+    container.appendChild(el);
+    requestAnimationFrame(function() { el.style.opacity = '1'; });
+    setTimeout(function() {
+        el.style.opacity = '0';
+        setTimeout(function() { el.remove(); }, 300);
+    }, 4000);
+}
+window._showCollisionToast = _showCollisionToast;
+
 /**
  * Haversine distance between two points in decimal degrees.
  * Returns distance in nautical miles.
@@ -218,6 +240,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
     proximityCogLines.removeAll();
     proximityCpaPoints.removeAll();
     proximityCpaLabels.removeAll();
+    if (proximityDataSource) proximityDataSource.entities.removeAll();
     proximityMap = {};
 
     // 2D Leaflet 클리어 (기존 로직 유지)
@@ -226,10 +249,12 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
         leafletCollisionLines = {};
     }
 
-    var selected = shipDataMap[selectedMmsi];
-    if (!selected || nearbyVessels.length === 0) return;
+    var selected = shipDataMap[selectedMmsi] || shipDataMap[String(selectedMmsi)];
+    if (nearbyVessels.length === 0) { console.warn('[proximity] renderLines: empty nearbyVessels'); return; }
+    if (!selected) console.warn('[proximity] renderLines: selected ship NOT in shipDataMap, mmsi=', selectedMmsi);
 
     var closestMmsi = nearbyVessels[0].mmsi;
+    var _linesAdded = 0;
 
     nearbyVessels.forEach(function(nv) {
         var isCollisionTarget = collisionTargetMmsi != null && (nv.mmsi == collisionTargetMmsi);
@@ -242,21 +267,24 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
         var isHighlight = isMlPair || isCollisionTarget || nv.mmsi === closestMmsi;
         var showCollisionViz = isMlPair || isCollisionTarget;
 
-        var sel = shipDataMap[selectedMmsi];
-        var tgt = shipDataMap[nv.mmsi];
-        if (!sel || !tgt) return;
+        // shipDataMap 우선, 없으면 nv에 포함된 좌표를 fallback으로 사용
+        var sel = selected || (nv._selData ? nv._selData : null);
+        var tgt = shipDataMap[nv.mmsi] || shipDataMap[String(nv.mmsi)]
+            || (nv.lat != null ? { lat: nv.lat, lng: nv.lng, sog: 0, cog: 0, name: '' } : null);
+        if (!sel || !tgt) { console.warn('[proximity] renderLines skip: sel=', !!sel, 'tgt=', !!tgt, 'mmsi=', nv.mmsi); return; }
 
-        // 근접 라인
+        // 근접 라인 — PolylineCollection (높이 10m, 해수면 바로 위)
         var lineWidth = isMlPair ? 4 : isCollisionTarget ? 4 : isHighlight ? 3 : 2;
         var lineColor = isHighlight ? color.cesium.withAlpha(0.8) : color.cesium.withAlpha(0.6);
 
         var line = proximityLines.add({
             positions: Cesium.Cartesian3.fromDegreesArrayHeights([
-                sel.lng, sel.lat, 50, tgt.lng, tgt.lat, 50
+                sel.lng, sel.lat, 100, tgt.lng, tgt.lat, 100
             ]),
             width: lineWidth,
             material: Cesium.Material.fromType('Color', { color: lineColor })
         });
+        _linesAdded++;
 
         // 거리 라벨
         var dist = haversineNm(sel.lat, sel.lng, tgt.lat, tgt.lng);
@@ -284,7 +312,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
             var selEnd = projectPosition(sel.lat, sel.lng, sel.cog || 0, Math.max((sel.sog || 0) / 60 * 10, 0.5));
             var cogSel = proximityCogLines.add({
                 positions: Cesium.Cartesian3.fromDegreesArrayHeights([
-                    sel.lng, sel.lat, 50, selEnd.lng, selEnd.lat, 50
+                    sel.lng, sel.lat, 100, selEnd.lng, selEnd.lat, 100
                 ]),
                 width: 2,
                 material: Cesium.Material.fromType('PolylineDash', {
@@ -297,7 +325,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
             var tgtEnd = projectPosition(tgt.lat, tgt.lng, tgt.cog || 0, Math.max((tgt.sog || 0) / 60 * 10, 0.5));
             var cogTgt = proximityCogLines.add({
                 positions: Cesium.Cartesian3.fromDegreesArrayHeights([
-                    tgt.lng, tgt.lat, 50, tgtEnd.lng, tgtEnd.lat, 50
+                    tgt.lng, tgt.lat, 100, tgtEnd.lng, tgtEnd.lat, 100
                 ]),
                 width: 2,
                 material: Cesium.Material.fromType('PolylineDash', {
@@ -342,6 +370,17 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
 
         proximityMap[nv.mmsi] = entry;
     });
+
+    if (_linesAdded === 0 && nearbyVessels.length > 0) {
+        console.warn('[proximity] renderLines: 0 lines added for', nearbyVessels.length, 'vessels! proximityLines.length=', proximityLines.length);
+    } else {
+        console.info('[proximity] renderLines:', _linesAdded, 'lines for', nearbyVessels.length, 'vessels');
+    }
+
+    // 2D 동기화
+    if (currentMapMode === '2d') {
+        setTimeout(function() { if (typeof syncProximityToLeaflet === 'function') syncProximityToLeaflet(); }, 50);
+    }
 }
 window.renderProximityLines = renderProximityLines;
 
@@ -417,6 +456,10 @@ function clearProximity() {
     collisionTargetMmsi = null;
     proximityMissCount = 0;
 
+    // 자동 추적 + 충돌 페어 초기화
+    _collisionTrackingActive = false;
+    if (typeof clearCollisionPair === 'function') clearCollisionPair();
+
     // Primitive Collections 클리어
     if (proximityLines) proximityLines.removeAll();
     if (proximityLabels) proximityLabels.removeAll();
@@ -478,3 +521,40 @@ async function updateProximity() {
     }
 }
 window.updateProximity = updateProximity;
+
+/**
+ * 충돌 쌍이 백엔드 collision 데이터에서 사라졌는지 확인.
+ * fetchCollisionRisks() 후 호출 — 10초마다.
+ */
+var _collisionTrackingActive = false;
+window._collisionTrackingActive = _collisionTrackingActive;
+
+function checkCollisionResolution() {
+    if (!_collisionTrackingActive) return;
+    var pairA = typeof _collisionPairMmsiA !== 'undefined' ? _collisionPairMmsiA : null;
+    var pairB = collisionTargetMmsi;
+    if (!pairA || !pairB) return;
+
+    // 백엔드 collision 데이터에서 해당 쌍이 아직 존재하는지 확인
+    var allRisks = [].concat(
+        (collisionData.distance && collisionData.distance.risks) || [],
+        (collisionData.ml && collisionData.ml.risks) || []
+    );
+    var stillAtRisk = allRisks.some(function(r) {
+        return (r.ship_a.mmsi == pairA && r.ship_b.mmsi == pairB)
+            || (r.ship_a.mmsi == pairB && r.ship_b.mmsi == pairA);
+    });
+
+    if (!stillAtRisk) {
+        var selShip = shipDataMap[pairA] || shipDataMap[String(pairA)];
+        var tgtShip = shipDataMap[pairB] || shipDataMap[String(pairB)];
+        var nameA = (selShip && selShip.name) || String(pairA);
+        var nameB = (tgtShip && tgtShip.name) || String(pairB);
+        _showCollisionToast(
+            '✓ 충돌 위험 해제',
+            nameA + ' ↔ ' + nameB + ' — 더 이상 위험 목록에 없음'
+        );
+        clearProximity();
+    }
+}
+window.checkCollisionResolution = checkCollisionResolution;
