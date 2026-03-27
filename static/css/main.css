@@ -1668,15 +1668,20 @@ header {
     height: 42px;
 }
 
+/* --- Collision Drawer Summary Bar --- */
 #collisionDrawer .drawer-summary-bar {
     display: none;
-    padding: 0 16px;
-    height: 40px;
+    padding: 0 12px 0 10px;
+    height: 42px;
     align-items: center;
-    justify-content: space-between;
+    gap: 12px;
     cursor: pointer;
-    font-size: 0.82rem;
-    font-weight: 600;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+#collisionDrawer .drawer-summary-bar:hover {
+    background: rgba(255, 255, 255, 0.02);
 }
 
 #collisionDrawer.collapsed .drawer-summary-bar {
@@ -1687,19 +1692,160 @@ header {
     display: none;
 }
 
-/* Filter panel toggle button — hidden in grid layout */
-#filterToggleBtn {
-    display: none;
+/* Left group: icon + title + count */
+.summary-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.summary-icon-box {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    color: var(--accent-amber);
+}
+
+.summary-title {
+    font-size: 0.68rem;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+}
+
+.summary-total-badge {
+    background: rgba(59, 130, 246, 0.12);
+    color: var(--accent);
+    font-size: 0.62rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 8px;
+    min-width: 20px;
+    text-align: center;
+    border: 1px solid rgba(59, 130, 246, 0.1);
+}
+
+/* Center: stat pills */
+.summary-stats-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    justify-content: center;
+}
+
+.summary-stats-row .s-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 0.62rem;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+}
+
+.summary-stats-row .s-pill .s-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.summary-stats-row .s-pill .s-count {
+    font-weight: 700;
+    font-size: 0.72rem;
+}
+
+/* Danger pill */
+.summary-stats-row .s-pill.s-danger {
+    background: rgba(244, 63, 94, 0.08);
+    border-color: rgba(244, 63, 94, 0.12);
+    color: #f43f5e;
+}
+
+.summary-stats-row .s-pill.s-danger .s-dot {
+    background: #f43f5e;
+    box-shadow: 0 0 6px rgba(244, 63, 94, 0.5);
+}
+
+/* Warning pill */
+.summary-stats-row .s-pill.s-warn {
+    background: rgba(249, 115, 22, 0.08);
+    border-color: rgba(249, 115, 22, 0.12);
+    color: #f97316;
+}
+
+.summary-stats-row .s-pill.s-warn .s-dot {
+    background: #f97316;
+    box-shadow: 0 0 6px rgba(249, 115, 22, 0.4);
+}
+
+/* Caution pill */
+.summary-stats-row .s-pill.s-caution {
+    background: rgba(234, 179, 8, 0.06);
+    border-color: rgba(234, 179, 8, 0.1);
+    color: #eab308;
+}
+
+.summary-stats-row .s-pill.s-caution .s-dot {
+    background: #eab308;
+    box-shadow: 0 0 6px rgba(234, 179, 8, 0.35);
+}
+
+/* Pill with zero count — dimmed */
+.summary-stats-row .s-pill.s-zero {
+    opacity: 0.35;
+}
+
+/* Right group: expand hint + chevron */
+.summary-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.summary-expand-hint {
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+#collisionDrawer .drawer-summary-bar:hover .summary-expand-hint {
+    opacity: 0.7;
 }
 
 .drawer-toggle-icon {
     color: var(--text-dim);
-    font-size: 0.7rem;
-    transition: transform 0.3s;
+    font-size: 0.65rem;
+    transition: transform 0.3s, color 0.2s;
+}
+
+#collisionDrawer .drawer-summary-bar:hover .drawer-toggle-icon {
+    color: var(--text-main);
 }
 
 #collisionDrawer.collapsed .drawer-toggle-icon {
-    transform: rotate(180deg);
+    transform: rotate(0deg);
+}
+
+/* Filter panel toggle button — hidden in grid layout */
+#filterToggleBtn {
+    display: none;
 }
 
 @media (max-width: 900px) {

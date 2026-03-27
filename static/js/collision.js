@@ -142,22 +142,25 @@ function renderCollisionList() {
     var summaryCount = document.getElementById('collision-count-summary');
     if (summaryStats && summaryCount) {
         summaryCount.textContent = risks.length;
+        var dangerN, warnN, cautionN;
+        var dangerLabel, warnLabel, cautionLabel;
         if (collisionActiveTab === 'ml') {
             var countByLevel = { 1: 0, 2: 0, 3: 0 };
             risks.forEach(function(r) { if (countByLevel[r.risk_level] !== undefined) countByLevel[r.risk_level]++; });
-            summaryStats.innerHTML =
-                '<span class="s-danger">\uc704\ud5d8 ' + countByLevel[3] + '</span>' +
-                '<span class="s-warn">\uacbd\uace0 ' + countByLevel[2] + '</span>' +
-                '<span class="s-caution">\uc8fc\uc758 ' + countByLevel[1] + '</span>';
+            dangerN = countByLevel[3]; warnN = countByLevel[2]; cautionN = countByLevel[1];
+            dangerLabel = '위험'; warnLabel = '경고'; cautionLabel = '주의';
         } else {
-            var highCount = risks.filter(function(r) { return r.severity === 'high' || r.severity === 'danger'; }).length;
-            var medCount = risks.filter(function(r) { return r.severity === 'medium' || r.severity === 'warning'; }).length;
-            var lowCount = risks.length - highCount - medCount;
-            summaryStats.innerHTML =
-                '<span class="s-danger">\uace0\uc704\ud5d8 ' + highCount + '</span>' +
-                '<span class="s-warn">\uacbd\uace0 ' + medCount + '</span>' +
-                '<span class="s-caution">\uc8fc\uc758 ' + lowCount + '</span>';
+            dangerN = risks.filter(function(r) { return r.severity === 'high' || r.severity === 'danger'; }).length;
+            warnN = risks.filter(function(r) { return r.severity === 'medium' || r.severity === 'warning'; }).length;
+            cautionN = risks.length - dangerN - warnN;
+            dangerLabel = '고위험'; warnLabel = '경고'; cautionLabel = '주의';
         }
+        function pill(cls, label, count) {
+            var zero = count === 0 ? ' s-zero' : '';
+            return '<span class="s-pill ' + cls + zero + '">' +
+                '<span class="s-dot"></span>' + label + ' <span class="s-count">' + count + '</span></span>';
+        }
+        summaryStats.innerHTML = pill('s-danger', dangerLabel, dangerN) + pill('s-warn', warnLabel, warnN) + pill('s-caution', cautionLabel, cautionN);
     }
 
     if (collisionActiveTab !== 'ml') {

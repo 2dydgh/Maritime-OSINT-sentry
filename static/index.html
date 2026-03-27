@@ -171,13 +171,18 @@
     <!-- Collision Drawer (bottom of center column) -->
     <div id="collisionDrawer">
         <div class="drawer-summary-bar" onclick="toggleCollisionDrawer()">
-            <span>
-                <i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px; color: var(--accent-amber);"></i>
-                충돌 분석
-                <span class="collision-count-badge" id="collision-count-summary">0</span>
-            </span>
-            <div class="drawer-summary-stats" id="drawerSummaryStats"></div>
-            <i class="fa-solid fa-chevron-down drawer-toggle-icon"></i>
+            <div class="summary-left">
+                <div class="summary-icon-box">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <span class="summary-title">COLLISION ANALYSIS</span>
+                <span class="summary-total-badge" id="collision-count-summary">0</span>
+            </div>
+            <div class="summary-stats-row" id="drawerSummaryStats"></div>
+            <div class="summary-right">
+                <span class="summary-expand-hint">펼치기</span>
+                <i class="fa-solid fa-chevron-up drawer-toggle-icon"></i>
+            </div>
         </div>
         <div id="collisionSection">
             <div class="collision-bottom-header">
