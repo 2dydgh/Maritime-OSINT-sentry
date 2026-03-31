@@ -18,7 +18,7 @@ var CHART_THEME = {
     warning: '#f97316',
     caution: '#eab308',
     safe: '#10b981',
-    accent: '#3b82f6'
+    accent: '#8b5cf6'
 };
 
 function initCharts() {
@@ -182,9 +182,9 @@ function buildRadarOption(factors) {
             type: 'radar',
             symbol: 'circle',
             symbolSize: 4,
-            lineStyle: { width: 1.5, color: CHART_THEME.accent },
+            lineStyle: { width: 1.5, color: '#3b82f6' },
             areaStyle: { color: 'rgba(59,130,246,0.15)' },
-            itemStyle: { color: CHART_THEME.accent },
+            itemStyle: { color: '#3b82f6' },
             data: [{ value: values }]
         }]
     };
@@ -274,14 +274,14 @@ function buildTrendOption(history) {
             confine: true,
             appendTo: document.body,
             backgroundColor: 'rgba(15,15,20,0.9)',
-            borderColor: 'rgba(59,130,246,0.3)',
+            borderColor: 'rgba(139,92,246,0.3)',
             textStyle: { color: '#e2e8f0', fontSize: 10, fontFamily: "'Pretendard Variable', sans-serif" },
             formatter: function(params) {
                 var s = params[0];
                 var c = params[1];
                 return s.axisValue + '<br/>' +
-                    '<span style="color:' + CHART_THEME.accent + '">\u25cf</span> 위험도 ' + s.value +
-                    '<br/><span style="color:' + CHART_THEME.danger + '">\u25cf</span> 위험 쌍 ' + (c ? c.value : 0) + '건';
+                    '<span style="color:#94a3b8">\u25cf</span> 위험도 ' + s.value +
+                    '<br/><span style="color:#64748b">\u25cf</span> 위험 쌍 ' + (c ? c.value : 0) + '건';
             }
         },
         xAxis: {
@@ -311,8 +311,8 @@ function buildTrendOption(history) {
                     color: {
                         type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
                         colorStops: [
-                            { offset: 0, color: 'rgba(59,130,246,0.25)' },
-                            { offset: 1, color: 'rgba(59,130,246,0)' }
+                            { offset: 0, color: 'rgba(139,92,246,0.25)' },
+                            { offset: 1, color: 'rgba(139,92,246,0)' }
                         ]
                     }
                 },
@@ -324,11 +324,7 @@ function buildTrendOption(history) {
                 data: counts,
                 barWidth: 4,
                 itemStyle: {
-                    color: function(params) {
-                        return params.value >= 3 ? CHART_THEME.danger :
-                               params.value >= 2 ? CHART_THEME.warning :
-                               'rgba(59,130,246,0.4)';
-                    },
+                    color: 'rgba(148,163,184,0.4)',
                     borderRadius: [2, 2, 0, 0]
                 },
                 yAxisIndex: 1

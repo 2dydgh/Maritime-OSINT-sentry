@@ -620,7 +620,7 @@ async function fetchData() {
         var seenAlertIds = new Set();
 
         function alertIcon(type) {
-            if (type === 'speeding') return { icon: 'fa-gauge-high', color: '#ef4444', label: 'SPEEDING' };
+            if (type === 'speeding') return { icon: 'fa-gauge-high', color: '#f59e0b', label: 'SPEEDING' };
             if (type === 'signal_lost') return { icon: 'fa-satellite-dish', color: '#f97316', label: 'SIGNAL LOST' };
             if (type === 'dest_change') return { icon: 'fa-right-left', color: '#a78bfa', label: 'DEST CHANGE' };
             return { icon: 'fa-triangle-exclamation', color: '#facc15', label: 'ALERT' };
@@ -639,12 +639,12 @@ async function fetchData() {
                         <span class="feed-alert-type" style="color:' + item.color + ';">\
                             <i class="fa-solid ' + item.icon + '" style="margin-right:4px;"></i>' + item.label + '\
                         </span>\
-                        <span class="feed-time"><i class="fa-solid fa-clock" style="margin-right:3px;"></i>' + item.timeStr + '</span>\
+                        <span class="feed-time">' + item.timeStr + '</span>\
                     </div>\
                     <h3 class="feed-title">' + (alert.name || 'UNKNOWN VESSEL') + '</h3>\
                     <div class="feed-body">\
                         ' + (alert.message || '') + '\
-                        ' + (alert.country ? '<span class="feed-country">\ud83c\udff4 ' + alert.country + '</span>' : '') + '\
+                        ' + (alert.country ? '<span class="feed-country">' + alert.country + '</span>' : '') + '\
                     </div>\
                     ' + (alert.mmsi ? '<div class="feed-mmsi">MMSI ' + alert.mmsi + '</div>' : '') + '\
                 </div>';
@@ -737,8 +737,7 @@ async function fetchData() {
 
                     var iconInfo = alertIcon(alert.type);
                     var timeStr = new Date(alert.ts).toISOString().substring(11, 19) + 'Z';
-                    var severity = alert.severity || 'medium';
-                    var borderColor = severity === 'high' ? '#ef4444' : severity === 'medium' ? '#f97316' : '#a78bfa';
+                    var borderColor = iconInfo.color;
 
                     if (!window._feedAlerts) window._feedAlerts = [];
                     window._feedAlerts.unshift({ alert: alert, icon: iconInfo.icon, color: iconInfo.color, label: iconInfo.label, timeStr: timeStr, borderColor: borderColor });
@@ -796,7 +795,7 @@ document.body.insertAdjacentHTML('beforeend', '\
             display:flex; align-items:center; gap:8px;"\
             onmouseover="this.style.background=\'rgba(99,102,241,0.15)\'"\
             onmouseout="this.style.background=\'transparent\'">\
-            <i class="fa-solid fa-satellite-dish"></i>&nbsp;\uc704\uc131 \uc601\uc0c1 \uac80\uc0c9 (Sentinel-2)\
+            \uc704\uc131 \uc601\uc0c1 \uac80\uc0c9 (Sentinel-2)\
         </div>\
         <div style="padding:4px 16px 8px; color:rgba(165,180,252,0.45); font-size:0.68rem;">\
             <span id="sentinelMenuCoords">--</span>\
@@ -805,7 +804,7 @@ document.body.insertAdjacentHTML('beforeend', '\
     <div id="sentinelCard" class="drag-panel">\
         <div id="sentinelCardHeader" class="drag-panel-header">\
             <span class="title">\
-                <i class="fa-solid fa-satellite-dish"></i>&nbsp; SENTINEL-2 IMAGERY\
+                SENTINEL-2 IMAGERY\
             </span>\
             <button class="close-btn" onclick="document.getElementById(\'sentinelCard\').classList.remove(\'visible\');_removeSentinelMarker();">&#x2715;</button>\
         </div>\

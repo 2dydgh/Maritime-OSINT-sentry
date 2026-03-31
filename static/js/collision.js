@@ -173,13 +173,33 @@ function renderCollisionList() {
             <div class="collision-card"\
                  data-mmsi-a="' + r.ship_a.mmsi + '" data-mmsi-b="' + r.ship_b.mmsi + '"\
                  data-lat-a="' + r.ship_a.lat + '" data-lng-a="' + r.ship_a.lng + '" data-lat-b="' + r.ship_b.lat + '" data-lng-b="' + r.ship_b.lng + '">\
-                <div class="pair-header">\
-                    ' + r.ship_a.name + ' <span style="color:var(--accent);">\u2194</span> ' + r.ship_b.name + '\
+                <div class="card-top">\
                     ' + collisionSeverityBadge(r.severity) + '\
                 </div>\
+                <div class="ship-row">\
+                    <span class="role-tag os">OS</span>\
+                    <span class="ship-name">' + r.ship_a.name + '</span>\
+                    <span class="ship-meta">' + (r.ship_a.sog || '--') + 'kts ' + (r.ship_a.cog || '--') + '\u00b0</span>\
+                </div>\
+                <div class="ship-row">\
+                    <span class="role-tag ts">TS</span>\
+                    <span class="ship-name">' + r.ship_b.name + '</span>\
+                    <span class="ship-meta">' + (r.ship_b.sog || '--') + 'kts ' + (r.ship_b.cog || '--') + '\u00b0</span>\
+                </div>\
                 ' + collisionLocationHtml(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '\
-                <div class="pair-detail">\
-                    TCPA: ' + r.tcpa_min + 'min \u00b7 DCPA: ' + r.dcpa_nm + 'nm \u00b7 DIST: ' + r.current_dist_nm + 'nm\
+                <div class="metrics-row">\
+                    <div class="metric">\
+                        <span class="metric-label">TCPA</span>\
+                        <span class="metric-value ' + tcpaClass(r.tcpa_min) + '">' + r.tcpa_min + 'm</span>\
+                    </div>\
+                    <div class="metric">\
+                        <span class="metric-label">DCPA</span>\
+                        <span class="metric-value ' + dcpaClass(r.dcpa_nm) + '">' + r.dcpa_nm + 'nm</span>\
+                    </div>\
+                    <div class="metric">\
+                        <span class="metric-label">DIST</span>\
+                        <span class="metric-value ' + distClass(r.current_dist_nm) + '">' + r.current_dist_nm + 'nm</span>\
+                    </div>\
                 </div>\
             </div>';
         }).join('');
@@ -195,22 +215,18 @@ function renderCollisionList() {
         fixedSummary.innerHTML = '\
             <div class="ml-risk-summary">\
                 <div class="risk-stat ' + isActive(3) + '" data-risk-filter="3" style="--stat-color: #f43f5e; --stat-bg: rgba(244,63,94,0.15);">\
-                    <i class="fa-solid fa-triangle-exclamation risk-stat-icon"></i>\
                     <span class="risk-stat-count">' + countByLevel[3] + '</span>\
                     <span class="risk-stat-label">\uc704\ud5d8</span>\
                 </div>\
                 <div class="risk-stat ' + isActive(2) + '" data-risk-filter="2" style="--stat-color: #f97316; --stat-bg: rgba(249,115,22,0.15);">\
-                    <i class="fa-solid fa-circle-exclamation risk-stat-icon"></i>\
                     <span class="risk-stat-count">' + countByLevel[2] + '</span>\
                     <span class="risk-stat-label">\uacbd\uace0</span>\
                 </div>\
                 <div class="risk-stat ' + isActive(1) + '" data-risk-filter="1" style="--stat-color: #eab308; --stat-bg: rgba(234,179,8,0.15);">\
-                    <i class="fa-solid fa-circle-info risk-stat-icon"></i>\
                     <span class="risk-stat-count">' + countByLevel[1] + '</span>\
                     <span class="risk-stat-label">\uc8fc\uc758</span>\
                 </div>\
                 <div class="risk-stat ' + isDefaultActive + '" data-risk-filter="all" style="--stat-color: var(--text-dim); --stat-bg: rgba(255,255,255,0.08);">\
-                    <i class="fa-solid fa-list risk-stat-icon"></i>\
                     <span class="risk-stat-count">' + risks.length + '</span>\
                     <span class="risk-stat-label">\uc804\uccb4</span>\
                 </div>\
@@ -301,7 +317,7 @@ function _handleCollisionCardClick(card) {
     var midLat = (latA + latB) / 2;
     var midLng = (lngA + lngB) / 2;
     smoothFlyTo({
-        destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, 5000)
+        destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, 15000)
     });
 
     if (collisionActiveTab === 'ml') {

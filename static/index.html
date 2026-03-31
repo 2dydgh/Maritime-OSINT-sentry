@@ -19,11 +19,11 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Application Styles -->
-    <link rel="stylesheet" href="css/main.css?v=10">
+    <link rel="stylesheet" href="css/main.css?v=11">
     <!-- ECharts for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 </head>
@@ -46,7 +46,6 @@
             </div>
             <div class="region-selector" id="regionSelector">
                 <button class="region-toggle" id="regionToggle">
-                    <i class="fa-solid fa-map-location-dot"></i>
                     <span id="regionLabel">지역 선택</span>
                     <span id="regionChevron"
                         style="display:inline-flex; align-items:center; padding:2px 0 2px 4px; margin-left:2px; border-left:1px solid rgba(255,255,255,0.1);"><i
@@ -54,23 +53,13 @@
                 </button>
                 <div class="region-dropdown" id="regionDropdown">
                     <div class="region-group-label">주요 해역</div>
-                    <div class="region-item" data-region="korea">
-                        <i class="fa-solid fa-location-crosshairs"></i> 한국 해역
-                    </div>
-                    <div class="region-item" data-region="arctic">
-                        <i class="fa-solid fa-snowflake"></i> 북극항로
-                    </div>
+                    <div class="region-item" data-region="korea">한국 해역</div>
+                    <div class="region-item" data-region="arctic">북극항로</div>
                     <div class="region-divider"></div>
                     <div class="region-group-label">위험 해역</div>
-                    <div class="region-item" data-region="somalia">
-                        <i class="fa-solid fa-skull-crossbones"></i> 소말리아 / 아덴만
-                    </div>
-                    <div class="region-item" data-region="malacca">
-                        <i class="fa-solid fa-skull-crossbones"></i> 말라카 해협
-                    </div>
-                    <div class="region-item" data-region="guinea">
-                        <i class="fa-solid fa-skull-crossbones"></i> 기니만
-                    </div>
+                    <div class="region-item" data-region="somalia">소말리아 / 아덴만</div>
+                    <div class="region-item" data-region="malacca">말라카 해협</div>
+                    <div class="region-item" data-region="guinea">기니만</div>
                 </div>
             </div>
             <div class="stat-item" id="statLatencyWrap">
@@ -79,18 +68,10 @@
             </div>
             <!-- Vision Mode Filter Toggle -->
             <div class="vision-mode-group">
-                <button class="vmode-btn active" data-mode="normal" id="vmode-normal" title="Normal View">
-                    <i class="fa-solid fa-eye"></i> NORMAL
-                </button>
-                <button class="vmode-btn" data-mode="nv" id="vmode-nv" title="Night Vision">
-                    <i class="fa-solid fa-moon"></i> NV
-                </button>
-                <button class="vmode-btn" data-mode="flir" id="vmode-flir" title="FLIR Thermal">
-                    <i class="fa-solid fa-fire"></i> FLIR
-                </button>
-                <button class="vmode-btn" data-mode="crt" id="vmode-crt" title="CRT Mode">
-                    <i class="fa-solid fa-tv"></i> CRT
-                </button>
+                <button class="vmode-btn active" data-mode="normal" id="vmode-normal" title="Normal View">NORMAL</button>
+                <button class="vmode-btn" data-mode="nv" id="vmode-nv" title="Night Vision">NV</button>
+                <button class="vmode-btn" data-mode="flir" id="vmode-flir" title="FLIR Thermal">FLIR</button>
+                <button class="vmode-btn" data-mode="crt" id="vmode-crt" title="CRT Mode">CRT</button>
             </div>
         </div>
     </header>
@@ -118,7 +99,7 @@
             </div>
             <div id="feedSection" class="panel-section">
                 <h2>
-                    <span><i class="fa-solid fa-ship" style="margin-right: 6px;"></i> 이상 선박 탐지</span>
+                    <span>이상 선박 탐지</span>
                     <button class="collapse-btn"
                         onclick="document.getElementById('feedSection').classList.toggle('collapsed'); var c=document.getElementById('feedSection').classList.contains('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up',!c); this.querySelector('i').classList.toggle('fa-chevron-down',c);">
                         <i class="fa-solid fa-chevron-up"></i>
@@ -196,12 +177,8 @@
         </div>
         <!-- Row 2: Tab switcher (separate line) -->
         <div class="drawer-tab-row">
-            <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">
-                <i class="fa-solid fa-ruler"></i>거리기반
-            </button>
-            <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl">
-                <i class="fa-solid fa-brain"></i>AI분석
-            </button>
+            <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">거리기반</button>
+            <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl">AI분석</button>
         </div>
         <div id="collisionSection">
             <!-- hidden count for JS compatibility -->
@@ -238,15 +215,13 @@
     <div id="rightSidebar">
         <div id="shipFilterPanel">
         <div class="panel-master-header">
-            <h3><i class="fa-solid fa-layer-group"></i> LAYERS</h3>
+            <h3><i class="fa-solid fa-layer-group"></i> FILTERS</h3>
         </div>
         <div class="filter-content">
 
             <!-- ═══ VESSELS ═══ -->
             <div class="layer-group" id="layerGroupVessels">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(59, 130, 246, 0.1); color: var(--accent);"><i
-                            class="fa-solid fa-ship"></i></div>
                     <span class="lg-title">선박</span>
                     <span class="lg-badge" id="total-ships">0</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
@@ -297,8 +272,6 @@
             <!-- ═══ WEATHER ═══ -->
             <div class="layer-group" id="layerGroupWeather">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(59, 130, 246, 0.12); color: #3b82f6;"><i
-                            class="fa-solid fa-cloud-showers-heavy"></i></div>
                     <span class="lg-title">기상</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
@@ -313,8 +286,6 @@
             <!-- ═══ SATELLITES ═══ -->
             <div class="layer-group" id="layerGroupSatellites">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(167, 139, 250, 0.12); color: #a78bfa;"><i
-                            class="fa-solid fa-satellite"></i></div>
                     <span class="lg-title">위성</span>
                     <span class="lg-badge" id="total-sats">0</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
@@ -373,8 +344,6 @@
             <!-- ═══ SIGINT ═══ -->
             <div class="layer-group collapsed" id="layerGroupSignal">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(234, 179, 8, 0.12); color: #eab308;"><i
-                            class="fa-solid fa-tower-cell"></i></div>
                     <span class="lg-title">SIGINT</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
@@ -397,8 +366,6 @@
             <!-- ═══ NEWS ═══ -->
             <div class="layer-group collapsed" id="layerGroupNews">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8;"><i
-                            class="fa-solid fa-newspaper"></i></div>
                     <span class="lg-title">뉴스</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
@@ -421,8 +388,6 @@
             <!-- ═══ BASES ═══ -->
             <div class="layer-group collapsed" id="layerGroupBases">
                 <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <div class="lg-icon" style="background: rgba(239, 68, 68, 0.12); color: #ef4444;"><i
-                            class="fa-solid fa-shield-halved"></i></div>
                     <span class="lg-title">주요 기지</span>
                     <i class="fa-solid fa-chevron-up lg-chevron"></i>
                 </div>
@@ -458,8 +423,7 @@
         <div id="shipInfoBody" class="drag-panel-body"></div>
         <div id="nearbyVesselsSection">
             <div class="section-title">NEARBY VESSELS <span id="nearbyMlIndicator"
-                    style="display:none;font-size:0.55rem;color:var(--accent);margin-left:6px;font-weight:400;"><i
-                        class="fa-solid fa-brain"></i> AI</span></div>
+                    style="display:none;font-size:0.55rem;color:var(--accent);margin-left:6px;font-weight:400;">AI</span></div>
             <div id="nearbyVesselsList"></div>
         </div>
     </div>
@@ -477,8 +441,8 @@
     <script src="js/proximity.js?v=2"></script>
     <script src="js/collision.js?v=4"></script>
     <script src="js/websocket.js?v=4"></script>
-    <script src="js/ui-controls.js?v=3"></script>
-    <script src="js/charts.js?v=3"></script>
+    <script src="js/ui-controls.js?v=4"></script>
+    <script src="js/charts.js?v=4"></script>
     <script>
         // ── 앱 부트스트랩 ──
         document.addEventListener('DOMContentLoaded', function() {
