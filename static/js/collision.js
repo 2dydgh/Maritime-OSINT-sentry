@@ -106,29 +106,20 @@ function _renderCollisionTicker(list, cardsHtml, count) {
     var prevScroll = list.scrollTop;
     list.innerHTML = cardsHtml;
     list.scrollTop = prevScroll;
-
-    // 이미 auto-scroll이 돌고 있으면 다시 시작하지 않음
-    if (!_collisionScrollRaf) {
-        _startCollisionAutoScroll(list);
-    }
 }
 
-var _collisionScrollRaf = null;
-var _collisionScrollPaused = false;
-function _startCollisionAutoScroll(list) {
-    if (_collisionScrollRaf) cancelAnimationFrame(_collisionScrollRaf);
-    list.onmouseenter = function() { _collisionScrollPaused = true; };
-    list.onmouseleave = function() { _collisionScrollPaused = false; };
-    function tick() {
-        if (!_collisionScrollPaused && list.scrollHeight > list.clientHeight) {
-            list.scrollTop += 0.3;
-            if (list.scrollTop >= list.scrollHeight - list.clientHeight) {
-                list.scrollTop = 0;
-            }
-        }
-        _collisionScrollRaf = requestAnimationFrame(tick);
-    }
-    _collisionScrollRaf = requestAnimationFrame(tick);
+// 이벤트 위임: collisionList에 한 번만 등록
+var _collisionDelegated = false;
+function _ensureCollisionDelegation() {
+    if (_collisionDelegated) return;
+    _collisionDelegated = true;
+    var list = document.getElementById('collisionList');
+    if (!list) return;
+    list.addEventListener('click', function(e) {
+        var card = e.target.closest('.collision-card');
+        if (!card) return;
+        _handleCollisionCardClick(card);
+    });
 }
 
 function renderCollisionList() {
@@ -141,7 +132,7 @@ function renderCollisionList() {
     var summaryStats = document.getElementById('drawerSummaryStats');
     var summaryCount = document.getElementById('collision-count-summary');
     if (summaryStats && summaryCount) {
-        summaryCount.textContent = risks.length;
+        animateCount(summaryCount, risks.length);
         var dangerN, warnN, cautionN;
         var dangerLabel, warnLabel, cautionLabel;
         if (collisionActiveTab === 'ml') {
@@ -157,8 +148,8 @@ function renderCollisionList() {
         }
         function pill(cls, label, count) {
             var zero = count === 0 ? ' s-zero' : '';
-            return '<span class="s-pill ' + cls + zero + '">' +
-                '<span class="s-dot"></span>' + label + ' <span class="s-count">' + count + '</span></span>';
+            return '<span class="s-pill ' + cls + zero + '" title="' + label + ' ' + count + '">' +
+                '<span class="s-dot"></span><span class="s-count">' + count + '</span></span>';
         }
         summaryStats.innerHTML = pill('s-danger', dangerLabel, dangerN) + pill('s-warn', warnLabel, warnN) + pill('s-caution', cautionLabel, cautionN);
     }
@@ -285,66 +276,67 @@ function renderCollisionList() {
         }
     }
 
-    _bindCollisionCardClicks(list);
+    _ensureCollisionDelegation();
 
     // Update ECharts visualizations
     if (typeof updateCollisionCharts === 'function') updateCollisionCharts();
 }
 
-function _bindCollisionCardClicks(list) {
-    list.querySelectorAll('.collision-card').forEach(function(card) {
-        card.addEventListener('click', function() {
-            var mmsiA = Number(card.dataset.mmsiA);
-            var mmsiB = Number(card.dataset.mmsiB);
+function _handleCollisionCardClick(card) {
+    // Collision card selection highlight
+    document.querySelectorAll('.collision-card.selected').forEach(function(c) { c.classList.remove('selected'); });
+    card.classList.add('selected');
 
-            // 실시간 위치 우선 사용, 없으면 카드 스냅샷 사용
-            var shipA = shipDataMap[mmsiA] || shipDataMap[String(mmsiA)];
-            var shipB = shipDataMap[mmsiB] || shipDataMap[String(mmsiB)];
-            var latA = shipA ? shipA.lat : parseFloat(card.dataset.latA);
-            var lngA = shipA ? shipA.lng : parseFloat(card.dataset.lngA);
-            var latB = shipB ? shipB.lat : parseFloat(card.dataset.latB);
-            var lngB = shipB ? shipB.lng : parseFloat(card.dataset.lngB);
+    var mmsiA = Number(card.dataset.mmsiA);
+    var mmsiB = Number(card.dataset.mmsiB);
 
-            var midLat = (latA + latB) / 2;
-            var midLng = (lngA + lngB) / 2;
-            smoothFlyTo({
-                destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, 5000)
-            });
+    // 실시간 위치 우선 사용, 없으면 카드 스냅샷 사용
+    var shipA = shipDataMap[mmsiA] || shipDataMap[String(mmsiA)];
+    var shipB = shipDataMap[mmsiB] || shipDataMap[String(mmsiB)];
+    var latA = shipA ? shipA.lat : parseFloat(card.dataset.latA);
+    var lngA = shipA ? shipA.lng : parseFloat(card.dataset.lngA);
+    var latB = shipB ? shipB.lat : parseFloat(card.dataset.latB);
+    var lngB = shipB ? shipB.lng : parseFloat(card.dataset.lngB);
 
-            if (collisionActiveTab === 'ml') {
-                // AI 분석 탭: 해당 두 선박만 표시 (근접 선박 전체 X)
-                selectedProximityMmsi = null;
-                collisionTargetMmsi = mmsiB;
-                var distNm = haversineNm(latA, lngA, latB, lngB);
-                var riskLevel = parseInt(card.dataset.riskLevel) || 1;
-                // shipDataMap에 선박이 없을 때를 대비해 _selData fallback 포함
-                var selFallback = { lat: latA, lng: lngA, sog: parseFloat(card.dataset.sogA) || 0, cog: parseFloat(card.dataset.cogA) || 0, name: card.dataset.nameA || '' };
-                renderProximityLines(mmsiA, [{
-                    mmsi: mmsiB,
-                    lat: latB,
-                    lng: lngB,
-                    distance: distNm,
-                    mlRiskLevel: riskLevel,
-                    _selData: selFallback
-                }]);
-                renderNearbyPanel([]);
-            } else {
-                // 거리 기반 탭: 근접 선박 전체 표시
-                collisionTargetMmsi = mmsiB;
-                selectedProximityMmsi = mmsiA;
-                proximityMissCount = 0;
-                updateProximity();
-            }
-
-            // 충돌 쌍 자동 추적 시작 (카메라 따라가기 + 위험 해제 감지)
-            _collisionTrackingActive = true;
-            startCollisionTracking(mmsiA, mmsiB);
-
-            if (shipA) {
-                showShipInfo(mmsiA);
-            }
-        });
+    var midLat = (latA + latB) / 2;
+    var midLng = (lngA + lngB) / 2;
+    smoothFlyTo({
+        destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, 5000)
     });
+
+    if (collisionActiveTab === 'ml') {
+        // AI 분석 탭: 해당 두 선박만 표시 (근접 선박 전체 X)
+        selectedProximityMmsi = null;
+        collisionTargetMmsi = mmsiB;
+        var distNm = haversineNm(latA, lngA, latB, lngB);
+        var riskLevel = parseInt(card.dataset.riskLevel) || 1;
+        // shipDataMap에 선박이 없을 때를 대비해 _selData fallback 포함
+        var selFallback = { lat: latA, lng: lngA, sog: parseFloat(card.dataset.sogA) || 0, cog: parseFloat(card.dataset.cogA) || 0, name: card.dataset.nameA || '' };
+        renderProximityLines(mmsiA, [{
+            mmsi: mmsiB,
+            lat: latB,
+            lng: lngB,
+            distance: distNm,
+            mlRiskLevel: riskLevel,
+            _selData: selFallback
+        }]);
+        renderNearbyPanel([]);
+    } else {
+        // 거리 기반 탭: 근접 선박 전체 표시
+        collisionTargetMmsi = mmsiB;
+        selectedProximityMmsi = mmsiA;
+        proximityMissCount = 0;
+        updateProximity();
+    }
+
+    // 충돌 쌍 자동 추적 시작 (카메라 따라가기 + 위험 해제 감지)
+    _collisionTrackingActive = true;
+    startCollisionTracking(mmsiA, mmsiB);
+
+    if (shipA) {
+        showShipInfo(mmsiA);
+        highlightShip(mmsiA);
+    }
 }
 
 // ── 충돌 쌍 상태 (카메라 추적과 분리) ──
@@ -416,7 +408,7 @@ async function fetchCollisionRisks() {
         var mlSerious = (collisionData.ml?.risks || []).filter(function(r) { return r.risk_level >= 2; }).length;
         var total = (collisionData.distance?.total || 0) + mlSerious;
         var badge = document.getElementById('collision-count');
-        if (badge) badge.textContent = total;
+        if (badge) animateCount(badge, total);
 
         // Update header collision risk counts
         _updateHeaderCollisionStats();
@@ -430,15 +422,5 @@ async function fetchCollisionRisks() {
 window.fetchCollisionRisks = fetchCollisionRisks;
 
 function _updateHeaderCollisionStats() {
-    var mlRisks = (collisionData.ml && collisionData.ml.risks) || [];
-
-    // ML: level 3 = 위험, level 2 = 경고
-    var mlDanger = mlRisks.filter(function(r) { return r.risk_level >= 3; }).length;
-    var mlWarn = mlRisks.filter(function(r) { return r.risk_level === 2; }).length;
-
-    var dots = document.querySelectorAll('#stat-collision-risks .header-risk-dot');
-    if (dots.length >= 2) {
-        dots[0].textContent = mlDanger;
-        dots[1].textContent = mlWarn;
-    }
+    // Removed — stats now only shown in drawer header pills
 }

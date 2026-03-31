@@ -60,8 +60,25 @@ function buildGaugeOption(riskScore) {
     else if (riskScore >= 25) color = CHART_THEME.caution;
     else color = CHART_THEME.safe;
 
+    var levelLabel = riskScore >= 75 ? '위험' : riskScore >= 50 ? '경고' : riskScore >= 25 ? '주의' : '안전';
+
     return {
         backgroundColor: CHART_THEME.bg,
+        tooltip: {
+            show: true,
+            trigger: 'item',
+            confine: true,
+            appendTo: document.body,
+            backgroundColor: 'rgba(15,15,20,0.92)',
+            borderColor: 'rgba(59,130,246,0.3)',
+            textStyle: { color: '#e2e8f0', fontSize: 11, fontFamily: "'Pretendard Variable', sans-serif" },
+            formatter: function() {
+                return '<b>종합 위험도</b><br/>' +
+                    '<span style="color:' + color + ';font-size:18px;font-weight:700">' + riskScore + '</span>' +
+                    '<span style="color:#94a3b8;font-size:11px"> / 100</span><br/>' +
+                    '<span style="color:' + color + '">\u25cf ' + levelLabel + ' 단계</span>';
+            }
+        },
         series: [{
             type: 'gauge',
             startAngle: 200,
@@ -116,6 +133,8 @@ function buildRadarOption(factors) {
         { name: 'DIST', max: 100 }
     ];
 
+    var fullNames = ['충돌 예상 시간 (TCPA)', '최근접 거리 (DCPA)', '속도 차이', '교차 각도', '현재 거리'];
+
     var values = [
         factors.tcpa || 0,
         factors.dcpa || 0,
@@ -126,6 +145,24 @@ function buildRadarOption(factors) {
 
     return {
         backgroundColor: CHART_THEME.bg,
+        tooltip: {
+            show: true,
+            trigger: 'item',
+            confine: true,
+            appendTo: document.body,
+            backgroundColor: 'rgba(15,15,20,0.92)',
+            borderColor: 'rgba(59,130,246,0.3)',
+            textStyle: { color: '#e2e8f0', fontSize: 11, fontFamily: "'Pretendard Variable', sans-serif" },
+            formatter: function() {
+                var html = '<b>위험 요인 분석</b><br/>';
+                for (var i = 0; i < fullNames.length; i++) {
+                    var v = Math.round(values[i]);
+                    var c = v >= 70 ? CHART_THEME.danger : v >= 40 ? CHART_THEME.warning : CHART_THEME.safe;
+                    html += '<span style="color:' + c + '">\u25cf</span> ' + fullNames[i] + ' <b>' + v + '</b><br/>';
+                }
+                return html;
+            }
+        },
         radar: {
             indicator: indicators,
             shape: 'polygon',
@@ -160,8 +197,27 @@ function buildShipTypeOption(counts) {
     var colors = keys.map(function(k) { return SHIP_COLORS[k] || '#6b7280'; });
     var data = keys.map(function(k) { return counts[k] || 0; });
 
+    var koNames = { Cargo: '화물선', Tanker: '유조선', Passenger: '여객선', Fishing: '어선', Military: '군함', Tug: '예인선', Other: '기타' };
+    var total = data.reduce(function(a, b) { return a + b; }, 0);
+
     return {
         backgroundColor: CHART_THEME.bg,
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            confine: true,
+            appendTo: document.body,
+            backgroundColor: 'rgba(15,15,20,0.92)',
+            borderColor: 'rgba(59,130,246,0.3)',
+            textStyle: { color: '#e2e8f0', fontSize: 11, fontFamily: "'Pretendard Variable', sans-serif" },
+            formatter: function(params) {
+                var p = params[0];
+                var pct = total > 0 ? Math.round(p.value / total * 100) : 0;
+                var ko = koNames[p.name] || p.name;
+                return '<span style="color:' + colors[p.dataIndex] + '">\u25cf</span> <b>' + ko + '</b> (' + p.name + ')<br/>' +
+                    p.value + '척 <span style="color:#94a3b8">(' + pct + '%)</span>';
+            }
+        },
         grid: { left: 50, right: 12, top: 8, bottom: 16 },
         xAxis: {
             type: 'value',
@@ -215,6 +271,8 @@ function buildTrendOption(history) {
         grid: { left: 32, right: 32, top: 10, bottom: 18 },
         tooltip: {
             trigger: 'axis',
+            confine: true,
+            appendTo: document.body,
             backgroundColor: 'rgba(15,15,20,0.9)',
             borderColor: 'rgba(59,130,246,0.3)',
             textStyle: { color: '#e2e8f0', fontSize: 10, fontFamily: "'Pretendard Variable', sans-serif" },

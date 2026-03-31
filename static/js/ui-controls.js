@@ -1,6 +1,71 @@
 // ── Maritime OSINT Sentry — UI Controls ──
 
+// ── Header UTC Clock ──
+function updateHeaderClock() {
+    var el = document.getElementById('headerUtcClock');
+    if (!el) return;
+    var now = new Date();
+    var h = String(now.getUTCHours()).padStart(2, '0');
+    var m = String(now.getUTCMinutes()).padStart(2, '0');
+    var s = String(now.getUTCSeconds()).padStart(2, '0');
+    el.textContent = h + ':' + m + ':' + s + ' UTC';
+}
+setInterval(updateHeaderClock, 1000);
+updateHeaderClock();
+
+// ── WebSocket Status LED ──
+function setWsStatus(status) {
+    var led = document.getElementById('wsStatusLed');
+    if (!led) return;
+    led.classList.remove('connected', 'disconnected', 'connecting');
+    led.classList.add(status);
+    var titles = { connected: 'WebSocket 연결됨', disconnected: '연결 끊김', connecting: '연결 중...' };
+    led.title = titles[status] || '';
+}
+window.setWsStatus = setWsStatus;
+
+// ── Number Count-Up Animation ──
+function animateCount(el, newValue) {
+    if (!el) return;
+    var oldText = el.textContent;
+    var newText = String(newValue);
+    if (oldText === newText) return;
+    el.textContent = newText;
+    el.classList.remove('count-up');
+    void el.offsetWidth; // force reflow
+    el.classList.add('count-up');
+}
+window.animateCount = animateCount;
+
 // ── Panel Collapse/Expand ──
+function toggleLeftSidebar() {
+    var sidebar = document.getElementById('leftSidebar');
+    var chevron = document.getElementById('leftSidebarChevron');
+    sidebar.classList.toggle('sidebar-collapsed');
+    var isCollapsed = sidebar.classList.contains('sidebar-collapsed');
+    if (chevron) {
+        chevron.classList.toggle('fa-chevron-left', !isCollapsed);
+        chevron.classList.toggle('fa-chevron-right', isCollapsed);
+    }
+    // Update slim rail alert badge
+    _updateSlimBadge();
+    setTimeout(resizeActiveMap, 350);
+}
+window.toggleLeftSidebar = toggleLeftSidebar;
+
+function _updateSlimBadge() {
+    var badge = document.getElementById('slimAlertCount');
+    if (!badge) return;
+    var count = (window._feedAlerts || []).length;
+    if (count > 0) {
+        badge.style.display = '';
+        badge.textContent = count > 99 ? '99+' : count;
+    } else {
+        badge.style.display = 'none';
+    }
+}
+window._updateSlimBadge = _updateSlimBadge;
+
 function toggleLeftPanel() {
     var panel = document.getElementById('feedPanel');
     panel.classList.toggle('panel-collapsed');
@@ -304,7 +369,7 @@ async function loadHistoryWindow(centerDate, opts) {
         currentWindowEnd = windowEnd;
         historyInterpolationLoaded = true;
 
-        document.getElementById('total-ships').textContent = shipCount.toLocaleString();
+        animateCount(document.getElementById('total-ships'), shipCount.toLocaleString());
 
         if (!silent) {
             document.getElementById('loading').style.display = 'none';
@@ -568,19 +633,20 @@ async function fetchData() {
             var cardsHtml = items.map(function(item) {
                 var alert = item.alert;
                 return '\
-                <div class="feed-card" style="border-left: 3px solid ' + item.borderColor + '; cursor: pointer;"\
+                <div class="feed-card" style="border-left-color: ' + item.borderColor + ';"\
                      data-lat="' + (alert.lat || '') + '" data-lng="' + (alert.lng || '') + '" data-mmsi="' + (alert.mmsi || '') + '">\
-                    <div class="feed-meta" style="display:flex;justify-content:space-between;align-items:center;">\
-                        <span style="color:' + item.color + ';font-weight:700;font-size:0.7rem;letter-spacing:0.08em;">\
-                            <i class="fa-solid ' + item.icon + '" style="margin-right:5px;"></i>' + item.label + '\
+                    <div class="feed-meta">\
+                        <span class="feed-alert-type" style="color:' + item.color + ';">\
+                            <i class="fa-solid ' + item.icon + '" style="margin-right:4px;"></i>' + item.label + '\
                         </span>\
-                        <span style="color:var(--text-dim);font-size:0.7rem;"><i class="fa-solid fa-clock" style="margin-right:3px;"></i>' + item.timeStr + '</span>\
+                        <span class="feed-time"><i class="fa-solid fa-clock" style="margin-right:3px;"></i>' + item.timeStr + '</span>\
                     </div>\
-                    <h3 class="feed-title" style="margin:6px 0 4px;font-size:0.85rem;">' + (alert.name || 'UNKNOWN VESSEL') + '</h3>\
-                    <div style="color:var(--text-dim);font-size:0.75rem;line-height:1.5;">\
+                    <h3 class="feed-title">' + (alert.name || 'UNKNOWN VESSEL') + '</h3>\
+                    <div class="feed-body">\
                         ' + (alert.message || '') + '\
-                        ' + (alert.country ? '<span style="margin-left:6px;opacity:0.7;">\ud83c\udff4 ' + alert.country + '</span>' : '') + '\
+                        ' + (alert.country ? '<span class="feed-country">\ud83c\udff4 ' + alert.country + '</span>' : '') + '\
                     </div>\
+                    ' + (alert.mmsi ? '<div class="feed-mmsi">MMSI ' + alert.mmsi + '</div>' : '') + '\
                 </div>';
             }).join('');
 
@@ -591,50 +657,61 @@ async function fetchData() {
                 // 카드 복제로 무한 흐름 + 호버 시 스크롤 모드
                 container.innerHTML = '<div class="feed-ticker-wrap" style="--feed-ticker-duration: ' + dur + 's;">' + cardsHtml + cardsHtml + '</div>';
                 container.onmouseenter = function() {
-                    container.classList.add('scrolling');
-                    // 스크롤 모드: 복제 제거, overflow 활성화
                     var wrap = container.querySelector('.feed-ticker-wrap');
-                    if (wrap && wrap._originalHtml === undefined) {
-                        wrap._originalHtml = wrap.innerHTML;
-                        wrap.innerHTML = cardsHtml; // 복제 제거
+                    if (!wrap) return;
+                    // 1. 현재 애니메이션 위치에서 스크롤 오프셋 계산
+                    var computed = getComputedStyle(wrap);
+                    var matrix = computed.transform; // "matrix(1,0,0,1,0,-Y)"
+                    var currentY = 0;
+                    if (matrix && matrix !== 'none') {
+                        var parts = matrix.match(/matrix.*\((.+)\)/);
+                        if (parts) currentY = Math.abs(parseFloat(parts[1].split(',')[5]));
                     }
+                    // 2. 복제 제거 → 단일 콘텐츠로 전환
+                    wrap.innerHTML = cardsHtml;
+                    // 3. 스크롤 모드 전환
+                    container.classList.add('scrolling');
+                    // 4. 캡처한 위치로 스크롤 설정
+                    container.scrollTop = currentY;
+                    _bindFeedCardClicks(container);
                 };
                 container.onmouseleave = function() {
                     container.classList.remove('scrolling');
                     container.scrollTop = 0;
-                    // 애니메이션 모드: 복제 복원
+                    // 복제 복원 + 애니메이션 재시작
                     var wrap = container.querySelector('.feed-ticker-wrap');
-                    if (wrap && wrap._originalHtml !== undefined) {
-                        wrap.innerHTML = wrap._originalHtml;
-                        delete wrap._originalHtml;
-                        // 클릭 이벤트 재바인딩
-                        _bindFeedCardClicks(container);
-                    }
+                    if (wrap) wrap.innerHTML = cardsHtml + cardsHtml;
+                    _bindFeedCardClicks(container);
                 };
             }
 
             _bindFeedCardClicks(container);
         }
 
+        // 이벤트 위임: DOM 교체에 영향받지 않도록 컨테이너에 한 번만 등록
+        var _feedDelegated = false;
         function _bindFeedCardClicks(el) {
-            el.querySelectorAll('.feed-card[data-lat]').forEach(function(card) {
+            if (_feedDelegated) return;
+            _feedDelegated = true;
+            el.addEventListener('click', function(e) {
+                var card = e.target.closest('.feed-card[data-lat]');
+                if (!card) return;
                 var lat = parseFloat(card.dataset.lat);
                 var lng = parseFloat(card.dataset.lng);
                 var mmsi = card.dataset.mmsi;
                 if (!lat || !lng) return;
-                card.addEventListener('click', function() {
-                    smoothFlyTo({
-                        destination: Cesium.Cartesian3.fromDegrees(lng, lat, 5000.0),
-                        complete: function() {
-                            setTimeout(function() {
-                                if (shipDataMap[mmsi] || shipDataMap[String(mmsi)]) {
-                                    showShipInfo(mmsi);
-                                    selectedProximityMmsi = mmsi;
-                                    updateProximity();
-                                }
-                            }, 500);
-                        }
-                    });
+                smoothFlyTo({
+                    destination: Cesium.Cartesian3.fromDegrees(lng, lat, 5000.0),
+                    complete: function() {
+                        setTimeout(function() {
+                            if (shipDataMap[mmsi] || shipDataMap[String(mmsi)]) {
+                                showShipInfo(mmsi);
+                                highlightShip(mmsi);
+                                selectedProximityMmsi = mmsi;
+                                updateProximity();
+                            }
+                        }, 500);
+                    }
                 });
             });
         }
@@ -672,7 +749,12 @@ async function fetchData() {
                 }
 
                 if (newCount > 0 && window._feedAlerts && window._feedAlerts.length > 0) {
-                    _rebuildFeedTicker(feedContainer);
+                    // 호버 중이면 리빌드 건너뛰기 (위치 점프 방지)
+                    if (!feedContainer.classList.contains('scrolling')) {
+                        _rebuildFeedTicker(feedContainer);
+                    }
+                    // Update slim rail badge
+                    if (typeof _updateSlimBadge === 'function') _updateSlimBadge();
                 }
             } catch (e) {
                 console.warn('Alert fetch failed:', e);
@@ -897,6 +979,7 @@ makeDraggable(
 document.getElementById('shipInfoClose').addEventListener('click', function() {
     document.getElementById('shipInfoPanel').classList.remove('visible');
     clearProximity();
+    clearShipHighlight();
 });
 
 // Show custom ship info panel when entity is clicked
@@ -989,6 +1072,7 @@ handler.setInputAction(function(click) {
 
             // 히스토리 모드 Entity 선박
             showShipInfo(picked.id);
+            highlightShip(entityId);
             if (shipDataMap[entityId]) {
                 selectedProximityMmsi = entityId;
                 collisionTargetMmsi = null;
@@ -1004,6 +1088,7 @@ handler.setInputAction(function(click) {
         if (picked.primitive && picked.primitive._mmsi) {
             var mmsi = picked.primitive._mmsi;
             showShipInfo(mmsi);
+            highlightShip(mmsi);
             selectedProximityMmsi = mmsi;
             collisionTargetMmsi = null;
             proximityMissCount = 0;
@@ -1015,6 +1100,7 @@ handler.setInputAction(function(click) {
     // 빈 공간 클릭 — 패널 닫기
     document.getElementById('shipInfoPanel').classList.remove('visible');
     clearProximity();
+    clearShipHighlight();
     if (_activeFootprintSatId) {
         var old = satDataSource.entities.getById('footprint-' + _activeFootprintSatId);
         if (old) satDataSource.entities.remove(old);

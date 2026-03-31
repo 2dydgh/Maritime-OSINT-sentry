@@ -7,11 +7,13 @@ function getSatIcon(colorHex, missionType) {
 
     var c = colorHex;
     var gid = c.slice(1) + (missionType || 'def');
+    // Diamond shape: rhombus centered at 24,24
     var body = '\
-        <polyline points=\'4,20 4,12 14,12\' fill=\'none\' stroke=\'' + c + '\' stroke-width=\'2\' stroke-linecap=\'round\' opacity=\'0.9\'/>\
-        <polyline points=\'34,12 44,12 44,20\' fill=\'none\' stroke=\'' + c + '\' stroke-width=\'2\' stroke-linecap=\'round\' opacity=\'0.9\'/>\
-        <polyline points=\'44,28 44,36 34,36\' fill=\'none\' stroke=\'' + c + '\' stroke-width=\'2\' stroke-linecap=\'round\' opacity=\'0.9\'/>\
-        <polyline points=\'14,36 4,36 4,28\' fill=\'none\' stroke=\'' + c + '\' stroke-width=\'2\' stroke-linecap=\'round\' opacity=\'0.9\'/>';
+        <polygon points=\'24,6 42,24 24,42 6,24\' fill=\'none\' stroke=\'' + c + '\' stroke-width=\'2\' stroke-linejoin=\'round\' opacity=\'0.9\'/>\
+        <line x1=\'24\' y1=\'14\' x2=\'24\' y2=\'20\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.5\'/>\
+        <line x1=\'24\' y1=\'28\' x2=\'24\' y2=\'34\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.5\'/>\
+        <line x1=\'14\' y1=\'24\' x2=\'20\' y2=\'24\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.5\'/>\
+        <line x1=\'28\' y1=\'24\' x2=\'34\' y2=\'24\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.5\'/>';
 
     var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 48 48\'>\
         <defs>\
@@ -338,7 +340,7 @@ function _propagateSatPositions() {
                     outlineWidth: 3,
                     style: Cesium.LabelStyle.FILL_AND_OUTLINE,
                     pixelOffset: new Cesium.Cartesian2(0, -26),
-                    distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2e7),
+                    distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 6e7),
                     disableDepthTestDistance: Number.POSITIVE_INFINITY
                 }
             });
@@ -411,7 +413,7 @@ function updateSatellitesForTime(sats, targetDate) {
                     outlineWidth: 3,
                     style: Cesium.LabelStyle.FILL_AND_OUTLINE,
                     pixelOffset: new Cesium.Cartesian2(0, -26),
-                    distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2e7),
+                    distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 6e7),
                     disableDepthTestDistance: Number.POSITIVE_INFINITY
                 }
             });

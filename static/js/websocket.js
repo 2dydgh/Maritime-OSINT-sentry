@@ -238,7 +238,7 @@ function updateShipsLayer(ships) {
             });
 
             var countEl = document.getElementById('count-' + type);
-            if (countEl) countEl.textContent = typeShips.length.toLocaleString();
+            if (countEl) animateCount(countEl, typeShips.length.toLocaleString());
         });
         return;
     }
@@ -331,7 +331,7 @@ function updateShipsLayer(ships) {
         });
 
         var countEl = document.getElementById('count-' + type);
-        if (countEl) countEl.textContent = typeShips.length.toLocaleString();
+        if (countEl) animateCount(countEl, typeShips.length.toLocaleString());
     });
 
     // 2D mode Leaflet marker update
@@ -416,6 +416,7 @@ function initWebSocket() {
 
     ws.onopen = function() {
         console.log("WebSocket connected!");
+        if (typeof setWsStatus === 'function') setWsStatus('connected');
         var loadingText = document.getElementById('loading-text');
         if (loadingText) loadingText.textContent = 'AIS 데이터 수신 대기...';
     };
@@ -464,7 +465,8 @@ function initWebSocket() {
                 }
 
 
-                document.getElementById('total-ships').textContent = (data.total_tracked || data.ship_count || 0).toLocaleString();
+                var totalShipsEl = document.getElementById('total-ships');
+                animateCount(totalShipsEl, (data.total_tracked || data.ship_count || 0).toLocaleString());
 
                 if (data.timestamp) {
                     var updated = new Date(data.timestamp);
@@ -481,10 +483,12 @@ function initWebSocket() {
 
     ws.onerror = function(error) {
         console.error("WebSocket error:", error);
+        if (typeof setWsStatus === 'function') setWsStatus('disconnected');
     };
 
     ws.onclose = function() {
         console.log("WebSocket closed. Reconnecting in 2 seconds...");
+        if (typeof setWsStatus === 'function') setWsStatus('connecting');
         var loadingEl = document.getElementById('loading');
         if (loadingEl) {
             loadingEl.style.display = '';
@@ -521,3 +525,114 @@ setInterval(function() {
         el.className = 'dead';
     }
 }, 1000);
+
+// ── Ship Highlight (targeting reticle on navigation) ──
+var _highlightEntity = null;
+var _highlightTimer = null;
+var _highlightStartTime = null;
+var _highlightMmsi = null;
+var _highlightUpdateInterval = null;
+
+// Generate square bracket targeting reticle SVG
+var _reticleImageCache = null;
+function _getReticleImage() {
+    if (_reticleImageCache) return _reticleImageCache;
+    var size = 64;
+    var corner = 16;
+    var pad = 4;
+    var c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    var ctx = c.getContext('2d');
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#00e5ff';
+    ctx.shadowBlur = 6;
+
+    // Top-left corner
+    ctx.beginPath();
+    ctx.moveTo(pad, pad + corner);
+    ctx.lineTo(pad, pad);
+    ctx.lineTo(pad + corner, pad);
+    ctx.stroke();
+
+    // Top-right corner
+    ctx.beginPath();
+    ctx.moveTo(size - pad - corner, pad);
+    ctx.lineTo(size - pad, pad);
+    ctx.lineTo(size - pad, pad + corner);
+    ctx.stroke();
+
+    // Bottom-right corner
+    ctx.beginPath();
+    ctx.moveTo(size - pad, size - pad - corner);
+    ctx.lineTo(size - pad, size - pad);
+    ctx.lineTo(size - pad - corner, size - pad);
+    ctx.stroke();
+
+    // Bottom-left corner
+    ctx.beginPath();
+    ctx.moveTo(pad + corner, size - pad);
+    ctx.lineTo(pad, size - pad);
+    ctx.lineTo(pad, size - pad - corner);
+    ctx.stroke();
+
+    _reticleImageCache = c.toDataURL();
+    return _reticleImageCache;
+}
+
+function highlightShip(mmsi) {
+    clearShipHighlight();
+
+    var ship = shipDataMap[mmsi] || shipDataMap[String(mmsi)];
+    if (!ship || !ship.lat || !ship.lng) return;
+
+    _highlightStartTime = Date.now();
+    _highlightMmsi = mmsi;
+
+    var position = Cesium.Cartesian3.fromDegrees(ship.lng, ship.lat);
+
+    _highlightEntity = viewer.entities.add({
+        position: position,
+        billboard: {
+            image: _getReticleImage(),
+            width: 52,
+            height: 52,
+            color: new Cesium.CallbackProperty(function() {
+                var elapsed = (Date.now() - _highlightStartTime) / 1000;
+                var alpha = 0.6 + 0.4 * Math.sin(elapsed * 4);
+                return Cesium.Color.WHITE.withAlpha(alpha);
+            }, false),
+            pixelOffset: new Cesium.Cartesian2(0, 0),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            scaleByDistance: new Cesium.NearFarScalar(1e3, 1.2, 5e6, 0.8)
+        }
+    });
+
+    // Follow ship position updates
+    _highlightUpdateInterval = setInterval(function() {
+        if (!_highlightEntity || !_highlightMmsi) return;
+        var s = shipDataMap[_highlightMmsi] || shipDataMap[String(_highlightMmsi)];
+        if (s && s.lat && s.lng) {
+            _highlightEntity.position = Cesium.Cartesian3.fromDegrees(s.lng, s.lat);
+        }
+    }, 1000);
+}
+window.highlightShip = highlightShip;
+
+function clearShipHighlight() {
+    if (_highlightEntity) {
+        viewer.entities.remove(_highlightEntity);
+        _highlightEntity = null;
+    }
+    if (_highlightTimer) {
+        clearTimeout(_highlightTimer);
+        _highlightTimer = null;
+    }
+    if (_highlightUpdateInterval) {
+        clearInterval(_highlightUpdateInterval);
+        _highlightUpdateInterval = null;
+    }
+    _highlightStartTime = null;
+    _highlightMmsi = null;
+}
+window.clearShipHighlight = clearShipHighlight;

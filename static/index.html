@@ -23,7 +23,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Application Styles -->
-    <link rel="stylesheet" href="css/main.css?v=5">
+    <link rel="stylesheet" href="css/main.css?v=10">
     <!-- ECharts for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 </head>
@@ -39,6 +39,11 @@
                 DASHBOARD</span>
         </div>
         <div class="header-stats">
+            <div class="header-clock">
+                <span class="ws-status-led connecting" id="wsStatusLed" title="연결 중..."></span>
+                <span id="headerUtcClock">--:--:-- UTC</span>
+                <span class="clock-label">ZULU</span>
+            </div>
             <div class="region-selector" id="regionSelector">
                 <button class="region-toggle" id="regionToggle">
                     <i class="fa-solid fa-map-location-dot"></i>
@@ -68,13 +73,6 @@
                     </div>
                 </div>
             </div>
-            <div class="stat-item" id="statCollisionWrap">
-                <span class="stat-value" id="stat-collision-risks" style="display:flex;align-items:center;gap:4px;">
-                    <span class="header-risk-dot danger">0</span>
-                    <span class="header-risk-dot warning">0</span>
-                </span>
-                <span class="stat-label">충돌 분석</span>
-            </div>
             <div class="stat-item" id="statLatencyWrap">
                 <span class="stat-value" id="stat-latency">--</span>
                 <span class="stat-label">데이터 지연</span>
@@ -102,11 +100,20 @@
     <div id="leftSidebar">
         <!-- Feed Panel -->
         <div id="feedPanel">
-            <div class="sidebar-section-header">
+            <div class="sidebar-section-header" onclick="toggleLeftSidebar()">
                 <span><i class="fa-solid fa-tower-broadcast" style="margin-right: 8px;"></i> LIVE FEED</span>
-                <button class="collapse-btn" title="접기/펼치기"
-                    onclick="const f=document.getElementById('feedSection');f.classList.toggle('collapsed');var c=f.classList.contains('collapsed');this.querySelector('i').classList.toggle('fa-chevron-up',!c);this.querySelector('i').classList.toggle('fa-chevron-down',c);">
-                    <i class="fa-solid fa-chevron-up"></i>
+                <button class="collapse-btn" title="사이드바 접기/펼치기" onclick="event.stopPropagation(); toggleLeftSidebar();">
+                    <i class="fa-solid fa-chevron-left" id="leftSidebarChevron"></i>
+                </button>
+            </div>
+            <!-- Slim rail icons (visible when collapsed) -->
+            <div class="slim-rail">
+                <button class="slim-rail-btn" title="LIVE FEED 펼치기" onclick="toggleLeftSidebar()">
+                    <i class="fa-solid fa-tower-broadcast"></i>
+                </button>
+                <button class="slim-rail-btn" title="이상 선박" id="slimAlertBtn">
+                    <i class="fa-solid fa-ship"></i>
+                    <span class="slim-badge" id="slimAlertCount" style="display:none;">0</span>
                 </button>
             </div>
             <div id="feedSection" class="panel-section">
@@ -165,41 +172,40 @@
             <button class="map-nav-btn" id="navDown" title="Pan Down (↓)"><i class="fa-solid fa-chevron-down"></i></button>
         </div>
 
+        <!-- 2D Zoom Controls (matches 3D nav style) -->
+        <div id="leafletZoomControls">
+            <button class="map-nav-btn" id="leafletZoomIn" title="Zoom In (+)"><i class="fa-solid fa-plus"></i></button>
+            <button class="map-nav-btn" id="leafletZoomOut" title="Zoom Out (-)"><i class="fa-solid fa-minus"></i></button>
+        </div>
+
         <button id="filterToggleBtn" style="display:none;"></button>
     </div><!-- /mapArea -->
 
     <!-- Collision Drawer (bottom of center column) -->
     <div id="collisionDrawer">
-        <div class="drawer-summary-bar" onclick="toggleCollisionDrawer()">
-            <div class="summary-left">
-                <div class="summary-icon-box">
-                    <i class="fa-solid fa-triangle-exclamation"></i>
-                </div>
-                <span class="summary-title">COLLISION ANALYSIS</span>
-                <span class="summary-total-badge" id="collision-count-summary">0</span>
-            </div>
-            <div class="summary-stats-row" id="drawerSummaryStats"></div>
-            <div class="summary-right">
-                <span class="summary-expand-hint">펼치기</span>
+        <!-- Row 1: Header bar (matches sidebar-section-header style) -->
+        <div class="drawer-header-bar" onclick="toggleCollisionDrawer()">
+            <span class="drawer-header-title">
+                <i class="fa-solid fa-triangle-exclamation" style="margin-right: 8px;"></i>COLLISION ANALYSIS
+            </span>
+            <div class="drawer-risk-counts" id="drawerSummaryStats"></div>
+            <span id="collision-count-summary" style="display:none;">0</span>
+            <button class="collapse-btn drawer-collapse-btn">
                 <i class="fa-solid fa-chevron-up drawer-toggle-icon"></i>
-            </div>
+            </button>
+        </div>
+        <!-- Row 2: Tab switcher (separate line) -->
+        <div class="drawer-tab-row">
+            <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">
+                <i class="fa-solid fa-ruler"></i>거리기반
+            </button>
+            <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl">
+                <i class="fa-solid fa-brain"></i>AI분석
+            </button>
         </div>
         <div id="collisionSection">
-            <div class="collision-bottom-header">
-                <span>
-                    <i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px;"></i> 충돌 분석
-                    <span class="collision-count-badge" id="collision-count">0</span>
-                </span>
-                <div class="collision-tabs" style="margin:0;">
-                    <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">거리기반</button>
-                    <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl">
-                        <i class="fa-solid fa-brain" style="margin-right:4px;font-size:0.65rem;"></i>AI분석
-                    </button>
-                </div>
-                <button class="collapse-btn" onclick="toggleCollisionDrawer()" title="접기" style="margin-left: auto;">
-                    <i class="fa-solid fa-chevron-down"></i>
-                </button>
-            </div>
+            <!-- hidden count for JS compatibility -->
+            <span id="collision-count" style="display:none;">0</span>
             <!-- ECharts 시각화 영역 -->
             <div id="chartsRow" style="display:none; padding:6px 8px; margin: 8px 14px 12px 14px; gap:6px; flex-shrink:0; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); box-shadow: inset 0 2px 6px rgba(0,0,0,0.3);">
                 <div class="chart-cell">
@@ -464,15 +470,15 @@
     </div>
 
     <!-- Application Scripts (load order matters) -->
-    <script src="js/app.js"></script>
-    <script src="js/map-cesium.js"></script>
+    <script src="js/app.js?v=2"></script>
+    <script src="js/map-cesium.js?v=2"></script>
     <script src="js/map-leaflet.js?v=2"></script>
-    <script src="js/satellite.js"></script>
-    <script src="js/proximity.js"></script>
-    <script src="js/collision.js"></script>
-    <script src="js/websocket.js"></script>
-    <script src="js/ui-controls.js"></script>
-    <script src="js/charts.js"></script>
+    <script src="js/satellite.js?v=3"></script>
+    <script src="js/proximity.js?v=2"></script>
+    <script src="js/collision.js?v=4"></script>
+    <script src="js/websocket.js?v=4"></script>
+    <script src="js/ui-controls.js?v=3"></script>
+    <script src="js/charts.js?v=3"></script>
     <script>
         // ── 앱 부트스트랩 ──
         document.addEventListener('DOMContentLoaded', function() {

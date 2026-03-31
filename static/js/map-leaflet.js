@@ -43,9 +43,16 @@ function initLeaflet() {
         pane: 'overlayPane'
     }).addTo(leafletMap);
 
-    L.control.zoom({ position: 'bottomright' }).addTo(leafletMap);
     leafletInitialized = true;
 }
+
+// 2D zoom buttons — bind after DOM ready, use leafletMap at click time
+document.addEventListener('DOMContentLoaded', function() {
+    var zoomInBtn = document.getElementById('leafletZoomIn');
+    var zoomOutBtn = document.getElementById('leafletZoomOut');
+    if (zoomInBtn) zoomInBtn.addEventListener('click', function() { if (leafletMap) leafletMap.zoomIn(); });
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', function() { if (leafletMap) leafletMap.zoomOut(); });
+});
 
 function setMapMode(mode) {
     if (mode === currentMapMode) return;
