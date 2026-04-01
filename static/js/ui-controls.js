@@ -144,10 +144,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (satCb) { satCb.checked = chip.classList.contains('active'); satCb.dispatchEvent(new Event('change')); }
             } else if (layer === 'weather') {
                 var wxOn = chip.classList.contains('active');
+                // 강수 레이더
                 if (typeof cloudLayer !== 'undefined' && cloudLayer) {
                     cloudLayer.show = wxOn;
                     if (wxOn && typeof viewer !== 'undefined') viewer.imageryLayers.raiseToTop(cloudLayer);
                 }
+                var wxPrecip = document.getElementById('wx-precipitation');
+                if (wxPrecip) wxPrecip.checked = wxOn;
+                // 파고/풍향 오버레이
+                var wxWave = document.getElementById('wx-wave-height');
+                var wxWind = document.getElementById('wx-wind');
+                if (!wxOn) {
+                    if (wxWave) { wxWave.checked = false; }
+                    if (wxWind) { wxWind.checked = false; }
+                }
+                if (typeof renderWeatherOverlays === 'function') renderWeatherOverlays();
             }
         });
     }
