@@ -2534,3 +2534,35 @@ header::after {
     border-top: 1px solid transparent;
     border-image: linear-gradient(90deg, transparent, rgba(64, 111, 216, 0.15), transparent) 1;
 }
+
+/* Weather legend */
+.wx-legend {
+    margin-top: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.3);
+    font-size: 0.6rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.wx-legend-title {
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    font-weight: 600;
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.wx-legend-bar {
+    height: 8px;
+    border-radius: 3px;
+    margin-bottom: 3px;
+}
+
+.wx-legend-labels {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-dim);
+    font-size: 0.5rem;
+}
