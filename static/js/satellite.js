@@ -66,6 +66,10 @@ function _applySatMissionFilter() {
         });
     });
     document.getElementById('total-sats').textContent = visibleCount + '/' + Object.keys(_satRecCache).length;
+    var hudS = document.getElementById('hudSats');
+    if (hudS) hudS.textContent = visibleCount;
+    var cs = document.getElementById('chipSatCount');
+    if (cs) cs.textContent = visibleCount;
 }
 
 document.getElementById('layer-sats').addEventListener('change', function(e) {
@@ -147,6 +151,10 @@ async function _refreshSatTleCache() {
         var enabledM = _getEnabledMissions();
         var visCount = sats.filter(function(s) { return enabledM.has(s.mission || ''); }).length;
         document.getElementById('total-sats').textContent = visCount + '/' + sats.length;
+        var hudS2 = document.getElementById('hudSats');
+        if (hudS2) hudS2.textContent = visCount;
+        var cs2 = document.getElementById('chipSatCount');
+        if (cs2) cs2.textContent = visCount;
     } catch (err) {
         console.error('Error fetching satellite TLE data:', err);
     }
@@ -242,6 +250,7 @@ function _computeOrbitPath(satrec, now, steps) {
 }
 
 function _propagateSatPositions() {
+    if (typeof satDataSource === 'undefined' || !satDataSource) return;
     var hasSatelliteJs = typeof satellite !== 'undefined';
     var now = new Date();
     var enabledMissions = _getEnabledMissions();
@@ -430,6 +439,10 @@ function updateSatellitesForTime(sats, targetDate) {
         .forEach(function(e) { satDataSource.entities.remove(e); });
 
     document.getElementById('total-sats').textContent = sats.length;
+    var hudS3 = document.getElementById('hudSats');
+    if (hudS3) hudS3.textContent = sats.length;
+    var cs3 = document.getElementById('chipSatCount');
+    if (cs3) cs3.textContent = sats.length;
 }
 window.updateSatellitesForTime = updateSatellitesForTime;
 

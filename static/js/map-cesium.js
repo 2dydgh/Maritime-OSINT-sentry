@@ -464,40 +464,46 @@ function flyToRegion(key) {
 var regionChevron = document.getElementById('regionChevron');
 
 function openRegionDropdown() {
-    regionDropdown.classList.add('open');
-    regionToggle.classList.add('open');
+    if (regionDropdown) regionDropdown.classList.add('open');
+    if (regionToggle) regionToggle.classList.add('open');
 }
 
 function closeRegionDropdown() {
-    regionDropdown.classList.remove('open');
-    regionToggle.classList.remove('open');
+    if (regionDropdown) regionDropdown.classList.remove('open');
+    if (regionToggle) regionToggle.classList.remove('open');
 }
 
-regionToggle.addEventListener('click', function(e) {
-    e.stopPropagation();
-    closeRegionDropdown();
-    if (currentRegionKey) {
-        flyToRegion(currentRegionKey);
-    } else {
-        openRegionDropdown();
-    }
-});
-
-regionChevron.addEventListener('click', function(e) {
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-    var isOpen = regionDropdown.classList.contains('open');
-    if (isOpen) {
+if (regionToggle) {
+    regionToggle.addEventListener('click', function(e) {
+        e.stopPropagation();
         closeRegionDropdown();
-    } else {
-        openRegionDropdown();
-    }
-});
+        if (currentRegionKey) {
+            flyToRegion(currentRegionKey);
+        } else {
+            openRegionDropdown();
+        }
+    });
+}
+
+if (regionChevron) {
+    regionChevron.addEventListener('click', function(e) {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        var isOpen = regionDropdown && regionDropdown.classList.contains('open');
+        if (isOpen) {
+            closeRegionDropdown();
+        } else {
+            openRegionDropdown();
+        }
+    });
+}
 
 document.addEventListener('click', function() {
     closeRegionDropdown();
 });
-regionDropdown.addEventListener('click', function(e) { e.stopPropagation(); });
+if (regionDropdown) {
+    regionDropdown.addEventListener('click', function(e) { e.stopPropagation(); });
+}
 
 document.querySelectorAll('.region-item').forEach(function(item) {
     item.addEventListener('click', function() {
@@ -507,7 +513,7 @@ document.querySelectorAll('.region-item').forEach(function(item) {
 
         document.querySelectorAll('.region-item').forEach(function(i) { i.classList.remove('active'); });
         item.classList.add('active');
-        regionLabel.textContent = r.label;
+        if (regionLabel) regionLabel.textContent = r.label;
         currentRegionKey = key;
 
         closeRegionDropdown();

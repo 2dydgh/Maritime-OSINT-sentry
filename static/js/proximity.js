@@ -406,8 +406,8 @@ function renderNearbyPanel(nearbyVessels) {
             : isCollisionTarget
                 ? { css: '#f43f5e' }
                 : proximityColor(nv.distance);
-        var ML_BADGE_COLORS = { 3: '#a855f7', 2: '#8b5cf6', 1: '#a78bfa' };
-        var mlBadgeColor = hasMlRisk ? (ML_BADGE_COLORS[nv.mlRiskLevel] || '#a855f7') : null;
+        var ML_BADGE_COLORS = { 3: '#002878', 2: '#406FD8', 1: '#6989E0' };
+        var mlBadgeColor = hasMlRisk ? (ML_BADGE_COLORS[nv.mlRiskLevel] || '#002878') : null;
 
         var hasDistRisk = nv.distSeverity != null;
         var DIST_SEVERITY_COLORS = { danger: '#f43f5e', warning: '#f97316' };

@@ -20,6 +20,47 @@ function flyToRegion2D(region, btn) {
 }
 window.flyToRegion2D = flyToRegion2D;
 
+var REGION_TABS_2D = [
+    { key: 'world', label: '전체' },
+    { key: 'east-asia', label: '동아시아' },
+    { key: 'southeast-asia', label: '동남아' },
+    { key: 'europe', label: '유럽' },
+    { key: 'middle-east', label: '중동' },
+    { key: 'africa', label: '아프리카' },
+    { key: 'north-america', label: '북미' },
+    { key: 'south-america', label: '남미' }
+];
+
+var REGION_TABS_3D = [
+    { key: 'korea', label: '한국 해역' },
+    { key: 'arctic', label: '북극항로' },
+    { key: 'somalia', label: '아덴만' },
+    { key: 'malacca', label: '말라카' },
+    { key: 'guinea', label: '기니만' }
+];
+
+function buildRegionTabs(mode) {
+    var container = document.getElementById('regionTabs');
+    if (!container) return;
+    var tabs = mode === '2d' ? REGION_TABS_2D : REGION_TABS_3D;
+    container.innerHTML = tabs.map(function(t, i) {
+        return '<button class="region-tab' + (i === 0 ? ' active' : '') + '" data-region="' + t.key + '" data-mode="' + mode + '">' + t.label + '</button>';
+    }).join('');
+    container.onclick = function(e) {
+        var btn = e.target.closest('.region-tab');
+        if (!btn) return;
+        container.querySelectorAll('.region-tab').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        var region = btn.dataset.region;
+        if (btn.dataset.mode === '2d') {
+            flyToRegion2D(region, btn);
+        } else if (typeof flyToRegion === 'function') {
+            flyToRegion(region);
+        }
+    };
+}
+window.buildRegionTabs = buildRegionTabs;
+
 function initLeaflet() {
     if (leafletInitialized) return;
 
@@ -48,6 +89,9 @@ function initLeaflet() {
 
 // 2D zoom buttons — bind after DOM ready, use leafletMap at click time
 document.addEventListener('DOMContentLoaded', function() {
+    // Initial region tabs (3D is default)
+    buildRegionTabs('3d');
+
     var zoomInBtn = document.getElementById('leafletZoomIn');
     var zoomOutBtn = document.getElementById('leafletZoomOut');
     if (zoomInBtn) zoomInBtn.addEventListener('click', function() { if (leafletMap) leafletMap.zoomIn(); });
@@ -72,9 +116,7 @@ function setMapMode(mode) {
         leafletMap.invalidateSize();
         leafletMap.setView([20, 0], 2);
 
-        document.querySelectorAll('.region-tab').forEach(function(b) { b.classList.remove('active'); });
-        var firstTab = document.querySelector('.region-tab');
-        if (firstTab) firstTab.classList.add('active');
+        buildRegionTabs('2d');
 
         // 로딩 표시 후 렌더링 — requestAnimationFrame으로 로딩 UI가 먼저 그려진 후 실행
         var loadingEl = document.getElementById('loading');
@@ -116,6 +158,8 @@ function setMapMode(mode) {
         }
 
         clearLeafletLayers();
+
+        buildRegionTabs('3d');
     }
 }
 window.setMapMode = setMapMode;

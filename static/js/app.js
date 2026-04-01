@@ -20,8 +20,8 @@ var SHIP_COLORS = {
     tanker: '#f97316',
     passenger: '#0ea5e9',
     fishing: '#eab308',
-    military: '#6366f1',
-    tug: '#a855f7',
+    military: '#002878',
+    tug: '#6989E0',
     other: '#6b7280'
 };
 
@@ -33,8 +33,8 @@ var SAT_COLORS = {
     sar: '#f97316',
     sigint: '#eab308',
     navigation: '#10b981',
-    early_warning: '#a855f7',
-    space_station: '#3b82f6',
+    early_warning: '#406FD8',
+    space_station: '#002878',
     commercial_imaging: '#94a3b8',
 };
 

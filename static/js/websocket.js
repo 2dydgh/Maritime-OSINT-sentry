@@ -132,7 +132,8 @@ function refreshRainviewer() {
                 url: host + latestPath + '/256/{z}/{x}/{y}/2/1_1.png',
                 maximumLevel: 6
             });
-            var wasVisible = cloudLayer ? cloudLayer.show : document.getElementById('layer-clouds').checked;
+            var _cl = document.getElementById('layer-clouds');
+            var wasVisible = cloudLayer ? cloudLayer.show : (_cl ? _cl.checked : false);
             if (cloudLayer) viewer.imageryLayers.remove(cloudLayer, true);
             cloudLayer = viewer.imageryLayers.addImageryProvider(newProvider);
             cloudLayer.alpha = 0.6;
@@ -144,12 +145,15 @@ function refreshRainviewer() {
 refreshRainviewer();
 setInterval(refreshRainviewer, 10 * 60 * 1000);
 
-document.getElementById('layer-clouds').addEventListener('change', function(e) {
-    if (cloudLayer) {
-        cloudLayer.show = e.target.checked;
-        if (e.target.checked) viewer.imageryLayers.raiseToTop(cloudLayer);
-    }
-});
+var _cloudsCheckbox = document.getElementById('layer-clouds');
+if (_cloudsCheckbox) {
+    _cloudsCheckbox.addEventListener('change', function(e) {
+        if (cloudLayer) {
+            cloudLayer.show = e.target.checked;
+            if (e.target.checked) viewer.imageryLayers.raiseToTop(cloudLayer);
+        }
+    });
+}
 
 function updateShipsLayer(ships) {
     var byType = {};
@@ -466,7 +470,8 @@ function initWebSocket() {
 
 
                 var totalShipsEl = document.getElementById('total-ships');
-                animateCount(totalShipsEl, (data.total_tracked || data.ship_count || 0).toLocaleString());
+                var totalCount = _lastShipsData.length;
+                animateCount(totalShipsEl, totalCount.toLocaleString());
 
                 if (data.timestamp) {
                     var updated = new Date(data.timestamp);
@@ -543,9 +548,9 @@ function _getReticleImage() {
     var c = document.createElement('canvas');
     c.width = size; c.height = size;
     var ctx = c.getContext('2d');
-    ctx.strokeStyle = '#00e5ff';
+    ctx.strokeStyle = '#406FD8';
     ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#00e5ff';
+    ctx.shadowColor = '#406FD8';
     ctx.shadowBlur = 6;
 
     // Top-left corner

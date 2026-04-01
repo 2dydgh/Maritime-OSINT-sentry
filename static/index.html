@@ -23,7 +23,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <!-- Application Styles -->
-    <link rel="stylesheet" href="css/main.css?v=11">
+    <link rel="stylesheet" href="css/main.css?v=16">
     <!-- ECharts for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 </head>
@@ -44,71 +44,119 @@
                 <span id="headerUtcClock">--:--:-- UTC</span>
                 <span class="clock-label">ZULU</span>
             </div>
-            <div class="region-selector" id="regionSelector">
-                <button class="region-toggle" id="regionToggle">
-                    <span id="regionLabel">지역 선택</span>
-                    <span id="regionChevron"
-                        style="display:inline-flex; align-items:center; padding:2px 0 2px 4px; margin-left:2px; border-left:1px solid rgba(255,255,255,0.1);"><i
-                            class="fa-solid fa-chevron-down" style="font-size:0.55rem; opacity:0.6;"></i></span>
-                </button>
-                <div class="region-dropdown" id="regionDropdown">
-                    <div class="region-group-label">주요 해역</div>
-                    <div class="region-item" data-region="korea">한국 해역</div>
-                    <div class="region-item" data-region="arctic">북극항로</div>
-                    <div class="region-divider"></div>
-                    <div class="region-group-label">위험 해역</div>
-                    <div class="region-item" data-region="somalia">소말리아 / 아덴만</div>
-                    <div class="region-item" data-region="malacca">말라카 해협</div>
-                    <div class="region-item" data-region="guinea">기니만</div>
-                </div>
-            </div>
             <div class="stat-item" id="statLatencyWrap">
-                <span class="stat-value" id="stat-latency">--</span>
                 <span class="stat-label">데이터 지연</span>
-            </div>
-            <!-- Vision Mode Filter Toggle -->
-            <div class="vision-mode-group">
-                <button class="vmode-btn active" data-mode="normal" id="vmode-normal" title="Normal View">NORMAL</button>
-                <button class="vmode-btn" data-mode="nv" id="vmode-nv" title="Night Vision">NV</button>
-                <button class="vmode-btn" data-mode="flir" id="vmode-flir" title="FLIR Thermal">FLIR</button>
-                <button class="vmode-btn" data-mode="crt" id="vmode-crt" title="CRT Mode">CRT</button>
+                <span class="stat-value" id="stat-latency">--</span>
             </div>
         </div>
     </header>
 
     <div id="mainContent">
     <!-- Left Sidebar -->
-    <div id="leftSidebar">
-        <!-- Feed Panel -->
-        <div id="feedPanel">
-            <div class="sidebar-section-header" onclick="toggleLeftSidebar()">
-                <span><i class="fa-solid fa-tower-broadcast" style="margin-right: 8px;"></i> LIVE FEED</span>
-                <button class="collapse-btn" title="사이드바 접기/펼치기" onclick="event.stopPropagation(); toggleLeftSidebar();">
-                    <i class="fa-solid fa-chevron-left" id="leftSidebarChevron"></i>
-                </button>
-            </div>
-            <!-- Slim rail icons (visible when collapsed) -->
-            <div class="slim-rail">
-                <button class="slim-rail-btn" title="LIVE FEED 펼치기" onclick="toggleLeftSidebar()">
-                    <i class="fa-solid fa-tower-broadcast"></i>
-                </button>
-                <button class="slim-rail-btn" title="이상 선박" id="slimAlertBtn">
-                    <i class="fa-solid fa-ship"></i>
-                    <span class="slim-badge" id="slimAlertCount" style="display:none;">0</span>
-                </button>
+    <div id="leftSidebar" class="sidebar-collapsed">
+        <!-- Icon Rail (always visible) -->
+        <div class="icon-rail">
+            <span class="rail-group-title">MONITOR</span>
+            <button class="rail-icon" data-panel="feed" title="LIVE FEED">
+                <i class="fa-solid fa-tower-broadcast"></i>
+                <span class="rail-label">FEED</span>
+                <span class="rail-badge" id="slimAlertCount" style="display:none;">0</span>
+            </button>
+            <button class="rail-icon" data-panel="collision" title="충돌 분석">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span class="rail-label">RISK</span>
+                <span class="rail-badge rail-badge-danger" id="collisionBadge" style="display:none;">0</span>
+            </button>
+
+            <div class="rail-spacer"></div>
+            <button class="rail-icon" data-panel="settings" title="설정">
+                <i class="fa-solid fa-gear"></i>
+                <span class="rail-label">SET</span>
+            </button>
+        </div>
+
+        <!-- Expandable Panels -->
+        <div class="rail-panel" id="railPanel-feed">
+            <div class="rail-panel-header">
+                <span>LIVE FEED</span>
             </div>
             <div id="feedSection" class="panel-section">
                 <h2>
                     <span>이상 선박 탐지</span>
-                    <button class="collapse-btn"
-                        onclick="document.getElementById('feedSection').classList.toggle('collapsed'); var c=document.getElementById('feedSection').classList.contains('collapsed'); this.querySelector('i').classList.toggle('fa-chevron-up',!c); this.querySelector('i').classList.toggle('fa-chevron-down',c);">
-                        <i class="fa-solid fa-chevron-up"></i>
-                    </button>
                 </h2>
                 <div class="feed-list" id="eventFeed">
                     <div style="text-align: center; color: var(--text-dim); font-style: italic; margin-top: 20px; font-size: 0.9rem;">
                         정보 수신 대기중...
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="rail-panel" id="railPanel-collision">
+            <div class="rail-panel-header">
+                <span>COLLISION ANALYSIS</span>
+                <div class="drawer-risk-counts" id="drawerSummaryStats"></div>
+            </div>
+            <div class="drawer-tab-row">
+                <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">거리기반</button>
+                <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl">AI분석</button>
+            </div>
+            <div id="collisionSection">
+                <span id="collision-count" style="display:none;">0</span>
+                <span id="collision-count-summary" style="display:none;">0</span>
+                <div id="mlRiskSummaryFixed" style="display:none; flex-shrink:0;"></div>
+                <div class="collision-table-header">
+                    <span class="col-severity">위험도</span>
+                    <span class="col-pairs">선박</span>
+                    <span class="col-area">해역</span>
+                </div>
+                <div class="collision-list" id="collisionList">
+                    <div class="collision-empty">분석 데이터 대기중...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="rail-panel" id="railPanel-settings">
+            <div class="rail-panel-header">
+                <span>설정</span>
+            </div>
+            <div class="rail-panel-body">
+                <div class="layer-sub-label">비전 모드</div>
+                <div class="vision-mode-group" style="display:flex; gap:4px; padding: 4px 0;">
+                    <button class="vmode-btn active" data-mode="normal" id="vmode-normal" title="Normal View">NORMAL</button>
+                    <button class="vmode-btn" data-mode="nv" id="vmode-nv" title="Night Vision">NV</button>
+                    <button class="vmode-btn" data-mode="flir" id="vmode-flir" title="FLIR Thermal">FLIR</button>
+                    <button class="vmode-btn" data-mode="crt" id="vmode-crt" title="CRT Mode">CRT</button>
+                </div>
+                <div class="layer-sub-label" style="margin-top:12px;">SIGINT</div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-sigint-ais"><span class="color-dot" style="background-color: #eab308;"></span> AIS 이상 탐지</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-sigint-rf"><span class="color-dot" style="background-color: #f97316;"></span> RF 신호 감지</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-sigint-darkship"><span class="color-dot" style="background-color: #ef4444;"></span> Dark Ship 탐지</label>
+                </div>
+                <div class="layer-sub-label" style="margin-top:12px;">뉴스</div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-news-maritime"><span class="color-dot" style="background-color: #38bdf8;"></span> 해양 사건</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-news-security"><span class="color-dot" style="background-color: #ef4444;"></span> 안보 위협</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-news-trade"><span class="color-dot" style="background-color: #10b981;"></span> 무역/물류</label>
+                </div>
+                <div class="layer-sub-label" style="margin-top:12px;">주요 기지</div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-base-naval"><span class="color-dot" style="background-color: #002878;"></span> 해군 기지</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-base-port"><span class="color-dot" style="background-color: #10b981;"></span> 주요 항구</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-base-chokepoint"><span class="color-dot" style="background-color: #f97316;"></span> 전략 요충지</label>
                 </div>
             </div>
         </div>
@@ -120,27 +168,122 @@
         <div id="cesiumContainer"></div>
         <div id="leafletContainer"></div>
 
-        <!-- 3D/2D 토글 -->
-        <div id="mapModeToggle">
-            <button class="map-mode-btn active" data-mode="3d" onclick="setMapMode('3d')">
-                <i class="fa-solid fa-globe"></i> 3D
-            </button>
-            <button class="map-mode-btn" data-mode="2d" onclick="setMapMode('2d')">
-                <i class="fa-solid fa-map"></i> 2D
-            </button>
+        <div id="mapTopBar">
+            <!-- 3D/2D 토글 -->
+            <div id="mapModeToggle">
+                <button class="map-mode-btn active" data-mode="3d" onclick="setMapMode('3d')">
+                    <i class="fa-solid fa-globe"></i> 3D
+                </button>
+                <button class="map-mode-btn" data-mode="2d" onclick="setMapMode('2d')">
+                    <i class="fa-solid fa-map"></i> 2D
+                </button>
+            </div>
+
+            <!-- 지역 탭 -->
+            <div id="regionTabs"></div>
+
+            <!-- 레이어 필터 칩 -->
+            <div id="layerChips">
+                <div class="layer-chip active" data-layer="ships">
+                    <i class="fa-solid fa-ship"></i> 선박
+                    <span class="chip-count" id="chipShipCount">0</span>
+                    <button class="chip-expand" data-dropdown="shipFilter" title="상세 필터"><i class="fa-solid fa-chevron-down"></i></button>
+                </div>
+                <div class="layer-chip" data-layer="satellites">
+                    <i class="fa-solid fa-satellite"></i> 위성
+                    <span class="chip-count" id="chipSatCount">0</span>
+                    <button class="chip-expand" data-dropdown="satFilter" title="상세 필터"><i class="fa-solid fa-chevron-down"></i></button>
+                </div>
+                <div class="layer-chip" data-layer="weather">
+                    <i class="fa-solid fa-cloud-sun"></i> 기상
+                </div>
+            </div>
         </div>
 
-        <!-- 2D 지역 탭 -->
-        <div id="regionTabs">
-            <button class="region-tab active" onclick="flyToRegion2D('world', this)">전체</button>
-            <button class="region-tab" onclick="flyToRegion2D('east-asia', this)">동아시아</button>
-            <button class="region-tab" onclick="flyToRegion2D('southeast-asia', this)">동남아</button>
-            <button class="region-tab" onclick="flyToRegion2D('europe', this)">유럽</button>
-            <button class="region-tab" onclick="flyToRegion2D('middle-east', this)">중동</button>
-            <button class="region-tab" onclick="flyToRegion2D('africa', this)">아프리카</button>
-            <button class="region-tab" onclick="flyToRegion2D('north-america', this)">북미</button>
-            <button class="region-tab" onclick="flyToRegion2D('south-america', this)">남미</button>
+        <!-- 레이어 상세 필터 드롭다운 -->
+        <div class="layer-dropdown" id="shipFilter">
+            <div class="layer-dropdown-header">
+                <span>선박 필터</span>
+                <span class="lg-badge" id="total-ships">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-cargo" checked><span class="color-dot color-cargo"></span> Cargo</label>
+                <span class="filter-count" id="count-cargo">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-tanker" checked><span class="color-dot color-tanker"></span> Tanker</label>
+                <span class="filter-count" id="count-tanker">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-passenger" checked><span class="color-dot color-passenger"></span> Passenger</label>
+                <span class="filter-count" id="count-passenger">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-fishing" checked><span class="color-dot color-fishing"></span> Fishing</label>
+                <span class="filter-count" id="count-fishing">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-military" checked><span class="color-dot color-military"></span> Military</label>
+                <span class="filter-count" id="count-military">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-tug" checked><span class="color-dot color-tug"></span> Tug</label>
+                <span class="filter-count" id="count-tug">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-other" checked><span class="color-dot color-other"></span> Other</label>
+                <span class="filter-count" id="count-other">0</span>
+            </div>
+            <div class="layer-group-stats">
+                Updated: <span id="last-update">--:--:--</span> UTC
+            </div>
+            <div id="shipTypeChart" style="display:none; height:110px; margin-top:6px;"></div>
         </div>
+
+        <div class="layer-dropdown" id="satFilter">
+            <div class="layer-dropdown-header">
+                <span>위성</span>
+                <span class="lg-badge" id="total-sats">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="layer-sats"><span class="color-dot" style="background-color: #406FD8;"></span> Intel Satellites</label>
+            </div>
+            <div id="satSubToggles" style="display:none; margin-top: 6px;">
+                <div class="layer-sub-label">임무 유형</div>
+                <div class="filter-item">
+                    <label><input type="checkbox" class="sat-mission-filter" data-mission="sar,military_sar" checked><span class="color-dot" style="background-color: #f97316;"></span> SAR</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" class="sat-mission-filter" data-mission="commercial_imaging" checked><span class="color-dot" style="background-color: #94a3b8;"></span> 광학</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" class="sat-mission-filter" data-mission="sigint" checked><span class="color-dot" style="background-color: #eab308;"></span> SIGINT</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" class="sat-mission-filter" data-mission="military_recon"><span class="color-dot" style="background-color: #fde047;"></span> 정찰</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" class="sat-mission-filter" data-mission="navigation"><span class="color-dot" style="background-color: #10b981;"></span> 항법</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" class="sat-mission-filter" data-mission="early_warning"><span class="color-dot" style="background-color: #406FD8;"></span> 조기경보</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" class="sat-mission-filter" data-mission="space_station"><span class="color-dot" style="background-color: #002878;"></span> 우주정거장</label>
+                </div>
+                <div class="layer-sub-label">표시</div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-sat-orbits" checked> 3D 궤도</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-sat-ground" checked> 지표 궤적</label>
+                </div>
+                <div class="filter-item">
+                    <label><input type="checkbox" id="layer-sat-footprint" checked> 관측 범위</label>
+                </div>
+            </div>
+        </div>
+
 
         <div id="mapNavControls">
             <button class="map-nav-btn" id="navUp" title="Pan Up (↑)"><i class="fa-solid fa-chevron-up"></i></button>
@@ -160,256 +303,26 @@
         </div>
 
         <button id="filterToggleBtn" style="display:none;"></button>
+
+        <!-- HUD Stats Overlay -->
+        <div id="hudStats">
+            <div class="hud-stat" data-panel="ships">
+                <span class="hud-stat-value" id="hudShips">0</span>
+                <span class="hud-stat-label">VESSELS</span>
+            </div>
+            <div class="hud-stat hud-stat-alert" data-panel="collision">
+                <span class="hud-stat-value" id="hudCollision">0</span>
+                <span class="hud-stat-label">RISK</span>
+            </div>
+            <div class="hud-stat" data-panel="satellites">
+                <span class="hud-stat-value" id="hudSats">0</span>
+                <span class="hud-stat-label">SAT</span>
+            </div>
+        </div>
+
     </div><!-- /mapArea -->
 
-    <!-- Collision Drawer (bottom of center column) -->
-    <div id="collisionDrawer">
-        <!-- Row 1: Header bar (matches sidebar-section-header style) -->
-        <div class="drawer-header-bar" onclick="toggleCollisionDrawer()">
-            <span class="drawer-header-title">
-                <i class="fa-solid fa-triangle-exclamation" style="margin-right: 8px;"></i>COLLISION ANALYSIS
-            </span>
-            <div class="drawer-risk-counts" id="drawerSummaryStats"></div>
-            <span id="collision-count-summary" style="display:none;">0</span>
-            <button class="collapse-btn drawer-collapse-btn">
-                <i class="fa-solid fa-chevron-up drawer-toggle-icon"></i>
-            </button>
-        </div>
-        <!-- Row 2: Tab switcher (separate line) -->
-        <div class="drawer-tab-row">
-            <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">거리기반</button>
-            <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl">AI분석</button>
-        </div>
-        <div id="collisionSection">
-            <!-- hidden count for JS compatibility -->
-            <span id="collision-count" style="display:none;">0</span>
-            <!-- ECharts 시각화 영역 -->
-            <div id="chartsRow" style="display:none; padding:6px 8px; margin: 8px 14px 12px 14px; gap:6px; flex-shrink:0; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); box-shadow: inset 0 2px 6px rgba(0,0,0,0.3);">
-                <div class="chart-cell">
-                    <span class="chart-label">위험도</span>
-                    <div id="riskGaugeChart" style="width:100%; height:80px;"></div>
-                </div>
-                <div class="chart-cell">
-                    <span class="chart-label">위험 요소</span>
-                    <div id="riskRadarChart" style="width:100%; height:80px;"></div>
-                </div>
-                <div class="chart-cell">
-                    <span class="chart-label">추이</span>
-                    <div id="riskTrendChart" style="width:100%; height:80px;"></div>
-                </div>
-            </div>
-            <div id="mlRiskSummaryFixed" style="display:none; flex-shrink:0;"></div>
-            <div class="collision-section-divider">
-                <span class="collision-section-line"></span>
-                <span class="collision-section-title">충돌 위험 목록</span>
-                <span class="collision-section-line"></span>
-            </div>
-            <div class="collision-list" id="collisionList">
-                <div class="collision-empty">분석 데이터 대기중...</div>
-            </div>
-        </div>
-    </div>
     </div><!-- /centerColumn -->
-
-    <!-- Right Sidebar (Layers Panel) -->
-    <div id="rightSidebar">
-        <div id="shipFilterPanel">
-        <div class="panel-master-header">
-            <h3><i class="fa-solid fa-layer-group"></i> FILTERS</h3>
-        </div>
-        <div class="filter-content">
-
-            <!-- ═══ VESSELS ═══ -->
-            <div class="layer-group" id="layerGroupVessels">
-                <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <span class="lg-title">선박</span>
-                    <span class="lg-badge" id="total-ships">0</span>
-                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
-                </div>
-                <div class="layer-group-body">
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="filter-cargo" checked><span
-                                class="color-dot color-cargo"></span> Cargo</label>
-                        <span class="filter-count" id="count-cargo">0</span>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="filter-tanker" checked><span
-                                class="color-dot color-tanker"></span> Tanker</label>
-                        <span class="filter-count" id="count-tanker">0</span>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="filter-passenger" checked><span
-                                class="color-dot color-passenger"></span> Passenger</label>
-                        <span class="filter-count" id="count-passenger">0</span>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="filter-fishing" checked><span
-                                class="color-dot color-fishing"></span> Fishing</label>
-                        <span class="filter-count" id="count-fishing">0</span>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="filter-military" checked><span
-                                class="color-dot color-military"></span> Military</label>
-                        <span class="filter-count" id="count-military">0</span>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="filter-tug" checked><span class="color-dot color-tug"></span>
-                            Tug</label>
-                        <span class="filter-count" id="count-tug">0</span>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="filter-other" checked><span
-                                class="color-dot color-other"></span> Other</label>
-                        <span class="filter-count" id="count-other">0</span>
-                    </div>
-                    <div class="layer-group-stats">
-                        Updated: <span id="last-update">--:--:--</span> UTC
-                    </div>
-                    <div id="shipTypeChart" style="display:none; height:110px; margin-top:6px;"></div>
-                </div>
-            </div>
-
-            <!-- ═══ WEATHER ═══ -->
-            <div class="layer-group" id="layerGroupWeather">
-                <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <span class="lg-title">기상</span>
-                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
-                </div>
-                <div class="layer-group-body">
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-clouds"><span class="color-dot"
-                                style="background-color: #3b82f6;"></span> Precipitation Radar</label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══ SATELLITES ═══ -->
-            <div class="layer-group" id="layerGroupSatellites">
-                <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <span class="lg-title">위성</span>
-                    <span class="lg-badge" id="total-sats">0</span>
-                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
-                </div>
-                <div class="layer-group-body">
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-sats"><span class="color-dot"
-                                style="background-color: #a78bfa;"></span> Intel Satellites</label>
-                    </div>
-                    <div id="satSubToggles" style="display:none; margin-top: 6px;">
-                        <div class="layer-sub-label">임무 유형</div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="sar,military_sar"
-                                    checked><span class="color-dot" style="background-color: #f97316;"></span>
-                                SAR</label>
-                        </div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="commercial_imaging"
-                                    checked><span class="color-dot" style="background-color: #94a3b8;"></span>
-                                광학</label>
-                        </div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="sigint" checked><span
-                                    class="color-dot" style="background-color: #eab308;"></span> SIGINT</label>
-                        </div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="military_recon"><span
-                                    class="color-dot" style="background-color: #fde047;"></span> 정찰</label>
-                        </div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="navigation"><span
-                                    class="color-dot" style="background-color: #10b981;"></span> 항법</label>
-                        </div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="early_warning"><span
-                                    class="color-dot" style="background-color: #a855f7;"></span> 조기경보</label>
-                        </div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" class="sat-mission-filter" data-mission="space_station"><span
-                                    class="color-dot" style="background-color: #3b82f6;"></span> 우주정거장</label>
-                        </div>
-                        <div class="layer-sub-label">표시</div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" id="layer-sat-orbits" checked> 3D 궤도</label>
-                        </div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" id="layer-sat-ground" checked> 지표 궤적</label>
-                        </div>
-                        <div class="filter-item">
-                            <label><input type="checkbox" id="layer-sat-footprint" checked> 관측 범위</label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══ SIGINT ═══ -->
-            <div class="layer-group collapsed" id="layerGroupSignal">
-                <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <span class="lg-title">SIGINT</span>
-                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
-                </div>
-                <div class="layer-group-body">
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-sigint-ais"><span class="color-dot"
-                                style="background-color: #eab308;"></span> AIS 이상 탐지</label>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-sigint-rf"><span class="color-dot"
-                                style="background-color: #f97316;"></span> RF 신호 감지</label>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-sigint-darkship"><span class="color-dot"
-                                style="background-color: #ef4444;"></span> Dark Ship 탐지</label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══ NEWS ═══ -->
-            <div class="layer-group collapsed" id="layerGroupNews">
-                <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <span class="lg-title">뉴스</span>
-                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
-                </div>
-                <div class="layer-group-body">
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-news-maritime"><span class="color-dot"
-                                style="background-color: #38bdf8;"></span> 해양 사건</label>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-news-security"><span class="color-dot"
-                                style="background-color: #ef4444;"></span> 안보 위협</label>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-news-trade"><span class="color-dot"
-                                style="background-color: #10b981;"></span> 무역/물류</label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══ BASES ═══ -->
-            <div class="layer-group collapsed" id="layerGroupBases">
-                <div class="layer-group-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                    <span class="lg-title">주요 기지</span>
-                    <i class="fa-solid fa-chevron-up lg-chevron"></i>
-                </div>
-                <div class="layer-group-body">
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-base-naval"><span class="color-dot"
-                                style="background-color: #6366f1;"></span> 해군 기지</label>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-base-port"><span class="color-dot"
-                                style="background-color: #10b981;"></span> 주요 항구</label>
-                    </div>
-                    <div class="filter-item">
-                        <label><input type="checkbox" id="layer-base-chokepoint"><span class="color-dot"
-                                style="background-color: #f97316;"></span> 전략 요충지</label>
-                    </div>
-                </div>
-            </div>
-
-        </div><!-- /filter-content -->
-    </div><!-- /shipFilterPanel -->
-    </div><!-- /rightSidebar -->
     </div><!-- /mainContent -->
 
     </div><!-- /app-layout -->
@@ -436,13 +349,13 @@
     <!-- Application Scripts (load order matters) -->
     <script src="js/app.js?v=2"></script>
     <script src="js/map-cesium.js?v=2"></script>
-    <script src="js/map-leaflet.js?v=2"></script>
-    <script src="js/satellite.js?v=3"></script>
+    <script src="js/map-leaflet.js?v=3"></script>
+    <script src="js/satellite.js?v=4"></script>
     <script src="js/proximity.js?v=2"></script>
-    <script src="js/collision.js?v=4"></script>
+    <script src="js/collision.js?v=7"></script>
     <script src="js/websocket.js?v=4"></script>
-    <script src="js/ui-controls.js?v=4"></script>
-    <script src="js/charts.js?v=4"></script>
+    <script src="js/ui-controls.js?v=7"></script>
+    <script src="js/charts.js?v=5"></script>
     <script>
         // ── 앱 부트스트랩 ──
         document.addEventListener('DOMContentLoaded', function() {

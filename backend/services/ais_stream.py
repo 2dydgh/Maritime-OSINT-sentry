@@ -198,7 +198,7 @@ def check_signal_loss():
                     "minutes_ago": minutes_ago,
                     "vessel_type": v.get("type", "unknown"),
                     "country": get_country_from_mmsi(mmsi),
-                    "message": f"{name} — AIS 신호 소실 ({minutes_ago}분 전 마지막 수신)",
+                    "message": f"AIS 신호 소실 ({minutes_ago}분 전 마지막 수신)",
                     "severity": "high" if updated < cutoff else "medium",
                 })
 
@@ -432,7 +432,7 @@ def _ais_stream_loop():
                             "sog": round(sog, 1),
                             "vessel_type": v_type,
                             "country": get_country_from_mmsi(mmsi),
-                            "message": f"{v_name} — 과속 감지 ({sog:.1f} kts, 유형: {v_type})",
+                            "message": f"과속 감지 ({sog:.1f} kts, 유형: {v_type})",
                             "severity": "high" if sog > 35 else "medium",
                         })
                 
@@ -506,7 +506,7 @@ def _ais_stream_loop():
                             "new_destination": new_dest,
                             "vessel_type": classify_vessel(ais_type, mmsi),
                             "country": get_country_from_mmsi(mmsi),
-                            "message": f"{v_name_static} — 목적지 변경: {old_dest} → {new_dest}",
+                            "message": f"목적지 변경: {old_dest} → {new_dest}",
                             "severity": "medium",
                         })
                 

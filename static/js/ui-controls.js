@@ -34,24 +34,131 @@ function animateCount(el, newValue) {
     el.classList.remove('count-up');
     void el.offsetWidth; // force reflow
     el.classList.add('count-up');
+    // Auto-sync HUD + chip when total-ships updates
+    if (el.id === 'total-ships') {
+        var h = document.getElementById('hudShips');
+        if (h) h.textContent = newText;
+        var c = document.getElementById('chipShipCount');
+        if (c) c.textContent = newText;
+    }
 }
 window.animateCount = animateCount;
 
 // ── Panel Collapse/Expand ──
-function toggleLeftSidebar() {
+function switchRailPanel(name) {
     var sidebar = document.getElementById('leftSidebar');
-    var chevron = document.getElementById('leftSidebarChevron');
-    sidebar.classList.toggle('sidebar-collapsed');
-    var isCollapsed = sidebar.classList.contains('sidebar-collapsed');
-    if (chevron) {
-        chevron.classList.toggle('fa-chevron-left', !isCollapsed);
-        chevron.classList.toggle('fa-chevron-right', isCollapsed);
+    var panels = sidebar.querySelectorAll('.rail-panel');
+    var icons = sidebar.querySelectorAll('.rail-icon');
+    var target = document.getElementById('railPanel-' + name);
+    var isAlreadyOpen = target && target.classList.contains('open') && !sidebar.classList.contains('sidebar-collapsed');
+
+    panels.forEach(function(p) { p.classList.remove('open'); });
+    icons.forEach(function(i) { i.classList.remove('active'); });
+
+    if (isAlreadyOpen) {
+        sidebar.classList.add('sidebar-collapsed');
+    } else {
+        if (target) target.classList.add('open');
+        var icon = sidebar.querySelector('[data-panel="' + name + '"]');
+        if (icon) icon.classList.add('active');
+        sidebar.classList.remove('sidebar-collapsed');
     }
-    // Update slim rail alert badge
-    _updateSlimBadge();
     setTimeout(resizeActiveMap, 350);
 }
+window.switchRailPanel = switchRailPanel;
+
+function toggleLeftSidebar() {
+    var sidebar = document.getElementById('leftSidebar');
+    if (sidebar.classList.contains('sidebar-collapsed')) {
+        switchRailPanel('feed');
+    } else {
+        var activeIcon = document.querySelector('.rail-icon.active');
+        switchRailPanel(activeIcon ? activeIcon.dataset.panel : 'feed');
+    }
+}
 window.toggleLeftSidebar = toggleLeftSidebar;
+
+// Icon rail click delegation
+document.addEventListener('DOMContentLoaded', function() {
+    var rail = document.querySelector('.icon-rail');
+    if (rail) {
+        rail.addEventListener('click', function(e) {
+            var btn = e.target.closest('.rail-icon');
+            if (!btn) return;
+            switchRailPanel(btn.dataset.panel);
+        });
+    }
+
+    // HUD stat click → open corresponding rail panel
+    var hud = document.getElementById('hudStats');
+    if (hud) {
+        hud.addEventListener('click', function(e) {
+            var stat = e.target.closest('.hud-stat');
+            if (!stat) return;
+            var panel = stat.dataset.panel;
+            if (panel) switchRailPanel(panel);
+        });
+    }
+
+    // Layer chip toggle (on/off) + dropdown
+    var chips = document.getElementById('layerChips');
+    if (chips) {
+        chips.addEventListener('click', function(e) {
+            // Expand button → open dropdown
+            var expandBtn = e.target.closest('.chip-expand');
+            if (expandBtn) {
+                e.stopPropagation();
+                var ddId = expandBtn.dataset.dropdown;
+                var dd = document.getElementById(ddId);
+                if (!dd) return;
+                // Close all other dropdowns
+                document.querySelectorAll('.layer-dropdown.open').forEach(function(d) {
+                    if (d.id !== ddId) d.classList.remove('open');
+                });
+                dd.classList.toggle('open');
+                // Position dropdown below its parent chip
+                if (dd.classList.contains('open')) {
+                    var chip = expandBtn.closest('.layer-chip');
+                    var container = dd.offsetParent || document.body;
+                    if (chip && container) {
+                        var chipRect = chip.getBoundingClientRect();
+                        var containerRect = container.getBoundingClientRect();
+                        dd.style.right = (containerRect.right - chipRect.right) + 'px';
+                        dd.style.top = (chipRect.bottom - containerRect.top + 4) + 'px';
+                    }
+                }
+                return;
+            }
+            // Chip body → toggle layer
+            var chip = e.target.closest('.layer-chip');
+            if (!chip) return;
+            chip.classList.toggle('active');
+            var layer = chip.dataset.layer;
+            if (layer === 'ships') {
+                var checked = chip.classList.contains('active');
+                document.querySelectorAll('[id^="filter-"]').forEach(function(cb) {
+                    if (cb.type === 'checkbox') { cb.checked = checked; cb.dispatchEvent(new Event('change')); }
+                });
+            } else if (layer === 'satellites') {
+                var satCb = document.getElementById('layer-sats');
+                if (satCb) { satCb.checked = chip.classList.contains('active'); satCb.dispatchEvent(new Event('change')); }
+            } else if (layer === 'weather') {
+                var wxOn = chip.classList.contains('active');
+                if (typeof cloudLayer !== 'undefined' && cloudLayer) {
+                    cloudLayer.show = wxOn;
+                    if (wxOn && typeof viewer !== 'undefined') viewer.imageryLayers.raiseToTop(cloudLayer);
+                }
+            }
+        });
+    }
+
+    // Close dropdowns on outside click
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.layer-dropdown') && !e.target.closest('.chip-expand')) {
+            document.querySelectorAll('.layer-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+        }
+    });
+});
 
 function _updateSlimBadge() {
     var badge = document.getElementById('slimAlertCount');
@@ -72,30 +179,14 @@ function toggleLeftPanel() {
 }
 window.toggleLeftPanel = toggleLeftPanel;
 
-function toggleCollisionDrawer() {
-    var drawer = document.getElementById('collisionDrawer');
-    drawer.classList.toggle('collapsed');
-    // 선박 정보 패널 높이를 드로어 상태에 맞춰 조정
-    _syncShipPanelHeight();
-    setTimeout(resizeActiveMap, 320);
-}
+function toggleCollisionDrawer() {}
 window.toggleCollisionDrawer = toggleCollisionDrawer;
 
-function _syncShipPanelHeight() {
-    var panel = document.getElementById('shipInfoPanel');
-    var drawer = document.getElementById('collisionDrawer');
-    if (!panel || !drawer) return;
-    if (drawer.classList.contains('collapsed')) {
-        panel.classList.add('drawer-collapsed');
-    } else {
-        panel.classList.remove('drawer-collapsed');
-    }
-}
+function _syncShipPanelHeight() {}
 window._syncShipPanelHeight = _syncShipPanelHeight;
 
 function toggleRightPanel() {
-    var sidebar = document.getElementById('rightSidebar');
-    sidebar.classList.toggle('panel-hidden');
+    // Right sidebar removed — collision analysis now in left rail panel
 }
 window.toggleRightPanel = toggleRightPanel;
 
@@ -611,7 +702,7 @@ async function fetchData() {
 
         var eventsSrc = await Cesium.GeoJsonDataSource.load(eventsJson, {
             markerSymbol: 'cross',
-            markerColor: Cesium.Color.fromCssColorString('#38bdf8'),
+            markerColor: Cesium.Color.fromCssColorString('#406FD8'),
             markerSize: 40
         });
         await viewer.dataSources.add(eventsSrc);
@@ -622,7 +713,7 @@ async function fetchData() {
         function alertIcon(type) {
             if (type === 'speeding') return { icon: 'fa-gauge-high', color: '#f59e0b', label: 'SPEEDING' };
             if (type === 'signal_lost') return { icon: 'fa-satellite-dish', color: '#f97316', label: 'SIGNAL LOST' };
-            if (type === 'dest_change') return { icon: 'fa-right-left', color: '#a78bfa', label: 'DEST CHANGE' };
+            if (type === 'dest_change') return { icon: 'fa-right-left', color: '#406FD8', label: 'DEST CHANGE' };
             return { icon: 'fa-triangle-exclamation', color: '#facc15', label: 'ALERT' };
         }
 
@@ -786,18 +877,18 @@ fetchData();
 document.body.insertAdjacentHTML('beforeend', '\
     <div id="sentinelMenu" style="\
         display:none; position:fixed; z-index:9999;\
-        background:rgba(10,14,27,0.96); border:1px solid rgba(99,102,241,0.4);\
+        background:rgba(10,14,27,0.96); border:1px solid rgba(0,40,120,0.4);\
         border-radius:8px; padding:6px 0; min-width:210px;\
         backdrop-filter:blur(12px); box-shadow:0 8px 32px rgba(0,0,0,0.6);\
         font-family:\'JetBrains Mono\',monospace;">\
         <div id="sentinelMenuBtn" style="\
-            padding:10px 16px; cursor:pointer; color:#a5b4fc; font-size:0.78rem;\
+            padding:10px 16px; cursor:pointer; color:#406FD8; font-size:0.78rem;\
             display:flex; align-items:center; gap:8px;"\
-            onmouseover="this.style.background=\'rgba(99,102,241,0.15)\'"\
+            onmouseover="this.style.background=\'rgba(0,40,120,0.15)\'"\
             onmouseout="this.style.background=\'transparent\'">\
             \uc704\uc131 \uc601\uc0c1 \uac80\uc0c9 (Sentinel-2)\
         </div>\
-        <div style="padding:4px 16px 8px; color:rgba(165,180,252,0.45); font-size:0.68rem;">\
+        <div style="padding:4px 16px 8px; color:rgba(64,111,216,0.45); font-size:0.68rem;">\
             <span id="sentinelMenuCoords">--</span>\
         </div>\
     </div>\
@@ -829,7 +920,7 @@ function _addSentinelMarker(lat, lng) {
                 ctx.arc(16, 14, 10, Math.PI, 0, false);
                 ctx.quadraticCurveTo(26, 28, 16, 38);
                 ctx.quadraticCurveTo(6, 28, 6, 14);
-                ctx.fillStyle = '#6366f1';
+                ctx.fillStyle = '#002878';
                 ctx.fill();
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 1.5;
@@ -850,7 +941,7 @@ function _addSentinelMarker(lat, lng) {
         label: {
             text: 'Sentinel-2',
             font: '10px JetBrains Mono, monospace',
-            fillColor: Cesium.Color.fromCssColorString('#a5b4fc'),
+            fillColor: Cesium.Color.fromCssColorString('#406FD8'),
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 3,
             style: Cesium.LabelStyle.FILL_AND_OUTLINE,

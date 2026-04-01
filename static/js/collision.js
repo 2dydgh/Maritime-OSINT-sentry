@@ -86,7 +86,7 @@ document.getElementById('collisionTabMl').addEventListener('click', function() {
 
 function collisionSeverityBadge(severity) {
     var colors = { danger: '#f43f5e', warning: '#eab308' };
-    var labels = { danger: 'DANGER', warning: 'WARNING' };
+    var labels = { danger: '\u26A0 위험', warning: '\u25B2 주의' };
     var bg = severity === 'danger' ? 'rgba(244,63,94,0.2)' : 'rgba(234,179,8,0.2)';
     return '<span class="collision-badge" style="background:' + bg + ';color:' + colors[severity] + '">' + labels[severity] + '</span>';
 }
@@ -94,7 +94,8 @@ function collisionSeverityBadge(severity) {
 function mlRiskBadge(level, label) {
     var colors = { 0: '#10b981', 1: '#eab308', 2: '#f97316', 3: '#f43f5e' };
     var bgs = { 0: 'rgba(16,185,129,0.2)', 1: 'rgba(234,179,8,0.2)', 2: 'rgba(249,115,22,0.2)', 3: 'rgba(244,63,94,0.2)' };
-    return '<span class="collision-badge" style="background:' + bgs[level] + ';color:' + colors[level] + '">' + level + ' \u2014 ' + label + '</span>';
+    var icons = { 0: '\u24EA', 1: '\u2460', 2: '\u2461', 3: '\u2462' };
+    return '<span class="collision-badge" style="background:' + bgs[level] + ';color:' + colors[level] + '">' + icons[level] + ' ' + label + '</span>';
 }
 
 function _renderCollisionTicker(list, cardsHtml, count) {
@@ -116,7 +117,7 @@ function _ensureCollisionDelegation() {
     var list = document.getElementById('collisionList');
     if (!list) return;
     list.addEventListener('click', function(e) {
-        var card = e.target.closest('.collision-card');
+        var card = e.target.closest('.collision-row');
         if (!card) return;
         _handleCollisionCardClick(card);
     });
@@ -154,6 +155,23 @@ function renderCollisionList() {
         summaryStats.innerHTML = pill('s-danger', dangerLabel, dangerN) + pill('s-warn', warnLabel, warnN) + pill('s-caution', cautionLabel, cautionN);
     }
 
+    // ML serious risks (level >= 2) — used for both badge and HUD
+    var mlSerious = (collisionData.ml?.risks || []).filter(function(r) { return r.risk_level >= 2; }).length;
+
+    // Update icon rail badge
+    var badge = document.getElementById('collisionBadge');
+    if (badge) {
+        if (mlSerious > 0) {
+            badge.style.display = '';
+            badge.textContent = mlSerious;
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+    // HUD
+    var hudCol = document.getElementById('hudCollision');
+    if (hudCol) hudCol.textContent = mlSerious;
+
     if (collisionActiveTab !== 'ml') {
         fixedSummary.style.display = 'none';
         fixedSummary.innerHTML = '';
@@ -164,46 +182,23 @@ function renderCollisionList() {
         return;
     }
 
-    function tcpaClass(t) { return t < 5 ? 'danger' : t < 10 ? 'warn' : ''; }
-    function dcpaClass(d) { return d < 0.5 ? 'danger' : d < 1.0 ? 'warn' : ''; }
-    function distClass(d) { return d < 1.0 ? 'danger' : d < 2.0 ? 'warn' : ''; }
+    function _seaAreaShort(latA, lngA, latB, lngB) {
+        var midLat = (latA + latB) / 2;
+        var midLng = (lngA + lngB) / 2;
+        return getSeaAreaName(midLat, midLng);
+    }
 
     if (collisionActiveTab === 'distance') {
-        var cardsHtml = risks.map(function(r) { return '\
-            <div class="collision-card"\
+        var rowsHtml = risks.map(function(r) { return '\
+            <div class="collision-row"\
                  data-mmsi-a="' + r.ship_a.mmsi + '" data-mmsi-b="' + r.ship_b.mmsi + '"\
                  data-lat-a="' + r.ship_a.lat + '" data-lng-a="' + r.ship_a.lng + '" data-lat-b="' + r.ship_b.lat + '" data-lng-b="' + r.ship_b.lng + '">\
-                <div class="card-top">\
-                    ' + collisionSeverityBadge(r.severity) + '\
-                </div>\
-                <div class="ship-row">\
-                    <span class="role-tag os">OS</span>\
-                    <span class="ship-name">' + r.ship_a.name + '</span>\
-                    <span class="ship-meta">' + (r.ship_a.sog || '--') + 'kts ' + (r.ship_a.cog || '--') + '\u00b0</span>\
-                </div>\
-                <div class="ship-row">\
-                    <span class="role-tag ts">TS</span>\
-                    <span class="ship-name">' + r.ship_b.name + '</span>\
-                    <span class="ship-meta">' + (r.ship_b.sog || '--') + 'kts ' + (r.ship_b.cog || '--') + '\u00b0</span>\
-                </div>\
-                ' + collisionLocationHtml(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '\
-                <div class="metrics-row">\
-                    <div class="metric">\
-                        <span class="metric-label">TCPA</span>\
-                        <span class="metric-value ' + tcpaClass(r.tcpa_min) + '">' + r.tcpa_min + 'm</span>\
-                    </div>\
-                    <div class="metric">\
-                        <span class="metric-label">DCPA</span>\
-                        <span class="metric-value ' + dcpaClass(r.dcpa_nm) + '">' + r.dcpa_nm + 'nm</span>\
-                    </div>\
-                    <div class="metric">\
-                        <span class="metric-label">DIST</span>\
-                        <span class="metric-value ' + distClass(r.current_dist_nm) + '">' + r.current_dist_nm + 'nm</span>\
-                    </div>\
-                </div>\
+                <span class="col-severity">' + collisionSeverityBadge(r.severity) + '</span>\
+                <span class="col-pairs">' + r.ship_a.name + ' <small>\u2192</small> ' + r.ship_b.name + '</span>\
+                <span class="col-area">' + _seaAreaShort(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '</span>\
             </div>';
         }).join('');
-        _renderCollisionTicker(list, cardsHtml, risks.length);
+        _renderCollisionTicker(list, rowsHtml, risks.length);
     } else {
         var countByLevel = { 1: 0, 2: 0, 3: 0 };
         risks.forEach(function(r) { if (countByLevel[r.risk_level] !== undefined) countByLevel[r.risk_level]++; });
@@ -252,55 +247,27 @@ function renderCollisionList() {
         if (filtered.length === 0) {
             list.innerHTML = '<div class="collision-empty">\ud574\ub2f9 \ub4f1\uae09\uc758 \uc704\ud5d8\uc774 \uc5c6\uc2b5\ub2c8\ub2e4</div>';
         } else {
-            var mlCardsHtml = filtered.map(function(r) { return '\
-                <div class="collision-card"\
+            var mlRowsHtml = filtered.map(function(r) { return '\
+                <div class="collision-row"\
                      data-mmsi-a="' + r.ship_a.mmsi + '" data-mmsi-b="' + r.ship_b.mmsi + '"\
                      data-lat-a="' + r.ship_a.lat + '" data-lng-a="' + r.ship_a.lng + '" data-lat-b="' + r.ship_b.lat + '" data-lng-b="' + r.ship_b.lng + '"\
                      data-sog-a="' + r.ship_a.sog + '" data-cog-a="' + r.ship_a.cog + '" data-name-a="' + r.ship_a.name + '"\
                      data-risk-level="' + r.risk_level + '">\
-                    <div class="card-top">\
-                        ' + mlRiskBadge(r.risk_level, r.risk_label) + '\
-                    </div>\
-                    <div class="ship-row">\
-                        <span class="role-tag os">OS</span>\
-                        <span class="ship-name">' + r.ship_a.name + '</span>\
-                        <span class="ship-meta">' + r.ship_a.sog + 'kts ' + r.ship_a.cog + '\u00b0</span>\
-                    </div>\
-                    <div class="ship-row">\
-                        <span class="role-tag ts">TS</span>\
-                        <span class="ship-name">' + r.ship_b.name + '</span>\
-                        <span class="ship-meta">' + r.ship_b.sog + 'kts ' + r.ship_b.cog + '\u00b0</span>\
-                    </div>\
-                    ' + collisionLocationHtml(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '\
-                    <div class="metrics-row">\
-                        <div class="metric">\
-                            <span class="metric-label">TCPA</span>\
-                            <span class="metric-value ' + tcpaClass(r.tcpa_min) + '">' + r.tcpa_min + 'm</span>\
-                        </div>\
-                        <div class="metric">\
-                            <span class="metric-label">DCPA</span>\
-                            <span class="metric-value ' + dcpaClass(r.dcpa_nm) + '">' + r.dcpa_nm + 'nm</span>\
-                        </div>\
-                        <div class="metric">\
-                            <span class="metric-label">DIST</span>\
-                            <span class="metric-value ' + distClass(r.current_dist_nm) + '">' + r.current_dist_nm + 'nm</span>\
-                        </div>\
-                    </div>\
+                    <span class="col-severity">' + mlRiskBadge(r.risk_level, r.risk_label) + '</span>\
+                    <span class="col-pairs">' + r.ship_a.name + ' <small>\u2192</small> ' + r.ship_b.name + '</span>\
+                    <span class="col-area">' + _seaAreaShort(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '</span>\
                 </div>';
             }).join('');
-            _renderCollisionTicker(list, mlCardsHtml, filtered.length);
+            _renderCollisionTicker(list, mlRowsHtml, filtered.length);
         }
     }
 
     _ensureCollisionDelegation();
-
-    // Update ECharts visualizations
-    if (typeof updateCollisionCharts === 'function') updateCollisionCharts();
 }
 
 function _handleCollisionCardClick(card) {
     // Collision card selection highlight
-    document.querySelectorAll('.collision-card.selected').forEach(function(c) { c.classList.remove('selected'); });
+    document.querySelectorAll('.collision-row.selected').forEach(function(c) { c.classList.remove('selected'); });
     card.classList.add('selected');
 
     var mmsiA = Number(card.dataset.mmsiA);
