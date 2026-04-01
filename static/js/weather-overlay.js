@@ -33,7 +33,7 @@ function renderWeatherOverlays() {
     }
 
     if (wxWind && wxWind.checked && _wxData.wind) {
-        renderWindArrows(_wxData.wind.points);
+        renderWindArrows(_wxData.wind.points, _wxData.marine ? _wxData.marine.points : null);
     } else {
         clearWindArrows();
     }
@@ -68,24 +68,27 @@ function _buildWaveHeatmapCanvas(points) {
     var valid = points.filter(function(p) { return p.wave_height && p.wave_height > 0; });
     if (valid.length === 0) return canvas;
 
-    // 각 픽셀에 대해 IDW 보간
+    // 각 픽셀에 대해 IDW 보간 (바다만: 최근접 해양 포인트가 18° 이내)
+    var MAX_DIST2 = 18 * 18; // 최대 보간 거리 (도 단위) 제곱
     for (var py = 0; py < H; py++) {
         var lat = 90 - (py / H) * 180;
         for (var px = 0; px < W; px++) {
             var lon = -180 + (px / W) * 360;
-            var wSum = 0, vSum = 0;
+            var wSum = 0, vSum = 0, minD2 = 99999;
             for (var i = 0; i < valid.length; i++) {
                 var dlat = lat - valid[i].lat;
                 var dlon = lon - valid[i].lon;
-                // 경도 wrap-around
                 if (dlon > 180) dlon -= 360;
                 if (dlon < -180) dlon += 360;
                 var d2 = dlat * dlat + dlon * dlon;
+                if (d2 < minD2) minD2 = d2;
                 if (d2 < 0.1) { wSum = 1; vSum = valid[i].wave_height; break; }
-                var w = 1.0 / (d2 * d2); // IDW power=4 for sharper falloff
+                var w = 1.0 / (d2 * d2);
                 wSum += w;
                 vSum += w * valid[i].wave_height;
             }
+            // 가장 가까운 해양 포인트가 너무 멀면 투명 (육지)
+            if (minD2 > MAX_DIST2) continue;
             var val = wSum > 0 ? vSum / wSum : 0;
             var c = waveHeightColorRGBA(val);
             var idx = (py * W + px) * 4;
@@ -164,8 +167,16 @@ function _createWindArrowCanvas(speed, direction) {
     return c;
 }
 
-function renderWindArrows(points) {
+function renderWindArrows(points, marinePoints) {
     clearWindArrows();
+
+    // 바다 좌표 셋 구축 (marine API에서 파고 > 0인 좌표)
+    var oceanSet = {};
+    if (marinePoints) {
+        marinePoints.forEach(function(m) {
+            if (m.wave_height && m.wave_height > 0) oceanSet[m.lat + ',' + m.lon] = true;
+        });
+    }
 
     if (typeof viewer === 'undefined' || !viewer) return;
 
@@ -173,6 +184,8 @@ function renderWindArrows(points) {
 
     points.forEach(function(p) {
         if (p.wind_speed <= 0) return;
+        // 바다 위만 표시
+        if (marinePoints && !oceanSet[p.lat + ',' + p.lon]) return;
         var canvas = _createWindArrowCanvas(p.wind_speed, p.wind_direction);
         _wxWindBillboards.add({
             position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 1000),
@@ -188,6 +201,7 @@ function renderWindArrows(points) {
         _wxLayers.wind = L.layerGroup();
         points.forEach(function(p) {
             if (p.wind_speed <= 0) return;
+            if (marinePoints && !oceanSet[p.lat + ',' + p.lon]) return;
             var color = p.wind_speed < 5 ? '#60a5fa' : p.wind_speed < 10 ? '#34d399' : p.wind_speed < 20 ? '#fbbf24' : '#ef4444';
             var icon = L.divIcon({
                 className: '',
