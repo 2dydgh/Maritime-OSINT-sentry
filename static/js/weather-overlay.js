@@ -5,7 +5,7 @@ var _wxLayers = { waveHeight: null, wind: null };
 var _wxInterval = null;
 
 // Cesium primitives
-var _wxWavePoints = null;   // PointPrimitiveCollection
+var _wxWaveImagery = null;  // ImageryLayer (heatmap)
 var _wxWindBillboards = null; // BillboardCollection
 
 async function fetchWeatherData() {
@@ -43,56 +43,87 @@ function renderWeatherOverlays() {
 
 // ── Wave Height ──
 
-function waveHeightColor(h) {
-    // 0m=파랑, 1m=초록, 2m=노랑, 3m=주황, 5m+=빨강
-    if (h <= 0.5) return { r: 0.1, g: 0.4, b: 0.8, a: 0.6 };
-    if (h <= 1.0) return { r: 0.1, g: 0.7, b: 0.5, a: 0.65 };
-    if (h <= 2.0) return { r: 0.9, g: 0.8, b: 0.1, a: 0.7 };
-    if (h <= 3.0) return { r: 0.95, g: 0.5, b: 0.1, a: 0.75 };
-    return { r: 0.95, g: 0.2, b: 0.2, a: 0.8 };
+function waveHeightColorRGBA(h) {
+    // 연속 보간 컬러맵: 0m=투명파랑 → 1m=시안 → 2m=노랑 → 3m=주황 → 5m+=빨강
+    var r, g, b, a;
+    if (h <= 0) return [0, 0, 0, 0];
+    if (h <= 0.5) { var t = h / 0.5; r = 10 + t * 10; g = 60 + t * 80; b = 180 + t * 20; a = 80 + t * 40; }
+    else if (h <= 1.0) { var t = (h - 0.5) / 0.5; r = 20 - t * 10; g = 140 + t * 60; b = 200 - t * 70; a = 120 + t * 20; }
+    else if (h <= 2.0) { var t = (h - 1.0); r = 10 + t * 220; g = 200 - t * 10; b = 130 - t * 110; a = 140 + t * 15; }
+    else if (h <= 3.0) { var t = (h - 2.0); r = 230 + t * 12; g = 190 - t * 70; b = 20 - t * 10; a = 155 + t * 15; }
+    else { var t = Math.min((h - 3.0) / 2.0, 1.0); r = 242 - t * 10; g = 120 - t * 70; b = 10 + t * 30; a = 170 + t * 30; }
+    return [Math.round(r), Math.round(g), Math.round(b), Math.round(a)];
+}
+
+function _buildWaveHeatmapCanvas(points) {
+    // IDW 보간으로 360x180 캔버스에 히트맵 렌더링
+    var W = 720, H = 360;
+    var canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    var ctx = canvas.getContext('2d');
+    var imgData = ctx.createImageData(W, H);
+    var data = imgData.data;
+
+    // 유효 포인트만 필터
+    var valid = points.filter(function(p) { return p.wave_height && p.wave_height > 0; });
+    if (valid.length === 0) return canvas;
+
+    // 각 픽셀에 대해 IDW 보간
+    for (var py = 0; py < H; py++) {
+        var lat = 90 - (py / H) * 180;
+        for (var px = 0; px < W; px++) {
+            var lon = -180 + (px / W) * 360;
+            var wSum = 0, vSum = 0;
+            for (var i = 0; i < valid.length; i++) {
+                var dlat = lat - valid[i].lat;
+                var dlon = lon - valid[i].lon;
+                // 경도 wrap-around
+                if (dlon > 180) dlon -= 360;
+                if (dlon < -180) dlon += 360;
+                var d2 = dlat * dlat + dlon * dlon;
+                if (d2 < 0.1) { wSum = 1; vSum = valid[i].wave_height; break; }
+                var w = 1.0 / (d2 * d2); // IDW power=4 for sharper falloff
+                wSum += w;
+                vSum += w * valid[i].wave_height;
+            }
+            var val = wSum > 0 ? vSum / wSum : 0;
+            var c = waveHeightColorRGBA(val);
+            var idx = (py * W + px) * 4;
+            data[idx] = c[0]; data[idx+1] = c[1]; data[idx+2] = c[2]; data[idx+3] = c[3];
+        }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
 }
 
 function renderWaveHeight(points) {
     clearWaveHeight();
 
-    if (typeof viewer === 'undefined' || !viewer) return;
+    var canvas = _buildWaveHeatmapCanvas(points);
 
-    _wxWavePoints = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
-
-    points.forEach(function(p) {
-        if (p.wave_height <= 0) return;
-        var c = waveHeightColor(p.wave_height);
-        _wxWavePoints.add({
-            position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat),
-            pixelSize: Math.max(12, Math.min(30, p.wave_height * 8)),
-            color: new Cesium.Color(c.r, c.g, c.b, c.a),
-            disableDepthTestDistance: Number.POSITIVE_INFINITY
+    // 3D Cesium
+    if (typeof viewer !== 'undefined' && viewer) {
+        var provider = new Cesium.SingleTileImageryProvider({
+            url: canvas.toDataURL(),
+            rectangle: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90)
         });
-    });
+        _wxWaveImagery = viewer.imageryLayers.addImageryProvider(provider);
+        _wxWaveImagery.alpha = 0.7;
+    }
 
-    // 2D Leaflet 오버레이
+    // 2D Leaflet
     if (typeof leafletMap !== 'undefined' && leafletMap && currentMapMode === '2d') {
-        _wxLayers.waveHeight = L.layerGroup();
-        points.forEach(function(p) {
-            if (p.wave_height <= 0) return;
-            var c = waveHeightColor(p.wave_height);
-            var color = 'rgba(' + Math.round(c.r*255) + ',' + Math.round(c.g*255) + ',' + Math.round(c.b*255) + ',' + c.a + ')';
-            L.circleMarker([p.lat, p.lon], {
-                radius: Math.max(8, Math.min(20, p.wave_height * 5)),
-                fillColor: color,
-                fillOpacity: c.a,
-                stroke: false
-            }).bindTooltip(p.wave_height.toFixed(1) + 'm', { className: 'ship-tooltip-2d' })
-              .addTo(_wxLayers.waveHeight);
-        });
+        var url = canvas.toDataURL();
+        _wxLayers.waveHeight = L.imageOverlay(url, [[-90, -180], [90, 180]], { opacity: 0.7 });
         _wxLayers.waveHeight.addTo(leafletMap);
     }
 }
 
 function clearWaveHeight() {
-    if (_wxWavePoints && typeof viewer !== 'undefined' && viewer) {
-        viewer.scene.primitives.remove(_wxWavePoints);
-        _wxWavePoints = null;
+    if (_wxWaveImagery && typeof viewer !== 'undefined' && viewer) {
+        viewer.imageryLayers.remove(_wxWaveImagery);
+        _wxWaveImagery = null;
     }
     if (_wxLayers.waveHeight && typeof leafletMap !== 'undefined' && leafletMap) {
         leafletMap.removeLayer(_wxLayers.waveHeight);
