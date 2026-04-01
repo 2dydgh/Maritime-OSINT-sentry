@@ -144,7 +144,7 @@ function renderWindArrows(points) {
         if (p.wind_speed <= 0) return;
         var canvas = _createWindArrowCanvas(p.wind_speed, p.wind_direction);
         _wxWindBillboards.add({
-            position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 50000),
+            position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat),
             image: canvas,
             width: 32,
             height: 32,
