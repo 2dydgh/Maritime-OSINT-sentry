@@ -6,7 +6,7 @@ var _wxInterval = null;
 
 // Cesium primitives
 var _wxWaveImagery = null;  // ImageryLayer (heatmap)
-var _wxWindBillboards = null; // BillboardCollection
+var _wxWindEntities = [];   // Entity array
 
 async function fetchWeatherData() {
     try {
@@ -180,20 +180,22 @@ function renderWindArrows(points, marinePoints) {
 
     if (typeof viewer === 'undefined' || !viewer) return;
 
-    _wxWindBillboards = viewer.scene.primitives.add(new Cesium.BillboardCollection());
-
     points.forEach(function(p) {
         if (p.wind_speed <= 0) return;
         // 바다 위만 표시
         if (marinePoints && !oceanSet[p.lat + ',' + p.lon]) return;
         var canvas = _createWindArrowCanvas(p.wind_speed, p.wind_direction);
-        _wxWindBillboards.add({
-            position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 1000),
-            image: canvas,
-            width: 32,
-            height: 32,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY
+        var entity = viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat),
+            billboard: {
+                image: canvas,
+                width: 32,
+                height: 32,
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+            }
         });
+        _wxWindEntities.push(entity);
     });
 
     // 2D Leaflet
@@ -216,9 +218,9 @@ function renderWindArrows(points, marinePoints) {
 }
 
 function clearWindArrows() {
-    if (_wxWindBillboards && typeof viewer !== 'undefined' && viewer) {
-        viewer.scene.primitives.remove(_wxWindBillboards);
-        _wxWindBillboards = null;
+    if (_wxWindEntities.length > 0 && typeof viewer !== 'undefined' && viewer) {
+        _wxWindEntities.forEach(function(e) { viewer.entities.remove(e); });
+        _wxWindEntities = [];
     }
     if (_wxLayers.wind && typeof leafletMap !== 'undefined' && leafletMap) {
         leafletMap.removeLayer(_wxLayers.wind);
