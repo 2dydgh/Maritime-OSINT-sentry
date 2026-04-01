@@ -172,12 +172,12 @@ function _buildWindLabelCanvas(points, marinePoints) {
 
         // 배경 원
         ctx.beginPath();
-        ctx.arc(px, py, 8, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.arc(px, py, 5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
         ctx.fill();
 
         // 숫자
-        ctx.font = 'bold 10px JetBrains Mono, monospace';
+        ctx.font = 'bold 7px JetBrains Mono, monospace';
         ctx.fillStyle = color;
         ctx.fillText(label, px, py);
     });
