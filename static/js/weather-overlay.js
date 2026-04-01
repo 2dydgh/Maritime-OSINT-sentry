@@ -4,9 +4,9 @@ var _wxData = { marine: null, wind: null };
 var _wxLayers = { waveHeight: null, wind: null };
 var _wxInterval = null;
 
-// Cesium primitives
-var _wxWaveImagery = null;  // ImageryLayer (heatmap)
-var _wxWindEntities = [];   // Entity array
+// Cesium imagery layers
+var _wxWaveImagery = null;
+var _wxWindImagery = null;
 
 async function fetchWeatherData() {
     try {
@@ -134,7 +134,7 @@ function clearWaveHeight() {
     }
 }
 
-// ── Wind Speed Labels ──
+// ── Wind Speed Labels (canvas imagery) ──
 
 function _windSpeedColor(speed) {
     if (speed < 5) return '#60a5fa';
@@ -143,10 +143,13 @@ function _windSpeedColor(speed) {
     return '#ef4444';
 }
 
-function renderWindLabels(points, marinePoints) {
-    clearWindLabels();
+function _buildWindLabelCanvas(points, marinePoints) {
+    var W = 720, H = 360;
+    var canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    var ctx = canvas.getContext('2d');
 
-    // 바다 좌표 셋 구축
+    // 바다 좌표 셋
     var oceanSet = {};
     if (marinePoints) {
         marinePoints.forEach(function(m) {
@@ -154,52 +157,61 @@ function renderWindLabels(points, marinePoints) {
         });
     }
 
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    points.forEach(function(p) {
+        if (p.wind_speed <= 0) return;
+        if (marinePoints && !oceanSet[p.lat + ',' + p.lon]) return;
+
+        var px = ((p.lon + 180) / 360) * W;
+        var py = ((90 - p.lat) / 180) * H;
+
+        var label = Math.round(p.wind_speed) + '';
+        var color = _windSpeedColor(p.wind_speed);
+
+        // 배경 원
+        ctx.beginPath();
+        ctx.arc(px, py, 8, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fill();
+
+        // 숫자
+        ctx.font = 'bold 10px JetBrains Mono, monospace';
+        ctx.fillStyle = color;
+        ctx.fillText(label, px, py);
+    });
+
+    return canvas;
+}
+
+function renderWindLabels(points, marinePoints) {
+    clearWindLabels();
+
+    var canvas = _buildWindLabelCanvas(points, marinePoints);
+
     // 3D Cesium
     if (typeof viewer !== 'undefined' && viewer) {
-        points.forEach(function(p) {
-            if (p.wind_speed <= 0) return;
-            if (marinePoints && !oceanSet[p.lat + ',' + p.lon]) return;
-            var entity = viewer.entities.add({
-                position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat),
-                label: {
-                    text: Math.round(p.wind_speed) + '',
-                    font: '11px JetBrains Mono, monospace',
-                    fillColor: Cesium.Color.fromCssColorString(_windSpeedColor(p.wind_speed)),
-                    outlineColor: Cesium.Color.BLACK,
-                    outlineWidth: 3,
-                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-                    disableDepthTestDistance: Number.POSITIVE_INFINITY,
-                    scaleByDistance: new Cesium.NearFarScalar(1e6, 1.2, 8e6, 0.5)
-                }
-            });
-            _wxWindEntities.push(entity);
+        var provider = new Cesium.SingleTileImageryProvider({
+            url: canvas.toDataURL(),
+            rectangle: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90)
         });
+        _wxWindImagery = viewer.imageryLayers.addImageryProvider(provider);
+        _wxWindImagery.alpha = 0.9;
     }
 
     // 2D Leaflet
     if (typeof leafletMap !== 'undefined' && leafletMap && currentMapMode === '2d') {
-        _wxLayers.wind = L.layerGroup();
-        points.forEach(function(p) {
-            if (p.wind_speed <= 0) return;
-            if (marinePoints && !oceanSet[p.lat + ',' + p.lon]) return;
-            var color = _windSpeedColor(p.wind_speed);
-            var icon = L.divIcon({
-                className: '',
-                html: '<div style="color:' + color + ';font-size:11px;font-family:JetBrains Mono,monospace;font-weight:700;text-shadow:0 0 4px #000, 0 0 2px #000;">' + Math.round(p.wind_speed) + '</div>',
-                iconSize: [24, 16],
-                iconAnchor: [12, 8]
-            });
-            L.marker([p.lat, p.lon], { icon: icon, interactive: false }).addTo(_wxLayers.wind);
-        });
+        var url = canvas.toDataURL();
+        _wxLayers.wind = L.imageOverlay(url, [[-90, -180], [90, 180]], { opacity: 0.9 });
         _wxLayers.wind.addTo(leafletMap);
     }
 }
 
 function clearWindLabels() {
-    if (_wxWindEntities.length > 0 && typeof viewer !== 'undefined' && viewer) {
-        _wxWindEntities.forEach(function(e) { viewer.entities.remove(e); });
-        _wxWindEntities = [];
+    if (_wxWindImagery && typeof viewer !== 'undefined' && viewer) {
+        viewer.imageryLayers.remove(_wxWindImagery);
+        _wxWindImagery = null;
     }
     if (_wxLayers.wind && typeof leafletMap !== 'undefined' && leafletMap) {
         leafletMap.removeLayer(_wxLayers.wind);
