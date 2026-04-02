@@ -542,6 +542,20 @@ setInterval(function() {
         el.textContent = Math.floor(ago / 60) + 'm';
         el.className = 'dead';
     }
+
+    // Bottom bar latency + WS LED
+    if (typeof BottomBar !== 'undefined') {
+        var ms = ago * 1000;
+        if (ago <= 5) {
+            BottomBar.updateValue('bottomLatency', (ms < 1000) ? ms : ago + 's');
+        } else {
+            BottomBar.updateValue('bottomLatency', ago < 60 ? ago + 's' : Math.floor(ago / 60) + 'm');
+        }
+    }
+    var led = document.getElementById('bottomWsLed');
+    if (led) {
+        led.className = 'ws-led ' + (ago <= 5 ? 'connected' : ago <= 15 ? 'connecting' : 'disconnected');
+    }
 }, 1000);
 
 // ── Ship Highlight (targeting reticle on navigation) ──

@@ -523,31 +523,7 @@ header::after {
 }
 
 /* Connection Status LED */
-.ws-status-led {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    transition: background-color 0.3s, box-shadow 0.3s;
-}
 
-.ws-status-led.connected {
-    background-color: var(--accent-green);
-    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
-    animation: ledPulse 3s ease-in-out infinite;
-}
-
-.ws-status-led.disconnected {
-    background-color: var(--accent-red);
-    box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
-    animation: ledBlink 1s ease-in-out infinite;
-}
-
-.ws-status-led.connecting {
-    background-color: var(--accent-amber);
-    box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
-    animation: ledBlink 0.6s ease-in-out infinite;
-}
 
 @keyframes ledPulse {
 
@@ -701,23 +677,6 @@ header::after {
 }
 
 /* Header latency indicator */
-#stat-latency {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.95rem;
-    transition: color 0.3s ease;
-}
-
-#stat-latency.fresh {
-    color: #10b981;
-}
-
-#stat-latency.stale {
-    color: #eab308;
-}
-
-#stat-latency.dead {
-    color: #f43f5e;
-}
 
 
 .panel-section {
@@ -2571,10 +2530,6 @@ header::after {
 .risk-stat-count,
 .s-count,
 .metric-value,
-#stat-latency {
-    font-variant-numeric: tabular-nums;
-}
-
 /* ── Number count-up animation ── */
 .count-up {
     display: inline-block;
