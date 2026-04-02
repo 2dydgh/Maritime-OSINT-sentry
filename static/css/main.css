@@ -245,7 +245,7 @@
 
 /* Bottom Stats Bar */
 #bottomBar {
-    height: 52px;
+    height: 120px;
     background: var(--panel-bg-solid);
     border-top: 1px solid rgba(64, 111, 216, 0.1);
     display: flex;
@@ -256,7 +256,7 @@
 }
 
 .stat-card {
-    flex: 1;
+    flex: 0.6;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--panel-border);
     border-radius: 6px;
@@ -265,6 +265,10 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+}
+
+.stat-card-bar {
+    flex: 1.5;
 }
 
 .stat-card-danger {

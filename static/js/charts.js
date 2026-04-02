@@ -31,14 +31,14 @@ function initCharts() {
 }
 window.initCharts = initCharts;
 
-// ── Ship Type Distribution Bar (compact for bottom bar) ──
+// ── Ship Type Distribution Bar ──
 function buildShipTypeOption(counts) {
     var types = ['Cargo', 'Tanker', 'Passenger', 'Fishing', 'Military', 'Tug', 'Other'];
     var keys = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
     var colors = keys.map(function(k) { return SHIP_COLORS[k] || '#6b7280'; });
     var data = keys.map(function(k) { return counts[k] || 0; });
 
-    var koNames = { Cargo: '화물', Tanker: '유조', Passenger: '여객', Fishing: '어선', Military: '군함', Tug: '예인', Other: '기타' };
+    var koNames = { Cargo: '화물선', Tanker: '유조선', Passenger: '여객선', Fishing: '어선', Military: '군함', Tug: '예인선', Other: '기타' };
     var total = data.reduce(function(a, b) { return a + b; }, 0);
 
     return {
@@ -50,34 +50,48 @@ function buildShipTypeOption(counts) {
             appendTo: document.body,
             backgroundColor: 'rgba(15,15,20,0.92)',
             borderColor: 'rgba(64,111,216,0.3)',
-            textStyle: { color: '#e2e8f0', fontSize: 10, fontFamily: "'Pretendard Variable', sans-serif" },
+            textStyle: { color: '#e2e8f0', fontSize: 11, fontFamily: "'Pretendard Variable', sans-serif" },
             formatter: function(params) {
                 var p = params[0];
                 var pct = total > 0 ? Math.round(p.value / total * 100) : 0;
                 var ko = koNames[p.name] || p.name;
-                return '<span style="color:' + colors[p.dataIndex] + '">\u25cf</span> ' + ko +
-                    ' ' + p.value + ' <span style="color:#94a3b8">(' + pct + '%)</span>';
+                return '<span style="color:' + colors[p.dataIndex] + '">\u25cf</span> <b>' + ko + '</b> (' + p.name + ')<br/>' +
+                    p.value + '척 <span style="color:#94a3b8">(' + pct + '%)</span>';
             }
         },
-        grid: { left: 2, right: 2, top: 0, bottom: 0 },
+        grid: { left: 50, right: 12, top: 8, bottom: 16 },
         xAxis: {
             type: 'value',
-            show: false
+            axisLine: { show: false },
+            axisTick: { show: false },
+            axisLabel: { show: false },
+            splitLine: { lineStyle: { color: CHART_THEME.axisLine } }
         },
         yAxis: {
             type: 'category',
             data: types,
             inverse: true,
-            show: false
+            axisLine: { show: false },
+            axisTick: { show: false },
+            axisLabel: {
+                color: CHART_THEME.textDim,
+                fontSize: 9,
+                fontFamily: "'Pretendard Variable', 'Inter', sans-serif"
+            }
         },
         series: [{
             type: 'bar',
-            barWidth: 3,
-            barGap: '20%',
+            barWidth: 10,
             data: data.map(function(v, i) {
-                return { value: v, itemStyle: { color: colors[i], borderRadius: [0, 2, 2, 0] } };
+                return { value: v, itemStyle: { color: colors[i], borderRadius: [0, 3, 3, 0] } };
             }),
-            label: { show: false },
+            label: {
+                show: true,
+                position: 'right',
+                fontSize: 9,
+                color: CHART_THEME.text,
+                fontFamily: "'Pretendard Variable', 'Inter', sans-serif"
+            },
             animationDuration: 600,
             animationEasing: 'cubicOut'
         }]
