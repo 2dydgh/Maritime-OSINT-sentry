@@ -310,9 +310,9 @@
 .stat-card-chart {
     flex: 1;
     display: flex;
+    flex-direction: column;
+    justify-content: center;
     gap: 2px;
-    align-items: flex-end;
-    height: 28px;
     min-width: 0;
 }
 
