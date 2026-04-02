@@ -1,13 +1,13 @@
-# Maritime OSINT Sentry
+# MSA Intelligent Platform
 
-AIS 선박 추적, 위성 궤도 전파, 이상 징후 탐지, ML 기반 충돌 예측을 3D 전술 글로브 위에서 통합 운용하는 실시간 해양 감시 플랫폼.
+AIS 선박 추적, 위성 궤도 전파, 이상 징후 탐지, ML 기반 충돌 예측을 3D 전술 글로브 위에서 통합 운용하는 실시간 해양 상황인식(MSA) 플랫폼입니다.
 
 ![Main Interface](static/demo.gif)
 
-## 이 프로젝트가 보여주는 것
+## 시스템 개요
 
 - **풀스택 지리공간 엔지니어링** — CesiumJS/Leaflet 프론트엔드, FastAPI 백엔드, PostGIS 공간 쿼리, WebSocket 실시간 파이프라인
-- **ML 모델 개발 및 서빙** — XGBoost 충돌 위험 모델 (14개 피처, 4단계 분류) 학습, 컨테이너화, REST API 서빙
+- **ML 기반 충돌 위험 예측** — XGBoost 충돌 위험 모델 (14개 피처, 4단계 분류) 학습, 컨테이너화, REST API 서빙
 - **다중 소스 데이터 퓨전** — AIS 라이브 스트림, SGP4 위성 궤도, Sentinel-2 위성 영상, GSHHG 해안선 데이터를 단일 작전 화면에 통합
 
 ## 로드맵
