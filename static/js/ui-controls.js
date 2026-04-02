@@ -996,6 +996,7 @@ document.getElementById('sentinelMenuBtn').addEventListener('click', async funct
 
 // ── Draggable Panels ──
 function makeDraggable(panel, handle) {
+    if (!panel || !handle) return;
     var isDragging = false, startX, startY, startLeft, startTop;
 
     handle.addEventListener('mousedown', function(e) {
@@ -1032,23 +1033,25 @@ makeDraggable(
     document.getElementById('sentinelCardHeader')
 );
 
-makeDraggable(
-    document.getElementById('shipInfoPanel'),
-    document.getElementById('shipInfoHeader')
-);
+// shipInfoPanel drag removed — ship info now lives in right panel
 
-// Close button
-document.getElementById('shipInfoClose').addEventListener('click', function() {
-    document.getElementById('shipInfoPanel').classList.remove('visible');
-    clearProximity();
-    clearShipHighlight();
-});
+// Close button — delegate to LayoutManager for right panel
+var shipInfoCloseBtn = document.getElementById('shipInfoClose');
+if (shipInfoCloseBtn) {
+    shipInfoCloseBtn.addEventListener('click', function() {
+        if (typeof LayoutManager !== 'undefined') {
+            LayoutManager.closeRightPanel();
+        }
+        clearProximity();
+        clearShipHighlight();
+    });
+}
 
 // Show custom ship info panel when entity is clicked
 function showShipInfo(entityOrMmsi) {
-    var panel = document.getElementById('shipInfoPanel');
     var title = document.getElementById('shipInfoTitle');
     var body = document.getElementById('shipInfoBody');
+    if (!title || !body) return;
 
     // Entity 객체 또는 mmsi 문자열 둘 다 지원 (히스토리 모드 호환)
     var s;
@@ -1069,7 +1072,9 @@ function showShipInfo(entityOrMmsi) {
                 }
             }
             body.innerHTML = descHtml || '<p style="color:var(--text-dim);font-size:0.8rem;">No details available</p>';
-            panel.classList.add('visible');
+            if (typeof LayoutManager !== 'undefined') {
+                LayoutManager.showShipInfo();
+            }
             return;
         }
     } else {
@@ -1078,7 +1083,9 @@ function showShipInfo(entityOrMmsi) {
 
     if (!s) {
         body.innerHTML = '<p style="color:var(--text-dim);font-size:0.8rem;">No details available</p>';
-        panel.classList.add('visible');
+        if (typeof LayoutManager !== 'undefined') {
+            LayoutManager.showShipInfo();
+        }
         return;
     }
 
@@ -1101,7 +1108,9 @@ function showShipInfo(entityOrMmsi) {
     if (s.imo) rows += '<tr><th>IMO</th><td>' + s.imo + '</td></tr>';
 
     body.innerHTML = '<table class="cesium-infoBox-defaultTable"><tbody>' + rows + '</tbody></table>';
-    panel.classList.add('visible');
+    if (typeof LayoutManager !== 'undefined') {
+        LayoutManager.showShipInfo();
+    }
 }
 window.showShipInfo = showShipInfo;
 
@@ -1160,7 +1169,9 @@ handler.setInputAction(function(click) {
     }
 
     // 빈 공간 클릭 — 패널 닫기
-    document.getElementById('shipInfoPanel').classList.remove('visible');
+    if (typeof LayoutManager !== 'undefined') {
+        LayoutManager.closeRightPanel();
+    }
     clearProximity();
     clearShipHighlight();
     if (_activeFootprintSatId) {

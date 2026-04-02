@@ -80,9 +80,11 @@ function switchCollisionTab(tab) {
 }
 window.switchCollisionTab = switchCollisionTab;
 
-// Bind collision tab buttons
-document.getElementById('collisionTabDistance').addEventListener('click', function() { switchCollisionTab('distance'); });
-document.getElementById('collisionTabMl').addEventListener('click', function() { switchCollisionTab('ml'); });
+// Bind collision tab buttons (with null guards for restructured DOM)
+var tabDist = document.getElementById('collisionTabDistance');
+var tabMl = document.getElementById('collisionTabMl');
+if (tabDist) tabDist.addEventListener('click', function() { switchCollisionTab('distance'); });
+if (tabMl) tabMl.addEventListener('click', function() { switchCollisionTab('ml'); });
 
 function collisionSeverityBadge(severity) {
     var colors = { danger: '#f43f5e', warning: '#eab308' };
@@ -126,6 +128,7 @@ function _ensureCollisionDelegation() {
 function renderCollisionList() {
     var list = document.getElementById('collisionList');
     var fixedSummary = document.getElementById('mlRiskSummaryFixed');
+    if (!list) return;
     var data = collisionActiveTab === 'distance' ? collisionData.distance : collisionData.ml;
     var risks = data.risks || [];
 
@@ -178,7 +181,7 @@ function renderCollisionList() {
     var hudCol = document.getElementById('hudCollision');
     if (hudCol) hudCol.textContent = mlSerious;
 
-    if (collisionActiveTab !== 'ml') {
+    if (collisionActiveTab !== 'ml' && fixedSummary) {
         fixedSummary.style.display = 'none';
         fixedSummary.innerHTML = '';
     }
@@ -212,6 +215,7 @@ function renderCollisionList() {
         var isActive = function(lvl) { return mlRiskFilter === lvl ? 'active' : ''; };
         var isDefaultActive = mlRiskFilter === null ? 'active' : '';
 
+        if (fixedSummary) {
         fixedSummary.style.display = 'block';
         fixedSummary.innerHTML = '\
             <div class="ml-risk-summary">\
@@ -245,6 +249,7 @@ function renderCollisionList() {
                 renderCollisionList();
             });
         });
+        } // end if (fixedSummary)
 
         var filtered = mlRiskFilter === null
             ? risks.filter(function(r) { return r.risk_level >= 2; })
