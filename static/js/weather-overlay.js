@@ -16,6 +16,19 @@ async function fetchWeatherData() {
         ]);
         _wxData.marine = await marineResp.json();
         _wxData.wind = await windResp.json();
+
+        // Bottom bar weather updates
+        if (typeof BottomBar !== 'undefined') {
+            var windPoints = (_wxData.wind && _wxData.wind.points) || [];
+            var marinePoints = (_wxData.marine && _wxData.marine.points) || [];
+            var avgWind = windPoints.reduce(function(s, d) { return s + (d.wind_speed || 0); }, 0) / (windPoints.length || 1);
+            var avgWave = marinePoints.reduce(function(s, d) { return s + (d.wave_height || 0); }, 0) / (marinePoints.length || 1);
+            BottomBar.updateValue('bottomWind', avgWind.toFixed(1));
+            BottomBar.updateValue('bottomWave', avgWave.toFixed(1));
+            BottomBar.pushData('wind', avgWind);
+            BottomBar.pushData('wave', avgWave);
+        }
+
         renderWeatherOverlays();
     } catch (err) {
         console.warn('Weather fetch failed:', err);

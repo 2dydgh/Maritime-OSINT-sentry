@@ -70,6 +70,12 @@ function _applySatMissionFilter() {
     if (hudS) hudS.textContent = visibleCount;
     var cs = document.getElementById('chipSatCount');
     if (cs) cs.textContent = visibleCount;
+
+    // Bottom bar satellite update
+    if (typeof BottomBar !== 'undefined') {
+        BottomBar.updateValue('bottomSats', visibleCount);
+        BottomBar.pushData('satellites', visibleCount);
+    }
 }
 
 document.getElementById('layer-sats').addEventListener('change', function(e) {
@@ -155,6 +161,12 @@ async function _refreshSatTleCache() {
         if (hudS2) hudS2.textContent = visCount;
         var cs2 = document.getElementById('chipSatCount');
         if (cs2) cs2.textContent = visCount;
+
+        // Bottom bar satellite update
+        if (typeof BottomBar !== 'undefined') {
+            BottomBar.updateValue('bottomSats', visCount);
+            BottomBar.pushData('satellites', visCount);
+        }
     } catch (err) {
         console.error('Error fetching satellite TLE data:', err);
     }

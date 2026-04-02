@@ -153,6 +153,12 @@ function renderCollisionList() {
                 '<span class="s-dot"></span><span class="s-count">' + count + '</span></span>';
         }
         summaryStats.innerHTML = pill('s-danger', dangerLabel, dangerN) + pill('s-warn', warnLabel, warnN) + pill('s-caution', cautionLabel, cautionN);
+
+        // Bottom bar risk update
+        if (typeof BottomBar !== 'undefined') {
+            BottomBar.updateValue('bottomRisk', risks.length);
+            BottomBar.updateRiskLevels(dangerN, warnN, cautionN);
+        }
     }
 
     // ML serious risks (level >= 2) — used for both badge and HUD

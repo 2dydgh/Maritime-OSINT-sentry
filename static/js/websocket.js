@@ -473,6 +473,19 @@ function initWebSocket() {
                 var totalCount = _lastShipsData.length;
                 animateCount(totalShipsEl, totalCount.toLocaleString());
 
+                // Bottom bar updates
+                if (typeof BottomBar !== 'undefined') {
+                    BottomBar.updateValue('bottomVessels', totalCount);
+
+                    // Vessel type counts
+                    var typeCounts = {};
+                    _lastShipsData.forEach(function(s) {
+                        var t = s.type || 'other';
+                        typeCounts[t] = (typeCounts[t] || 0) + 1;
+                    });
+                    BottomBar.updateVesselTypes(typeCounts);
+                }
+
                 if (data.timestamp) {
                     var updated = new Date(data.timestamp);
                     document.getElementById('last-update').textContent = updated.toISOString().substring(11, 19);
