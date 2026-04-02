@@ -8,10 +8,12 @@ var BottomBar = (function() {
         wave: { data: [], max: 60 }
     };
 
-    // Vessel type counts for mini bar chart
+    // Vessel type counts
     var vesselCounts = {};
-    // Risk level counts for mini bar chart
+    // Risk level counts
     var riskCounts = { danger: 0, warning: 0, caution: 0 };
+    // ECharts donut instance
+    var vesselDonut = null;
 
     function pushData(key, value) {
         var buf = buffers[key];
@@ -50,40 +52,73 @@ var BottomBar = (function() {
             '<path d="' + pathD + '" fill="none" stroke="var(--secondary)" stroke-width="1.2" opacity="0.6"/>';
     }
 
+    function initDonut(domId) {
+        var el = document.getElementById(domId);
+        if (!el || typeof echarts === 'undefined') return null;
+        return echarts.init(el, null, { renderer: 'canvas' });
+    }
+
+    function setDonutData(chart, data) {
+        if (!chart) return;
+        chart.setOption({
+            animation: false,
+            series: [{
+                type: 'pie',
+                radius: ['55%', '90%'],
+                center: ['50%', '50%'],
+                silent: true,
+                label: { show: false },
+                labelLine: { show: false },
+                itemStyle: { borderWidth: 1, borderColor: 'rgba(0,0,0,0.6)' },
+                data: data
+            }]
+        });
+    }
+
     function updateVesselTypes(counts) {
         vesselCounts = counts;
-        var container = document.getElementById('vesselTypeBars');
-        if (!container) return;
+        if (!vesselDonut) vesselDonut = initDonut('vesselDonutChart');
+        if (!vesselDonut) return;
 
-        var types = ['cargo', 'tanker', 'other'];
-        var labels = { cargo: 'Cargo', tanker: 'Tanker', other: 'Other' };
-        // Include all non-cargo, non-tanker as 'other'
-        var otherCount = (counts.passenger || 0) + (counts.fishing || 0) +
-            (counts.military || 0) + (counts.tug || 0) + (counts.other || 0) + (counts.yacht || 0);
-        var displayCounts = {
-            cargo: counts.cargo || 0,
-            tanker: counts.tanker || 0,
-            other: otherCount
+        var defaultColors = {
+            cargo: '#3b82f6', tanker: '#f97316', passenger: '#a855f7',
+            fishing: '#10b981', military: '#ef4444', tug: '#06b6d4', other: '#6b7280'
         };
-        var total = displayCounts.cargo + displayCounts.tanker + displayCounts.other;
+        var labels = {
+            cargo: 'Cargo', tanker: 'Tanker', passenger: 'Passenger',
+            fishing: 'Fishing', military: 'Military', tug: 'Tug', other: 'Other'
+        };
+        var types = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
+
+        var data = [];
+        var total = 0;
+        types.forEach(function(t) {
+            var v = counts[t] || 0;
+            if (t === 'other') v += (counts.yacht || 0);
+            total += v;
+            if (v > 0) {
+                var c = (typeof SHIP_COLORS !== 'undefined' && SHIP_COLORS[t]) || defaultColors[t];
+                data.push({ value: v, name: labels[t], itemStyle: { color: c } });
+            }
+        });
         if (total === 0) return;
 
-        var colors = {
-            cargo: (typeof SHIP_COLORS !== 'undefined' && SHIP_COLORS.cargo) || '#3b82f6',
-            tanker: (typeof SHIP_COLORS !== 'undefined' && SHIP_COLORS.tanker) || '#f97316',
-            other: (typeof SHIP_COLORS !== 'undefined' && SHIP_COLORS.other) || '#6b7280'
-        };
+        setDonutData(vesselDonut, data);
 
-        var html = '';
-        types.forEach(function(t) {
-            var pct = Math.round((displayCounts[t] / total) * 100);
-            html += '<div style="display:flex;align-items:center;gap:3px;">' +
-                '<span style="font-size:0.45rem;color:var(--text-dim);width:28px;">' + labels[t] + '</span>' +
-                '<div style="flex:1;height:4px;background:rgba(255,255,255,0.05);border-radius:2px;overflow:hidden;">' +
-                '<div style="width:' + pct + '%;height:100%;background:' + colors[t] + ';border-radius:2px;"></div>' +
-                '</div></div>';
-        });
-        container.innerHTML = html;
+        // Render mini legend (top 3 by count)
+        var legend = document.getElementById('vesselDonutLegend');
+        if (legend) {
+            var sorted = data.slice().sort(function(a, b) { return b.value - a.value; });
+            var html = '';
+            sorted.forEach(function(d) {
+                html += '<div class="donut-legend-item">' +
+                    '<span class="donut-legend-dot" style="background:' + d.itemStyle.color + ';"></span>' +
+                    '<span>' + d.name + '</span>' +
+                    '<span class="donut-legend-count">' + d.value + '</span>' +
+                    '</div>';
+            });
+            legend.innerHTML = html;
+        }
     }
 
     function updateRiskLevels(danger, warning, caution) {
@@ -92,10 +127,14 @@ var BottomBar = (function() {
         if (!container) return;
 
         var max = Math.max(danger, warning, caution, 1);
+        var dP = Math.max((danger / max) * 100, 5);
+        var wP = Math.max((warning / max) * 100, 5);
+        var cP = Math.max((caution / max) * 100, 5);
+        var ovl = 'position:absolute;bottom:1px;left:0;right:0;text-align:center;font-family:"JetBrains Mono",monospace;font-size:0.38rem;line-height:1;text-shadow:0 0 3px rgba(0,0,0,0.8);';
         container.innerHTML =
-            '<div class="mini-bar mini-bar-danger" style="height:' + Math.max((danger / max) * 100, 5) + '%;"></div>' +
-            '<div class="mini-bar mini-bar-warning" style="height:' + Math.max((warning / max) * 100, 5) + '%;"></div>' +
-            '<div class="mini-bar mini-bar-caution" style="height:' + Math.max((caution / max) * 100, 5) + '%;"></div>';
+            '<div class="risk-bar-wrap"><div class="mini-bar mini-bar-danger" style="height:' + dP + '%;"></div><span style="' + ovl + 'color:#fca5a5;">' + danger + '</span></div>' +
+            '<div class="risk-bar-wrap"><div class="mini-bar mini-bar-warning" style="height:' + wP + '%;"></div><span style="' + ovl + 'color:#fca5a5;">' + warning + '</span></div>' +
+            '<div class="risk-bar-wrap"><div class="mini-bar mini-bar-caution" style="height:' + cP + '%;"></div><span style="' + ovl + 'color:#fca5a5;">' + caution + '</span></div>';
     }
 
     function updateValue(id, value) {

@@ -4,6 +4,7 @@
 var LayoutManager = (function() {
     var activePanel = null;     // currently active sidebar icon panel name
     var activeAction = null;    // 'right-panel' | 'layer-toggle' | 'dedicated-screen'
+    var prevPanel = null;       // panel to return to from ship info
 
     function init() {
         // Sidebar icon click delegation
@@ -27,6 +28,25 @@ var LayoutManager = (function() {
                 activeAction = null;
             });
         });
+
+        // Ship info back button → return to previous panel
+        var backBtn = document.getElementById('shipInfoBack');
+        if (backBtn) {
+            backBtn.addEventListener('click', function() {
+                if (prevPanel) {
+                    activePanel = prevPanel;
+                    activeAction = 'right-panel';
+                    highlightIcon(prevPanel);
+                    openRightPanel(prevPanel);
+                    prevPanel = null;
+                } else {
+                    closeRightPanel();
+                    deactivateAllIcons();
+                    activePanel = null;
+                    activeAction = null;
+                }
+            });
+        }
     }
 
     function handleIconClick(panel, action) {
@@ -57,9 +77,17 @@ var LayoutManager = (function() {
             openRightPanel(panel);
         } else if (action === 'layer-toggle') {
             toggleModelLayer(panel, true);
+            // Notify registry
+            if (window.ModelRegistry && ModelRegistry.isModel(panel)) {
+                ModelRegistry.activateModel(panel);
+            }
         } else if (action === 'dedicated-screen') {
             closeRightPanel();
             showDedicatedScreen(panel);
+            // Notify registry
+            if (window.ModelRegistry && ModelRegistry.isModel(panel)) {
+                ModelRegistry.activateModel(panel);
+            }
         }
     }
 
@@ -70,8 +98,14 @@ var LayoutManager = (function() {
             closeRightPanel();
         } else if (action === 'layer-toggle') {
             toggleModelLayer(panel, false);
+            if (window.ModelRegistry && ModelRegistry.isModel(panel)) {
+                ModelRegistry.deactivateModel(panel);
+            }
         } else if (action === 'dedicated-screen') {
             showDedicatedScreen(null);
+            if (window.ModelRegistry && ModelRegistry.isModel(panel)) {
+                ModelRegistry.deactivateModel(panel);
+            }
         }
     }
 
@@ -122,14 +156,22 @@ var LayoutManager = (function() {
             v.classList.remove('active');
         });
 
+        // Elements to hide during dedicated screen mode
+        var mapTopBar = document.getElementById('mapTopBar');
+        var mapNav = document.getElementById('mapNavControls');
+        var leafletZoom = document.getElementById('leafletZoomControls');
+
         if (panel) {
             var target = document.getElementById('dedicated-' + panel);
             if (target) target.classList.add('active');
             ds.style.display = '';
             ds.classList.add('active');
-            // Hide bottom bar in dedicated screen mode
+            // Hide map-only UI elements
             var bb = document.getElementById('bottomBar');
             if (bb) bb.style.display = 'none';
+            if (mapTopBar) mapTopBar.style.display = 'none';
+            if (mapNav) mapNav.style.display = 'none';
+            if (leafletZoom) leafletZoom.style.display = 'none';
         } else {
             ds.classList.remove('active');
             setTimeout(function() {
@@ -137,8 +179,12 @@ var LayoutManager = (function() {
                     ds.style.display = 'none';
                 }
             }, 300);
+            // Restore map-only UI elements
             var bb = document.getElementById('bottomBar');
             if (bb) bb.style.display = '';
+            if (mapTopBar) mapTopBar.style.display = '';
+            if (mapNav) mapNav.style.display = '';
+            if (leafletZoom) leafletZoom.style.display = '';
         }
     }
 
@@ -158,7 +204,8 @@ var LayoutManager = (function() {
 
     // ── Public: open ship info in right panel ──
     function showShipInfo() {
-        // Deactivate sidebar selection (ship info is not a sidebar item)
+        // Remember current panel so back button can return to it
+        prevPanel = (activePanel && activePanel !== 'ship') ? activePanel : prevPanel || null;
         deactivateAllIcons();
         activePanel = 'ship';
         activeAction = 'right-panel';
@@ -179,9 +226,5 @@ var LayoutManager = (function() {
         getActivePanel: getActivePanel
     };
 })();
-
-document.addEventListener('DOMContentLoaded', function() {
-    LayoutManager.init();
-});
 
 window.LayoutManager = LayoutManager;

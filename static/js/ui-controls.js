@@ -1034,13 +1034,10 @@ makeDraggable(
 
 // shipInfoPanel drag removed — ship info now lives in right panel
 
-// Close button — delegate to LayoutManager for right panel
-var shipInfoCloseBtn = document.getElementById('shipInfoClose');
-if (shipInfoCloseBtn) {
-    shipInfoCloseBtn.addEventListener('click', function() {
-        if (typeof LayoutManager !== 'undefined') {
-            LayoutManager.closeRightPanel();
-        }
+// Back button — clear ship highlights when navigating back
+var shipInfoBackBtn = document.getElementById('shipInfoBack');
+if (shipInfoBackBtn) {
+    shipInfoBackBtn.addEventListener('click', function() {
         clearProximity();
         clearShipHighlight();
     });
@@ -1107,6 +1104,12 @@ function showShipInfo(entityOrMmsi) {
     if (s.imo) rows += '<tr><th>IMO</th><td>' + s.imo + '</td></tr>';
 
     body.innerHTML = '<table class="cesium-infoBox-defaultTable"><tbody>' + rows + '</tbody></table>';
+
+    // Render model summary cards from registry
+    if (window.ModelRegistry) {
+        ModelRegistry.renderShipModelCards(s.mmsi, body);
+    }
+
     if (typeof LayoutManager !== 'undefined') {
         LayoutManager.showShipInfo();
     }

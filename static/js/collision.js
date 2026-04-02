@@ -157,10 +157,13 @@ function renderCollisionList() {
         }
         summaryStats.innerHTML = pill('s-danger', dangerLabel, dangerN) + pill('s-warn', warnLabel, warnN) + pill('s-caution', cautionLabel, cautionN);
 
-        // Bottom bar risk update
+        // Bottom bar risk update — always use ML data
         if (typeof BottomBar !== 'undefined') {
-            BottomBar.updateValue('bottomRisk', risks.length);
-            BottomBar.updateRiskLevels(dangerN, warnN, cautionN);
+            var mlRisks = (collisionData.ml && collisionData.ml.risks) || [];
+            var mlByLevel = { 1: 0, 2: 0, 3: 0 };
+            mlRisks.forEach(function(r) { if (mlByLevel[r.risk_level] !== undefined) mlByLevel[r.risk_level]++; });
+            BottomBar.updateValue('bottomRisk', mlRisks.length);
+            BottomBar.updateRiskLevels(mlByLevel[3], mlByLevel[2], mlByLevel[1]);
         }
     }
 

@@ -4,6 +4,26 @@ var _wxData = { marine: null, wind: null };
 var _wxLayers = { waveHeight: null, wind: null };
 var _wxInterval = null;
 
+function _oceanRegionName(lat, lon) {
+    // Korean peninsula & nearby seas
+    if (lat >= 33 && lat <= 43 && lon >= 124 && lon <= 132) return '동해/서해';
+    if (lat >= 25 && lat <= 35 && lon >= 120 && lon <= 132) return '동중국해';
+    if (lat >= 33 && lat <= 46 && lon >= 127 && lon <= 142) return '동해';
+    // Major oceans by lat/lon
+    if (lat >= 0 && lat <= 30 && lon >= 100 && lon <= 150) return '서태평양';
+    if (lat >= 30 && lat <= 60 && lon >= 100 && lon <= 180) return '북태평양';
+    if (lat >= -60 && lat < 0 && lon >= 100 && lon <= 180) return '남태평양';
+    if (lat >= 0 && lat <= 30 && lon >= -80 && lon <= 0) return '대서양';
+    if (lat >= 30 && lat <= 70 && lon >= -80 && lon <= 0) return '북대서양';
+    if (lat >= -60 && lat < 0 && lon >= -70 && lon <= 20) return '남대서양';
+    if (lat >= -40 && lat <= 30 && lon >= 20 && lon <= 100) return '인도양';
+    if (lat >= 0 && lat <= 35 && lon >= -180 && lon <= -100) return '동태평양';
+    if (lat >= 50 && lon >= -10 && lon <= 30) return '북해/발트해';
+    if (lat >= 30 && lat <= 46 && lon >= -6 && lon <= 36) return '지중해';
+    // No region match
+    return '';
+}
+
 // Cesium imagery layers
 var _wxWaveImagery = null;
 var _wxWindImagery = null;
@@ -17,16 +37,42 @@ async function fetchWeatherData() {
         _wxData.marine = await marineResp.json();
         _wxData.wind = await windResp.json();
 
-        // Bottom bar weather updates
+        // Bottom bar weather updates — show max values with location
         if (typeof BottomBar !== 'undefined') {
             var windPoints = (_wxData.wind && _wxData.wind.points) || [];
             var marinePoints = (_wxData.marine && _wxData.marine.points) || [];
-            var avgWind = windPoints.reduce(function(s, d) { return s + (d.wind_speed || 0); }, 0) / (windPoints.length || 1);
-            var avgWave = marinePoints.reduce(function(s, d) { return s + (d.wave_height || 0); }, 0) / (marinePoints.length || 1);
-            BottomBar.updateValue('bottomWind', avgWind.toFixed(1));
-            BottomBar.updateValue('bottomWave', avgWave.toFixed(1));
-            BottomBar.pushData('wind', avgWind);
-            BottomBar.pushData('wave', avgWave);
+
+            var maxWind = { val: 0, lat: 0, lon: 0 };
+            windPoints.forEach(function(p) {
+                if ((p.wind_speed || 0) > maxWind.val) {
+                    maxWind = { val: p.wind_speed, lat: p.lat, lon: p.lon };
+                }
+            });
+
+            var maxWave = { val: 0, lat: 0, lon: 0 };
+            marinePoints.forEach(function(p) {
+                if ((p.wave_height || 0) > maxWave.val) {
+                    maxWave = { val: p.wave_height, lat: p.lat, lon: p.lon };
+                }
+            });
+
+            BottomBar.updateValue('bottomWind', maxWind.val.toFixed(1));
+            BottomBar.updateValue('bottomWave', maxWave.val.toFixed(1));
+
+            var windLocEl = document.getElementById('bottomWindLoc');
+            var waveLocEl = document.getElementById('bottomWaveLoc');
+            if (windLocEl && maxWind.val > 0) {
+                var wr = _oceanRegionName(maxWind.lat, maxWind.lon);
+                var wc = Math.abs(maxWind.lat).toFixed(1) + '°' + (maxWind.lat >= 0 ? 'N' : 'S') +
+                    ' ' + Math.abs(maxWind.lon).toFixed(1) + '°' + (maxWind.lon >= 0 ? 'E' : 'W');
+                windLocEl.textContent = wr ? wr + ' ' + wc : wc;
+            }
+            if (waveLocEl && maxWave.val > 0) {
+                var mr = _oceanRegionName(maxWave.lat, maxWave.lon);
+                var mc = Math.abs(maxWave.lat).toFixed(1) + '°' + (maxWave.lat >= 0 ? 'N' : 'S') +
+                    ' ' + Math.abs(maxWave.lon).toFixed(1) + '°' + (maxWave.lon >= 0 ? 'E' : 'W');
+                waveLocEl.textContent = mr ? mr + ' ' + mc : mc;
+            }
         }
 
         renderWeatherOverlays();

@@ -59,7 +59,8 @@ async def lifespan(app: FastAPI):
                         "type": "ships_update",
                         "ships": vessels,
                         "total_tracked": len(vessels),
-                        "timestamp": asyncio.get_event_loop().time()
+                        "timestamp": int(asyncio.get_event_loop().time() * 1000),
+                        "server_time_ms": int(__import__('time').time() * 1000)
                     })
             except Exception as e:
                 logger.error(f"Error in ship broadcast loop: {e}")
@@ -122,7 +123,6 @@ async def websocket_ships(ws: WebSocket):
     await websocket.manager.connect(ws)
     try:
         while True:
-            # Just keep connection alive, we primarily broadcast
             await ws.receive_text()
     except WebSocketDisconnect:
         websocket.manager.disconnect(ws)

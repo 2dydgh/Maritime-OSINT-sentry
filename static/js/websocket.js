@@ -431,6 +431,15 @@ function initWebSocket() {
         try {
             var data = JSON.parse(event.data);
             if (data.type === "ships_update") {
+                // Measure latency from server timestamp
+                if (data.server_time_ms) {
+                    var latency = Date.now() - data.server_time_ms;
+                    if (latency >= 0 && latency < 10000) {
+                        if (typeof BottomBar !== 'undefined') {
+                            BottomBar.updateValue('bottomLatency', latency);
+                        }
+                    }
+                }
                 var loadingEl = document.getElementById('loading');
                 var loadingTextEl = document.getElementById('loading-text');
                 var isFirstLoad2d = Object.keys(leafletShipMarkers).length === 0 && currentMapMode === '2d';
@@ -519,37 +528,11 @@ function initWebSocket() {
 }
 window.initWebSocket = initWebSocket;
 
-// ── Header latency indicator ──
+// ── WS connection status LED ──
 var _lastWsReceived = 0;
 
 setInterval(function() {
-    var el = document.getElementById('stat-latency');
-    if (!el) return;
-
-    if (_lastWsReceived === 0) {
-        el.textContent = '--';
-        el.className = '';
-        return;
-    }
-
-    var ago = Math.round((Date.now() - _lastWsReceived) / 1000);
-    if (ago < 60) {
-        el.textContent = ago + 's';
-        el.className = ago <= 5 ? 'fresh' : ago <= 15 ? '' : 'stale';
-    } else {
-        el.textContent = Math.floor(ago / 60) + 'm';
-        el.className = 'dead';
-    }
-
-    // Bottom bar latency + WS LED
-    if (typeof BottomBar !== 'undefined') {
-        var ms = ago * 1000;
-        if (ago <= 5) {
-            BottomBar.updateValue('bottomLatency', (ms < 1000) ? ms : ago + 's');
-        } else {
-            BottomBar.updateValue('bottomLatency', ago < 60 ? ago + 's' : Math.floor(ago / 60) + 'm');
-        }
-    }
+    var ago = _lastWsReceived ? Math.round((Date.now() - _lastWsReceived) / 1000) : 999;
     var led = document.getElementById('bottomWsLed');
     if (led) {
         led.className = 'ws-led ' + (ago <= 5 ? 'connected' : ago <= 15 ? 'connecting' : 'disconnected');
