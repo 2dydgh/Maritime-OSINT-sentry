@@ -57,8 +57,6 @@ var BottomBar = (function() {
 
         var types = ['cargo', 'tanker', 'other'];
         var labels = { cargo: 'Cargo', tanker: 'Tanker', other: 'Other' };
-        var total = 0;
-        types.forEach(function(t) { total += (counts[t] || 0); });
         // Include all non-cargo, non-tanker as 'other'
         var otherCount = (counts.passenger || 0) + (counts.fishing || 0) +
             (counts.military || 0) + (counts.tug || 0) + (counts.other || 0) + (counts.yacht || 0);
@@ -67,8 +65,14 @@ var BottomBar = (function() {
             tanker: counts.tanker || 0,
             other: otherCount
         };
-        total = displayCounts.cargo + displayCounts.tanker + displayCounts.other;
+        var total = displayCounts.cargo + displayCounts.tanker + displayCounts.other;
         if (total === 0) return;
+
+        var colors = {
+            cargo: (typeof SHIP_COLORS !== 'undefined' && SHIP_COLORS.cargo) || '#3b82f6',
+            tanker: (typeof SHIP_COLORS !== 'undefined' && SHIP_COLORS.tanker) || '#f97316',
+            other: (typeof SHIP_COLORS !== 'undefined' && SHIP_COLORS.other) || '#6b7280'
+        };
 
         var html = '';
         types.forEach(function(t) {
@@ -76,7 +80,7 @@ var BottomBar = (function() {
             html += '<div style="display:flex;align-items:center;gap:3px;">' +
                 '<span style="font-size:0.45rem;color:var(--text-dim);width:28px;">' + labels[t] + '</span>' +
                 '<div style="flex:1;height:4px;background:rgba(255,255,255,0.05);border-radius:2px;overflow:hidden;">' +
-                '<div style="width:' + pct + '%;height:100%;background:var(--secondary);border-radius:2px;opacity:' + (t === 'cargo' ? '1' : t === 'tanker' ? '0.6' : '0.35') + ';"></div>' +
+                '<div style="width:' + pct + '%;height:100%;background:' + colors[t] + ';border-radius:2px;"></div>' +
                 '</div></div>';
         });
         container.innerHTML = html;
