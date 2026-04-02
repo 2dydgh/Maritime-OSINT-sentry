@@ -77,38 +77,31 @@
 
 .rail-icon {
     width: 40px;
-    height: 44px;
+    height: 48px;
     border-radius: 8px;
-    border: 1px solid transparent;
-    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
     color: var(--text-dim);
-    font-size: 1rem;
+    font-size: 1.1rem;
     cursor: pointer;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    transition: all 0.2s ease;
+    gap: 3px;
+    transition: all 0.2s;
     position: relative;
 }
 
 .rail-icon:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.15);
     color: var(--text-main);
 }
 
 .rail-icon.active {
-    background: var(--secondary);
+    background: var(--accent);
     color: #fff;
-    border-color: rgba(64, 111, 216, 0.3);
-    box-shadow: 0 0 12px rgba(64, 111, 216, 0.25);
-}
-
-.rail-icon.layer-active {
-    background: rgba(64, 111, 216, 0.15);
-    color: var(--secondary);
-    border-color: rgba(64, 111, 216, 0.2);
+    box-shadow: 0 0 12px rgba(64, 111, 216, 0.3);
 }
 
 .rail-label {
@@ -137,23 +130,28 @@
 }
 
 .rail-group-title {
+    font-family: 'JetBrains Mono', monospace;
     font-size: 0.45rem;
-    color: var(--text-dim);
+    font-weight: 600;
+    color: rgba(148, 163, 184, 0.5);
+    letter-spacing: 0.15em;
     text-transform: uppercase;
-    letter-spacing: 1px;
     text-align: center;
-    padding: 8px 0 4px;
-    opacity: 0.6;
-}
-
-.rail-separator {
-    height: 1px;
-    background: rgba(64, 111, 216, 0.1);
-    margin: 6px 8px;
+    margin-top: 4px;
+    margin-bottom: 2px;
+    flex-shrink: 0;
 }
 
 .rail-spacer {
     flex: 1;
+}
+
+.rail-separator {
+    width: 28px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(64, 111, 216, 0.4), transparent);
+    margin: 6px auto;
+    flex-shrink: 0;
 }
 
 .rail-badge-danger {
@@ -721,6 +719,7 @@ header::after {
     color: #f43f5e;
 }
 
+
 .panel-section {
     display: flex;
     flex-direction: column;
@@ -776,6 +775,7 @@ header::after {
     justify-content: space-between;
     align-items: center;
 }
+
 
 #feedSection.collapsed h2 {
     margin-bottom: 0;
@@ -1231,6 +1231,7 @@ header::after {
     background-color: #6b7280;
 }
 
+
 /* Nearby Vessels proximity list */
 #nearbyVesselsSection {
     border-top: 1px solid var(--panel-border);
@@ -1657,6 +1658,63 @@ header::after {
     z-index: 9998;
 }
 
+
+/* HUD Stats Overlay */
+#hudStats {
+    position: absolute;
+    bottom: 24px;
+    right: 24px;
+    z-index: 100;
+    display: flex;
+    gap: 20px;
+    pointer-events: auto;
+}
+
+.hud-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    cursor: pointer;
+    padding: 8px 12px;
+    transition: opacity 0.2s;
+    opacity: 0.85;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(12px);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    min-width: 80px;
+}
+
+.hud-stat:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.hud-stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.8rem;
+    font-weight: 800;
+    line-height: 1;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(64, 111, 216, 0.3), 0 2px 6px rgba(0, 0, 0, 0.5);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.hud-stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: rgba(148, 163, 184, 0.9);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-top: 4px;
+}
+
+.hud-stat-alert .hud-stat-value {
+    color: var(--accent-red, #f43f5e);
+    text-shadow: 0 0 20px rgba(244, 63, 94, 0.5), 0 2px 8px rgba(0, 0, 0, 0.6);
+}
 
 /* Map Navigation Controls */
 #mapNavControls {
