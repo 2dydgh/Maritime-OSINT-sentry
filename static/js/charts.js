@@ -31,7 +31,7 @@ function initCharts() {
 }
 window.initCharts = initCharts;
 
-// ── Ship Type Distribution Bar ──
+// ── Ship Type Distribution Bar (vertical columns for bottom bar) ──
 function buildShipTypeOption(counts) {
     var types = ['Cargo', 'Tanker', 'Passenger', 'Fishing', 'Military', 'Tug', 'Other'];
     var keys = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
@@ -59,39 +59,30 @@ function buildShipTypeOption(counts) {
                     p.value + '척 <span style="color:#94a3b8">(' + pct + '%)</span>';
             }
         },
-        grid: { left: 50, right: 12, top: 8, bottom: 16 },
-        xAxis: {
-            type: 'value',
-            axisLine: { show: false },
-            axisTick: { show: false },
-            axisLabel: { show: false },
-            splitLine: { lineStyle: { color: CHART_THEME.axisLine } }
-        },
+        grid: { left: 4, right: 4, top: 2, bottom: 14 },
         yAxis: {
+            type: 'value',
+            show: false
+        },
+        xAxis: {
             type: 'category',
             data: types,
-            inverse: true,
             axisLine: { show: false },
             axisTick: { show: false },
             axisLabel: {
                 color: CHART_THEME.textDim,
-                fontSize: 9,
+                fontSize: 7,
+                interval: 0,
                 fontFamily: "'Pretendard Variable', 'Inter', sans-serif"
             }
         },
         series: [{
             type: 'bar',
-            barWidth: 10,
+            barWidth: '50%',
             data: data.map(function(v, i) {
-                return { value: v, itemStyle: { color: colors[i], borderRadius: [0, 3, 3, 0] } };
+                return { value: v, itemStyle: { color: colors[i], borderRadius: [3, 3, 0, 0] } };
             }),
-            label: {
-                show: true,
-                position: 'right',
-                fontSize: 9,
-                color: CHART_THEME.text,
-                fontFamily: "'Pretendard Variable', 'Inter', sans-serif"
-            },
+            label: { show: false },
             animationDuration: 600,
             animationEasing: 'cubicOut'
         }]
