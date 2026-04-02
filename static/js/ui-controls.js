@@ -46,59 +46,20 @@ window.animateCount = animateCount;
 
 // ── Panel Collapse/Expand ──
 function switchRailPanel(name) {
-    var sidebar = document.getElementById('leftSidebar');
-    var panels = sidebar.querySelectorAll('.rail-panel');
-    var icons = sidebar.querySelectorAll('.rail-icon');
-    var target = document.getElementById('railPanel-' + name);
-    var isAlreadyOpen = target && target.classList.contains('open') && !sidebar.classList.contains('sidebar-collapsed');
-
-    panels.forEach(function(p) { p.classList.remove('open'); });
-    icons.forEach(function(i) { i.classList.remove('active'); });
-
-    if (isAlreadyOpen) {
-        sidebar.classList.add('sidebar-collapsed');
-    } else {
-        if (target) target.classList.add('open');
-        var icon = sidebar.querySelector('[data-panel="' + name + '"]');
-        if (icon) icon.classList.add('active');
-        sidebar.classList.remove('sidebar-collapsed');
+    // Legacy: delegate to LayoutManager
+    if (typeof LayoutManager !== 'undefined') {
+        var btn = document.querySelector('.rail-icon[data-panel="' + name + '"]');
+        var action = btn ? btn.dataset.action : 'right-panel';
+        LayoutManager.handleIconClick(name, action);
     }
-    setTimeout(resizeActiveMap, 350);
 }
 window.switchRailPanel = switchRailPanel;
 
-function toggleLeftSidebar() {
-    var sidebar = document.getElementById('leftSidebar');
-    if (sidebar.classList.contains('sidebar-collapsed')) {
-        switchRailPanel('feed');
-    } else {
-        var activeIcon = document.querySelector('.rail-icon.active');
-        switchRailPanel(activeIcon ? activeIcon.dataset.panel : 'feed');
-    }
-}
+function toggleLeftSidebar() {}
 window.toggleLeftSidebar = toggleLeftSidebar;
 
-// Icon rail click delegation
+// Icon rail click delegation now handled by layout-manager.js
 document.addEventListener('DOMContentLoaded', function() {
-    var rail = document.querySelector('.icon-rail');
-    if (rail) {
-        rail.addEventListener('click', function(e) {
-            var btn = e.target.closest('.rail-icon');
-            if (!btn) return;
-            switchRailPanel(btn.dataset.panel);
-        });
-    }
-
-    // HUD stat click → open corresponding rail panel
-    var hud = document.getElementById('hudStats');
-    if (hud) {
-        hud.addEventListener('click', function(e) {
-            var stat = e.target.closest('.hud-stat');
-            if (!stat) return;
-            var panel = stat.dataset.panel;
-            if (panel) switchRailPanel(panel);
-        });
-    }
 
     // Layer chip toggle (on/off) + dropdown
     var chips = document.getElementById('layerChips');
