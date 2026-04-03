@@ -28,6 +28,10 @@ var RollViewer = (function() {
     var shipType = 'other';
     var rollParams = null;
 
+    var cameraAnimating = false;
+    var cameraAnimStart = 0;
+    var CAMERA_ANIM_DURATION = 2.0; // seconds
+
     // ── Roll simulation params per ship type ──
     var ROLL_PARAMS = {
         cargo:     { amp: 5,   freq: 0.5 },
@@ -107,6 +111,35 @@ var RollViewer = (function() {
             if (code === 52 || code === 53) return 'tug';
         }
         return 'other';
+    }
+
+    function easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+    }
+
+    var CAM_START = { x: 80, y: 40, z: 80 };
+    var CAM_END   = { x: 30, y: 20, z: 40 };
+
+    function animateCamera(elapsed) {
+        if (!cameraAnimating) return;
+
+        var t = Math.min((elapsed - cameraAnimStart) / CAMERA_ANIM_DURATION, 1);
+        var e = easeOutCubic(t);
+
+        camera.position.set(
+            CAM_START.x + (CAM_END.x - CAM_START.x) * e,
+            CAM_START.y + (CAM_END.y - CAM_START.y) * e,
+            CAM_START.z + (CAM_END.z - CAM_START.z) * e
+        );
+        camera.lookAt(0, 2, 0);
+
+        if (t >= 1) {
+            cameraAnimating = false;
+            if (controls) {
+                controls.enabled = true;
+                controls.update();
+            }
+        }
     }
 
     // ── load(mmsi) ──
@@ -204,8 +237,8 @@ var RollViewer = (function() {
         var aspect = w / (h || 1);
 
         camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
-        camera.position.set(30, 20, 40);
-        camera.lookAt(0, 0, 0);
+        camera.position.set(CAM_START.x, CAM_START.y, CAM_START.z);
+        camera.lookAt(0, 2, 0);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -509,6 +542,11 @@ var RollViewer = (function() {
     // ── startAnimation() ──
     function startAnimation() {
         clockStart = performance.now();
+        cameraAnimating = true;
+        cameraAnimStart = 0;
+        camera.position.set(CAM_START.x, CAM_START.y, CAM_START.z);
+        camera.lookAt(0, 2, 0);
+        if (controls) controls.enabled = false;
 
         function loop() {
             animFrameId = requestAnimationFrame(loop);
@@ -516,6 +554,7 @@ var RollViewer = (function() {
             var elapsed = (performance.now() - clockStart) / 1000;
 
             animateWater(elapsed);
+            animateCamera(elapsed);
 
             // Roll & Pitch calculation
             var roll = rollParams.amp * Math.sin(elapsed * rollParams.freq * Math.PI * 2)
@@ -877,6 +916,7 @@ var RollViewer = (function() {
         shipGroup = null;
         waterMesh = null;
         clockStart = null;
+        cameraAnimating = false;
         weather = null;
         rollParams = null;
         currentMmsi = null;
