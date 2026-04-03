@@ -1305,7 +1305,9 @@ var RollViewer = (function() {
         scene = null;
         camera = null;
         shipGroup = null;
+        if (waterNormals) { waterNormals.dispose(); }
         waterMesh = null;
+        waterNormals = null;
         sprayPoints = null;
         sprayVelocities = [];
         clockStart = null;
@@ -1314,6 +1316,7 @@ var RollViewer = (function() {
         rollParams = null;
         currentMmsi = null;
         rollHistory = [];
+        pitchHistory = [];
 
         // Clear container DOM
         var container = getContainer();
