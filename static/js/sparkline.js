@@ -13,6 +13,10 @@ var BottomBar = (function() {
     // Risk level counts
     var riskCounts = { danger: 0, warning: 0, caution: 0 };
 
+    // Risk total history (circular buffer, 60 entries ≈ 10 min at 10s interval)
+    var riskHistory = [];
+    var RISK_HISTORY_MAX = 60;
+
     function pushData(key, value) {
         var buf = buffers[key];
         if (!buf) return;
@@ -88,18 +92,54 @@ var BottomBar = (function() {
 
     function updateRiskLevels(danger, warning, caution) {
         riskCounts = { danger: danger, warning: warning, caution: caution };
-        var container = document.getElementById('riskLevelBars');
-        if (!container) return;
+        var total = danger + warning + caution;
 
-        var max = Math.max(danger, warning, caution, 1);
-        var dP = Math.max((danger / max) * 100, 5);
-        var wP = Math.max((warning / max) * 100, 5);
-        var cP = Math.max((caution / max) * 100, 5);
-        var ovl = 'position:absolute;bottom:1px;left:0;right:0;text-align:center;font-family:"JetBrains Mono",monospace;font-size:0.38rem;line-height:1;text-shadow:0 0 3px rgba(0,0,0,0.8);';
-        container.innerHTML =
-            '<div class="risk-bar-wrap"><div class="mini-bar mini-bar-danger" style="height:' + dP + '%;"></div><span style="' + ovl + 'color:#fca5a5;">' + danger + '</span></div>' +
-            '<div class="risk-bar-wrap"><div class="mini-bar mini-bar-warning" style="height:' + wP + '%;"></div><span style="' + ovl + 'color:#fca5a5;">' + warning + '</span></div>' +
-            '<div class="risk-bar-wrap"><div class="mini-bar mini-bar-caution" style="height:' + cP + '%;"></div><span style="' + ovl + 'color:#fca5a5;">' + caution + '</span></div>';
+        // Push to history buffer
+        riskHistory.push(total);
+        if (riskHistory.length > RISK_HISTORY_MAX) riskHistory.shift();
+
+        // Update value display
+        var valEl = document.getElementById('bottomRisk');
+        if (valEl) {
+            var unit = valEl.querySelector('.stat-card-unit');
+            var unitText = unit ? unit.outerHTML : '';
+            valEl.innerHTML = total + unitText;
+        }
+
+        // Render area sparkline
+        var svg = document.getElementById('riskSparkline');
+        if (!svg || riskHistory.length < 2) return;
+
+        var data = riskHistory;
+        var w = 80, h = 30;
+        var max = Math.max.apply(null, data);
+        if (max === 0) max = 1;
+
+        var points = data.map(function(v, i) {
+            var x = (i / (data.length - 1)) * w;
+            var y = h - (v / max) * (h - 4) - 2;
+            return x.toFixed(1) + ',' + y.toFixed(1);
+        });
+
+        var pathD = 'M' + points.join(' L');
+        var fillD = pathD + ' L' + w + ',' + h + ' L0,' + h + 'Z';
+
+        // Trend detection: compare last 10 vs previous 10
+        var recent = data.slice(-10);
+        var prior = data.slice(-20, -10);
+        var recentAvg = recent.reduce(function(s, v) { return s + v; }, 0) / recent.length;
+        var priorAvg = prior.length > 0 ? prior.reduce(function(s, v) { return s + v; }, 0) / prior.length : recentAvg;
+        var increasing = recentAvg > priorAvg;
+        var strokeColor = increasing ? '#f43f5e' : '#10b981';
+        var fillColor = increasing ? '#f43f5e' : '#10b981';
+
+        svg.innerHTML =
+            '<defs><linearGradient id="rg-risk" x1="0" y1="0" x2="0" y2="1">' +
+            '<stop offset="0%" stop-color="' + fillColor + '" stop-opacity="0.3"/>' +
+            '<stop offset="100%" stop-color="' + fillColor + '" stop-opacity="0"/>' +
+            '</linearGradient></defs>' +
+            '<path d="' + fillD + '" fill="url(#rg-risk)"/>' +
+            '<path d="' + pathD + '" fill="none" stroke="' + strokeColor + '" stroke-width="1.5"/>';
     }
 
     function updateValue(id, value) {
