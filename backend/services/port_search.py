@@ -120,9 +120,14 @@ def search_ports(query: str, max_results: int = 10) -> list[dict]:
 
     matches.sort(key=lambda x: (x[0], x[1]["name"]))
 
-    # Return without internal raw_name field
+    # Deduplicate by name+country (same port, multiple entries)
+    seen = set()
     results = []
-    for _, port in matches[:max_results]:
+    for _, port in matches:
+        key = (port["name"].lower(), port["country"].lower())
+        if key in seen:
+            continue
+        seen.add(key)
         results.append({
             "name": port["name"],
             "country": port["country"],
@@ -130,4 +135,6 @@ def search_ports(query: str, max_results: int = 10) -> list[dict]:
             "lng": port["lng"],
             "lat": port["lat"],
         })
+        if len(results) >= max_results:
+            break
     return results

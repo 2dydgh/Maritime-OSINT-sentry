@@ -6,9 +6,11 @@ import math
 import logging
 from fastapi import APIRouter, Query, HTTPException
 from cachetools import TTLCache
+import searoute as sr
 from ..services.port_search import search_ports
 
 logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["route"])
 
 # Cache routes for 1 hour — key is rounded coordinates
@@ -78,7 +80,6 @@ def get_route(
         return _route_cache[cache_key]
 
     try:
-        import searoute as sr
         route = sr.searoute(
             [from_lng, from_lat],
             [to_lng, to_lat],
@@ -90,13 +91,10 @@ def get_route(
     raw_coords = route["geometry"]["coordinates"]
     distance_km = route["properties"].get("length", 0)
 
-    # Interpolate to ~20km density
-    dense_coords = _interpolate_route(raw_coords)
-
     result = {
-        "coordinates": dense_coords,
+        "coordinates": raw_coords,
         "distance_km": round(distance_km, 1),
-        "point_count": len(dense_coords),
+        "point_count": len(raw_coords),
     }
     _route_cache[cache_key] = result
     return result

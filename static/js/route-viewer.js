@@ -17,7 +17,7 @@ var RouteViewer = (function() {
     var playing = false;
     var progress = 0;           // 0..1
     var speedKts = 14;
-    var playbackRate = 1;       // x1, x2, x4
+    var playbackRate = 500;     // x1, x10, x100, x500, x2k
     var lastFrameTime = null;
 
     // Search state
@@ -36,11 +36,46 @@ var RouteViewer = (function() {
 
     // ── Constants ──
     var KTS_TO_KMH = 1.852;
+    var ROUTE_ALT = 500;
     var SHIP_ICON_URL = 'data:image/svg+xml,' + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">' +
-        '<polygon points="16,2 28,28 16,22 4,28" fill="#00d4ff" stroke="#003366" stroke-width="1.5"/>' +
+        '<polygon points="16,2 28,28 16,22 4,28" fill="#7BA3FF" stroke="#3058B0" stroke-width="1.5"/>' +
         '</svg>'
     );
+
+    // Major sea regions / straits — [name, minLng, minLat, maxLng, maxLat]
+    var SEA_REGIONS = [
+        ['말라카 해협', 98.0, 0.5, 104.5, 4.5],
+        ['수에즈 운하', 32.0, 29.5, 33.0, 31.5],
+        ['파나마 운하', -80.5, 8.5, -79.0, 9.5],
+        ['남중국해', 105.0, 3.0, 121.0, 23.0],
+        ['동중국해', 120.0, 23.0, 132.0, 33.0],
+        ['대한해협', 128.0, 33.5, 130.5, 35.5],
+        ['홍해', 32.0, 12.0, 44.0, 29.5],
+        ['아라비아해', 50.0, 8.0, 77.0, 25.0],
+        ['벵골만', 77.0, 5.0, 100.0, 23.0],
+        ['지중해', -6.0, 30.0, 36.5, 46.0],
+        ['인도양', 40.0, -40.0, 100.0, 8.0],
+        ['태평양', 120.0, -50.0, 180.0, 50.0],
+        ['대서양', -80.0, -50.0, 0.0, 60.0],
+        ['호르무즈 해협', 54.0, 25.5, 57.5, 27.5],
+        ['바시 해협', 119.0, 19.5, 123.0, 22.0],
+    ];
+
+    function detectSeaRegions(coords) {
+        var found = [];
+        for (var r = 0; r < SEA_REGIONS.length; r++) {
+            var reg = SEA_REGIONS[r];
+            for (var i = 0; i < coords.length; i++) {
+                var lng = coords[i][0], lat = coords[i][1];
+                if (lng >= reg[1] && lat >= reg[2] && lng <= reg[3] && lat <= reg[4]) {
+                    found.push(reg[0]);
+                    break;
+                }
+            }
+        }
+        return found;
+    }
 
     // ── UI Building ──
     function buildUI() {
@@ -95,7 +130,7 @@ var RouteViewer = (function() {
             '</div>';
         wrap.appendChild(searchPanel);
 
-        // Playback bar (bottom)
+        // Playback bar (bottom center, compact)
         var playbar = document.createElement('div');
         playbar.id = 'route-playbar';
         playbar.className = 'route-overlay-panel route-playbar';
@@ -110,15 +145,54 @@ var RouteViewer = (function() {
                     '</div>' +
                 '</div>' +
                 '<div class="route-speed-btns">' +
-                    '<button class="route-rate-btn active" data-rate="1">x1</button>' +
-                    '<button class="route-rate-btn" data-rate="2">x2</button>' +
-                    '<button class="route-rate-btn" data-rate="4">x4</button>' +
+                    '<button class="route-rate-btn" data-rate="1">x1</button>' +
+                    '<button class="route-rate-btn" data-rate="10">x10</button>' +
+                    '<button class="route-rate-btn" data-rate="100">x100</button>' +
+                    '<button class="route-rate-btn active" data-rate="500">x500</button>' +
+                    '<button class="route-rate-btn" data-rate="2000">x2k</button>' +
                 '</div>' +
-            '</div>' +
-            '<div class="route-playbar-info">' +
-                '<span id="routeInfoText">--</span>' +
             '</div>';
         wrap.appendChild(playbar);
+
+        // Route info panel (right side)
+        var infoPanel = document.createElement('div');
+        infoPanel.id = 'route-info-panel';
+        infoPanel.className = 'route-overlay-panel route-info-panel';
+        infoPanel.style.display = 'none';
+        infoPanel.innerHTML =
+            '<div class="route-panel-header">' +
+                '<span class="route-panel-title"><i class="fa-solid fa-chart-line"></i> 경로 정보</span>' +
+            '</div>' +
+            '<div class="route-info-body">' +
+                '<div class="route-info-route-name">' +
+                    '<span id="routeInfoFrom">--</span>' +
+                    ' <span class="route-info-arrow">\u2192</span> ' +
+                    '<span id="routeInfoTo">--</span>' +
+                '</div>' +
+                '<div class="route-info-grid">' +
+                    '<div class="route-info-item">' +
+                        '<div class="route-info-label">총 거리</div>' +
+                        '<div class="route-info-value" id="routeInfoDist">--</div>' +
+                    '</div>' +
+                    '<div class="route-info-item">' +
+                        '<div class="route-info-label">예상 소요</div>' +
+                        '<div class="route-info-value" id="routeInfoTime">--</div>' +
+                    '</div>' +
+                    '<div class="route-info-item">' +
+                        '<div class="route-info-label">운항 속도</div>' +
+                        '<div class="route-info-value" id="routeInfoSpeed">--</div>' +
+                    '</div>' +
+                    '<div class="route-info-item">' +
+                        '<div class="route-info-label">예상 도착</div>' +
+                        '<div class="route-info-value" id="routeInfoETA">--</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="route-info-sea-section">' +
+                    '<div class="route-info-label">통과 해역</div>' +
+                    '<div class="route-info-sea-tags" id="routeInfoSeas">--</div>' +
+                '</div>' +
+            '</div>';
+        wrap.appendChild(infoPanel);
 
         container.appendChild(wrap);
     }
@@ -127,23 +201,26 @@ var RouteViewer = (function() {
     function hideExistingLayers() {
         hiddenLayers = [];
 
+        function hideIfVisible(layer) {
+            if (layer && layer.show) {
+                hiddenLayers.push(layer);
+                layer.show = false;
+            }
+        }
+
         // Ship billboards & labels
         if (typeof SHIP_TYPES !== 'undefined') {
             SHIP_TYPES.forEach(function(type) {
-                if (shipBillboards[type]) { hiddenLayers.push(shipBillboards[type]); shipBillboards[type].show = false; }
-                if (shipLabels[type]) { hiddenLayers.push(shipLabels[type]); shipLabels[type].show = false; }
+                hideIfVisible(shipBillboards[type]);
+                hideIfVisible(shipLabels[type]);
             });
         }
 
         // COG lines
-        if (typeof shipCogLines !== 'undefined' && shipCogLines) {
-            hiddenLayers.push(shipCogLines); shipCogLines.show = false;
-        }
+        if (typeof shipCogLines !== 'undefined') hideIfVisible(shipCogLines);
 
         // Satellite data source
-        if (typeof satDataSource !== 'undefined' && satDataSource) {
-            hiddenLayers.push(satDataSource); satDataSource.show = false;
-        }
+        if (typeof satDataSource !== 'undefined') hideIfVisible(satDataSource);
 
         // Proximity layers
         var proxLayers = [
@@ -155,14 +232,14 @@ var RouteViewer = (function() {
             typeof proximityCpaLabels !== 'undefined' ? proximityCpaLabels : null,
         ];
         proxLayers.forEach(function(layer) {
-            if (layer) { hiddenLayers.push(layer); layer.show = false; }
+            hideIfVisible(layer);
         });
 
         // Ship data sources
         if (typeof shipDataSources !== 'undefined') {
             Object.keys(shipDataSources).forEach(function(type) {
                 var ds = shipDataSources[type];
-                if (ds) { hiddenLayers.push(ds); ds.show = false; }
+                hideIfVisible(ds);
             });
         }
     }
@@ -212,32 +289,9 @@ var RouteViewer = (function() {
         var coordDisplay = document.getElementById(coordId);
         if (!input || !dropdown) return;
 
-        input.addEventListener('input', function() {
-            var q = input.value.trim();
-            clearTimeout(searchDebounce);
-            if (q.length < 1) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; return; }
-            searchDebounce = setTimeout(function() {
-                fetch('/api/v1/ports/search?q=' + encodeURIComponent(q))
-                    .then(function(r) { return r.json(); })
-                    .then(function(ports) {
-                        if (!ports.length) {
-                            dropdown.innerHTML = '<div class="route-dropdown-item disabled">일치하는 항구가 없습니다</div>';
-                            dropdown.style.display = '';
-                            return;
-                        }
-                        dropdown.innerHTML = ports.map(function(p) {
-                            return '<div class="route-dropdown-item" data-name="' + p.name + '" data-lat="' + p.lat + '" data-lng="' + p.lng + '" data-country="' + p.country + '">' +
-                                '<strong>' + p.name + '</strong> <span class="route-port-country">' + p.country + '</span>' +
-                            '</div>';
-                        }).join('');
-                        dropdown.style.display = '';
-                    })
-                    .catch(function() { dropdown.style.display = 'none'; });
-            }, 250);
-        });
+        var highlightIdx = -1;
 
-        dropdown.addEventListener('click', function(e) {
-            var item = e.target.closest('.route-dropdown-item');
+        function selectPort(item) {
             if (!item || item.classList.contains('disabled')) return;
             var port = {
                 name: item.dataset.name,
@@ -247,15 +301,91 @@ var RouteViewer = (function() {
             input.value = port.name;
             dropdown.style.display = 'none';
             coordDisplay.textContent = port.lat.toFixed(4) + ', ' + port.lng.toFixed(4);
-            if (which === 'from') fromPort = port;
-            else toPort = port;
+            if (which === 'from') {
+                fromPort = port;
+                // Auto-focus to destination input
+                var toInput = document.getElementById('routeToInput');
+                if (toInput && !toPort) toInput.focus();
+            } else {
+                toPort = port;
+                // Auto-focus to speed slider
+                var slider = document.getElementById('routeSpeedSlider');
+                if (slider) slider.focus();
+            }
             updateSearchBtn();
+            highlightIdx = -1;
+        }
+
+        function updateHighlight() {
+            var items = dropdown.querySelectorAll('.route-dropdown-item:not(.disabled)');
+            items.forEach(function(el, i) {
+                el.classList.toggle('highlighted', i === highlightIdx);
+            });
+        }
+
+        input.addEventListener('input', function() {
+            var q = input.value.trim();
+            clearTimeout(searchDebounce);
+            highlightIdx = -1;
+            if (q.length < 1) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; return; }
+            searchDebounce = setTimeout(function() {
+                fetch('/api/v1/ports/search?q=' + encodeURIComponent(q))
+                    .then(function(r) { return r.json(); })
+                    .then(function(ports) {
+                        if (!ports.length) {
+                            dropdown.innerHTML = '<div class="route-dropdown-item disabled">일치하는 항구가 없습니다</div>';
+                            dropdown.style.display = 'block';
+                            return;
+                        }
+                        dropdown.innerHTML = ports.map(function(p) {
+                            return '<div class="route-dropdown-item" data-name="' + p.name + '" data-lat="' + p.lat + '" data-lng="' + p.lng + '" data-country="' + p.country + '">' +
+                                '<strong>' + p.name + '</strong> <span class="route-port-country">' + p.country + '</span>' +
+                            '</div>';
+                        }).join('');
+                        dropdown.style.display = 'block';
+                        highlightIdx = 0;
+                        updateHighlight();
+                    })
+                    .catch(function() { dropdown.style.display = 'none'; });
+            }, 150);
+        });
+
+        input.addEventListener('keydown', function(e) {
+            var items = dropdown.querySelectorAll('.route-dropdown-item:not(.disabled)');
+            if (!items.length || dropdown.style.display === 'none') return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                highlightIdx = Math.min(highlightIdx + 1, items.length - 1);
+                updateHighlight();
+                if (items[highlightIdx]) items[highlightIdx].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                highlightIdx = Math.max(highlightIdx - 1, 0);
+                updateHighlight();
+                if (items[highlightIdx]) items[highlightIdx].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (highlightIdx >= 0 && items[highlightIdx]) {
+                    selectPort(items[highlightIdx]);
+                } else if (items[0]) {
+                    selectPort(items[0]);
+                }
+            } else if (e.key === 'Escape') {
+                dropdown.style.display = 'none';
+                highlightIdx = -1;
+            }
+        });
+
+        dropdown.addEventListener('click', function(e) {
+            selectPort(e.target.closest('.route-dropdown-item'));
         });
 
         // Close dropdown on outside click
         document.addEventListener('click', function(e) {
             if (!input.contains(e.target) && !dropdown.contains(e.target)) {
                 dropdown.style.display = 'none';
+                highlightIdx = -1;
             }
         });
     }
@@ -355,24 +485,32 @@ var RouteViewer = (function() {
             }
 
             btn.disabled = true;
-            btn.textContent = '검색 중...';
+            btn.innerHTML = '<span class="route-btn-spinner"></span> 검색 중...';
             showError('');
 
             var url = '/api/v1/route?from_lat=' + fromPort.lat + '&from_lng=' + fromPort.lng +
                       '&to_lat=' + toPort.lat + '&to_lng=' + toPort.lng;
 
+            console.time('[Route] total');
+            console.time('[Route] fetch');
             fetch(url)
                 .then(function(r) {
                     if (!r.ok) throw new Error('경로를 찾을 수 없습니다');
                     return r.json();
                 })
                 .then(function(data) {
+                    console.timeEnd('[Route] fetch');
                     routeCoords = data.coordinates;
                     totalDistanceKm = data.distance_km;
+                    console.time('[Route] render');
                     renderRoute();
+                    console.timeEnd('[Route] render');
                     showPlaybar();
                     updateInfoText();
+                    console.time('[Route] flyTo');
                     flyToRoute();
+                    console.timeEnd('[Route] flyTo');
+                    console.timeEnd('[Route] total');
                 })
                 .catch(function(err) {
                     showError(err.message || '경로 검색 실패');
@@ -404,25 +542,28 @@ var RouteViewer = (function() {
             return Cesium.Cartesian3.fromDegrees(c[0], c[1]);
         });
 
+        var dashPositions = routeCoords.map(function(c) {
+            return Cesium.Cartesian3.fromDegrees(c[0], c[1], ROUTE_ALT);
+        });
         routeDataSource.entities.add({
             polyline: {
-                positions: positions,
-                width: 3,
+                positions: dashPositions,
+                width: 5,
                 material: new Cesium.PolylineDashMaterialProperty({
-                    color: Cesium.Color.fromCssColorString('#00d4ff'),
-                    dashLength: 16,
+                    color: Cesium.Color.fromCssColorString('#7BA3FF'),
+                    dashLength: 8,
                 }),
-                clampToGround: true,
+                arcType: Cesium.ArcType.RHUMB,
             }
         });
 
         // Start marker
         routeDataSource.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(routeCoords[0][0], routeCoords[0][1]),
+            position: Cesium.Cartesian3.fromDegrees(routeCoords[0][0], routeCoords[0][1], ROUTE_ALT),
             point: { pixelSize: 12, color: Cesium.Color.LIME, outlineColor: Cesium.Color.WHITE, outlineWidth: 2 },
             label: {
                 text: fromPort ? fromPort.name : 'Start',
-                font: '13px Inter, sans-serif',
+                font: '13px Pretendard Variable, Inter, sans-serif',
                 fillColor: Cesium.Color.WHITE,
                 outlineColor: Cesium.Color.BLACK,
                 outlineWidth: 2,
@@ -435,11 +576,11 @@ var RouteViewer = (function() {
         // End marker
         var last = routeCoords[routeCoords.length - 1];
         routeDataSource.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(last[0], last[1]),
+            position: Cesium.Cartesian3.fromDegrees(last[0], last[1], ROUTE_ALT),
             point: { pixelSize: 12, color: Cesium.Color.RED, outlineColor: Cesium.Color.WHITE, outlineWidth: 2 },
             label: {
                 text: toPort ? toPort.name : 'End',
-                font: '13px Inter, sans-serif',
+                font: '13px Pretendard Variable, Inter, sans-serif',
                 fillColor: Cesium.Color.WHITE,
                 outlineColor: Cesium.Color.BLACK,
                 outlineWidth: 2,
@@ -451,7 +592,7 @@ var RouteViewer = (function() {
 
         // Ship entity (animated)
         shipEntity = routeDataSource.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(routeCoords[0][0], routeCoords[0][1]),
+            position: Cesium.Cartesian3.fromDegrees(routeCoords[0][0], routeCoords[0][1], ROUTE_ALT),
             billboard: {
                 image: SHIP_ICON_URL,
                 width: 28,
@@ -462,6 +603,11 @@ var RouteViewer = (function() {
         });
 
         progress = 0;
+
+        // Force render to ensure route is visible immediately
+        if (viewer.scene) {
+            viewer.scene.requestRender();
+        }
     }
 
     function clearRoute() {
@@ -481,7 +627,7 @@ var RouteViewer = (function() {
         });
         viewer.camera.flyToBoundingSphere(
             Cesium.BoundingSphere.fromPoints(positions),
-            { duration: 2.0, offset: new Cesium.HeadingPitchRange(0, -0.5, 0) }
+            { duration: 0.8, offset: new Cesium.HeadingPitchRange(0, -Math.PI / 2, 0) }
         );
     }
 
@@ -515,7 +661,7 @@ var RouteViewer = (function() {
         if (!shipEntity || routeCoords.length < 2) return;
         var pos = getPositionAtProgress(progress);
         var heading = getHeadingAtProgress(progress);
-        shipEntity.position = Cesium.Cartesian3.fromDegrees(pos[0], pos[1]);
+        shipEntity.position = Cesium.Cartesian3.fromDegrees(pos[0], pos[1], ROUTE_ALT);
         shipEntity.billboard.rotation = -heading;
 
         // Update progress bar
@@ -579,16 +725,18 @@ var RouteViewer = (function() {
     function showPlaybar() {
         var bar = document.getElementById('route-playbar');
         if (bar) bar.style.display = '';
+        var info = document.getElementById('route-info-panel');
+        if (info) info.style.display = '';
     }
 
     function hidePlaybar() {
         var bar = document.getElementById('route-playbar');
         if (bar) bar.style.display = 'none';
+        var info = document.getElementById('route-info-panel');
+        if (info) info.style.display = 'none';
     }
 
     function updateInfoText() {
-        var el = document.getElementById('routeInfoText');
-        if (!el) return;
         var fromName = fromPort ? fromPort.name : '?';
         var toName = toPort ? toPort.name : '?';
         var speedKmh = speedKts * KTS_TO_KMH;
@@ -603,10 +751,43 @@ var RouteViewer = (function() {
         }
 
         var distStr = totalDistanceKm >= 1000
-            ? (totalDistanceKm / 1000).toFixed(1) + '천km'
-            : Math.round(totalDistanceKm) + 'km';
+            ? Number((totalDistanceKm / 1000).toFixed(1)).toLocaleString() + '천km'
+            : Math.round(totalDistanceKm).toLocaleString() + 'km';
 
-        el.textContent = fromName + ' \u2192 ' + toName + '  |  ' + distStr + '  |  약 ' + timeStr + '  (' + speedKts + 'kts)';
+        var distNm = Math.round(totalDistanceKm / 1.852).toLocaleString() + 'NM';
+
+        // ETA calculation
+        var eta = new Date(Date.now() + totalHours * 3600000);
+        var etaMonth = eta.getMonth() + 1;
+        var etaDay = eta.getDate();
+        var etaHour = eta.getHours();
+        var etaStr = etaMonth + '/' + etaDay + ' ' + (etaHour < 10 ? '0' : '') + etaHour + ':00';
+
+        var elFrom = document.getElementById('routeInfoFrom');
+        var elTo = document.getElementById('routeInfoTo');
+        var elDist = document.getElementById('routeInfoDist');
+        var elTime = document.getElementById('routeInfoTime');
+        var elSpeed = document.getElementById('routeInfoSpeed');
+        var elETA = document.getElementById('routeInfoETA');
+        var elSeas = document.getElementById('routeInfoSeas');
+
+        if (elFrom) elFrom.textContent = fromName;
+        if (elTo) elTo.textContent = toName;
+        if (elDist) elDist.innerHTML = distStr + ' <span class="route-info-sub">' + distNm + '</span>';
+        if (elTime) elTime.textContent = '약 ' + timeStr;
+        if (elSpeed) elSpeed.textContent = speedKts + ' kts';
+        if (elETA) elETA.textContent = etaStr;
+
+        if (elSeas && routeCoords && routeCoords.length > 0) {
+            var seas = detectSeaRegions(routeCoords);
+            if (seas.length > 0) {
+                elSeas.innerHTML = seas.map(function(s) {
+                    return '<span class="route-sea-tag">' + s + '</span>';
+                }).join('');
+            } else {
+                elSeas.textContent = '--';
+            }
+        }
     }
 
     function setupPlaybar() {
@@ -646,6 +827,14 @@ var RouteViewer = (function() {
             if (label) label.textContent = speedKts;
             updateInfoText();
         });
+        slider.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                slider.blur();
+                var btn = document.getElementById('routeSearchBtn');
+                if (btn && !btn.disabled) btn.click();
+            }
+        });
     }
 
     function setupPanelToggle() {
@@ -662,11 +851,21 @@ var RouteViewer = (function() {
     }
 
     // ── Lifecycle ──
+    // Warm up searoute server on first activate
+    var warmedUp = false;
+    function warmUpServer() {
+        if (warmedUp) return;
+        warmedUp = true;
+        fetch('/api/v1/route?from_lat=35.1&from_lng=129.0&to_lat=1.3&to_lng=103.8')
+            .catch(function() {});
+    }
+
     function activate() {
         if (active) return;
         active = true;
 
         buildUI();
+        warmUpServer();
         hideExistingLayers();
         moveGlobeToRoute();
         setupGlobeClickHandler();

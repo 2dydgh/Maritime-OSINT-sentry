@@ -43,6 +43,14 @@ async def lifespan(app: FastAPI):
     )
     land_filter.start_land_index_loading(land_shapefile)
 
+    # Pre-warm searoute graph (~2s first call)
+    try:
+        import searoute as _sr
+        _sr.searoute([129.0, 35.1], [103.8, 1.3])  # Busan→Singapore
+        logger.info("searoute graph pre-loaded")
+    except Exception as e:
+        logger.warning(f"searoute pre-warm failed: {e}")
+
     # Start AIS Stream Background Task
     ais_stream.start_ais_stream()
     

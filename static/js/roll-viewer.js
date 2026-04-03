@@ -608,7 +608,7 @@ var RollViewer = (function() {
             default:          buildGenericShip(THREE, color); break;
         }
 
-        shipGroup.position.y = 1;
+        shipGroup.position.y = 0;
         scene.add(shipGroup);
     }
 
@@ -969,7 +969,7 @@ var RollViewer = (function() {
             // Apply transforms to ship
             if (shipGroup) {
                 shipGroup.rotation.z = roll * (Math.PI / 180);
-                shipGroup.position.y = 1 + weather.waveHeight * 0.3 * Math.sin(elapsed * 0.8);
+                shipGroup.position.y = weather.waveHeight * 0.3 * Math.sin(elapsed * 0.8);
                 shipGroup.rotation.x = pitch * (Math.PI / 180);
             }
 
