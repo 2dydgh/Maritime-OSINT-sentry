@@ -12,8 +12,6 @@ var BottomBar = (function() {
     var vesselCounts = {};
     // Risk level counts
     var riskCounts = { danger: 0, warning: 0, caution: 0 };
-    // ECharts donut instance
-    var vesselDonut = null;
 
     function pushData(key, value) {
         var buf = buffers[key];
@@ -52,45 +50,18 @@ var BottomBar = (function() {
             '<path d="' + pathD + '" fill="none" stroke="var(--secondary)" stroke-width="1.2" opacity="0.6"/>';
     }
 
-    function initDonut(domId) {
-        var el = document.getElementById(domId);
-        if (!el || typeof echarts === 'undefined') return null;
-        return echarts.init(el, null, { renderer: 'canvas' });
-    }
-
-    function setDonutData(chart, data) {
-        if (!chart) return;
-        chart.setOption({
-            animation: false,
-            series: [{
-                type: 'pie',
-                radius: ['55%', '90%'],
-                center: ['50%', '50%'],
-                silent: true,
-                label: { show: false },
-                labelLine: { show: false },
-                itemStyle: { borderWidth: 1, borderColor: 'rgba(0,0,0,0.6)' },
-                data: data
-            }]
-        });
-    }
-
     function updateVesselTypes(counts) {
         vesselCounts = counts;
-        if (!vesselDonut) vesselDonut = initDonut('vesselDonutChart');
-        if (!vesselDonut) return;
+        var container = document.getElementById('vesselTreemap');
+        if (!container) return;
 
         var defaultColors = {
             cargo: '#3b82f6', tanker: '#f97316', passenger: '#a855f7',
             fishing: '#10b981', military: '#ef4444', tug: '#06b6d4', other: '#6b7280'
         };
-        var labels = {
-            cargo: 'Cargo', tanker: 'Tanker', passenger: 'Passenger',
-            fishing: 'Fishing', military: 'Military', tug: 'Tug', other: 'Other'
-        };
         var types = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
 
-        var data = [];
+        var items = [];
         var total = 0;
         types.forEach(function(t) {
             var v = counts[t] || 0;
@@ -98,27 +69,21 @@ var BottomBar = (function() {
             total += v;
             if (v > 0) {
                 var c = (typeof SHIP_COLORS !== 'undefined' && SHIP_COLORS[t]) || defaultColors[t];
-                data.push({ value: v, name: labels[t], itemStyle: { color: c } });
+                items.push({ type: t, count: v, color: c });
             }
         });
-        if (total === 0) return;
+        if (total === 0) { container.innerHTML = ''; return; }
 
-        setDonutData(vesselDonut, data);
+        // Sort descending by count for treemap layout
+        items.sort(function(a, b) { return b.count - a.count; });
 
-        // Render mini legend (top 3 by count)
-        var legend = document.getElementById('vesselDonutLegend');
-        if (legend) {
-            var sorted = data.slice().sort(function(a, b) { return b.value - a.value; });
-            var html = '';
-            sorted.forEach(function(d) {
-                html += '<div class="donut-legend-item">' +
-                    '<span class="donut-legend-dot" style="background:' + d.itemStyle.color + ';"></span>' +
-                    '<span>' + d.name + '</span>' +
-                    '<span class="donut-legend-count">' + d.value + '</span>' +
-                    '</div>';
-            });
-            legend.innerHTML = html;
-        }
+        var html = '';
+        items.forEach(function(item) {
+            var flex = (item.count / total * 10).toFixed(2);
+            var label = item.count >= 5 ? item.count : '';
+            html += '<div class="treemap-cell" style="flex:' + flex + ';background:' + item.color + ';">' + label + '</div>';
+        });
+        container.innerHTML = html;
     }
 
     function updateRiskLevels(danger, warning, caution) {
