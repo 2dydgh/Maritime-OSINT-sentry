@@ -16,17 +16,16 @@ var ModelRegistry = (function() {
             name: '관습 항로 추론',
             icon: 'fa-solid fa-route',
             label: '항로',
-            type: 'globe-layer',
+            type: 'dedicated-screen',
             title: '관습 항로 추론',
             init: function() {},
             activate: function() {
-                // TODO: show route corridor entities on globe
+                if (window.RouteViewer) RouteViewer.activate();
             },
             deactivate: function() {
-                // TODO: hide route corridor entities
+                if (window.RouteViewer) RouteViewer.deactivate();
             },
             getShipSummary: function(mmsi) {
-                // TODO: return route conformance status
                 return { label: '항로', status: '정상', level: 'safe', icon: 'fa-route' };
             }
         },
