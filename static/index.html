@@ -52,6 +52,10 @@
             <div class="header-clock">
                 <span id="headerUtcClock">--:--:-- UTC</span>
             </div>
+            <div class="header-latency">
+                <div class="ws-led connected" id="headerWsLed"></div>
+                <span class="header-latency-value" id="headerLatency">--<span class="stat-card-unit">ms</span></span>
+            </div>
         </div>
     </header>
 
@@ -130,7 +134,7 @@
                 <span>기상 레이어</span>
             </div>
             <div class="filter-item">
-                <label><input type="checkbox" id="wx-precipitation" checked><span class="color-dot" style="background-color: #3b82f6;"></span> 강수 레이더</label>
+                <label><input type="checkbox" id="wx-precipitation"><span class="color-dot" style="background-color: #3b82f6;"></span> 강수 레이더</label>
             </div>
             <div class="filter-item">
                 <label><input type="checkbox" id="wx-wave-height"><span class="color-dot" style="background-color: #06b6d4;"></span> 파고</label>
@@ -384,13 +388,6 @@
                 <span class="stat-card-value" id="bottomWave">--<span class="stat-card-unit">m</span></span>
             </div>
             <span class="stat-card-loc" id="bottomWaveLoc"></span>
-        </div>
-        <div class="stat-card stat-card-status" id="statLatency">
-            <div class="ws-led connected" id="bottomWsLed"></div>
-            <div class="stat-card-info">
-                <span class="stat-card-label">LATENCY</span>
-                <span class="stat-card-value" id="bottomLatency">--<span class="stat-card-unit">ms</span></span>
-            </div>
         </div>
     </div>
 

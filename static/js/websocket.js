@@ -436,7 +436,7 @@ function initWebSocket() {
                     var latency = Date.now() - data.server_time_ms;
                     if (latency >= 0 && latency < 10000) {
                         if (typeof BottomBar !== 'undefined') {
-                            BottomBar.updateValue('bottomLatency', latency);
+                            BottomBar.updateValue('headerLatency', latency);
                         }
                     }
                 }
@@ -533,7 +533,7 @@ var _lastWsReceived = 0;
 
 setInterval(function() {
     var ago = _lastWsReceived ? Math.round((Date.now() - _lastWsReceived) / 1000) : 999;
-    var led = document.getElementById('bottomWsLed');
+    var led = document.getElementById('headerWsLed');
     if (led) {
         led.className = 'ws-led ' + (ago <= 5 ? 'connected' : ago <= 15 ? 'connecting' : 'disconnected');
     }

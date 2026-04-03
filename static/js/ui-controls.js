@@ -15,7 +15,7 @@ updateHeaderClock();
 
 // ── WebSocket Status LED ──
 function setWsStatus(status) {
-    var led = document.getElementById('bottomWsLed');
+    var led = document.getElementById('headerWsLed');
     if (!led) return;
     led.className = 'ws-led ' + status;
     var titles = { connected: 'WebSocket 연결됨', disconnected: '연결 끊김', connecting: '연결 중...' };
