@@ -26,15 +26,10 @@ NM_TO_KM = 1.852
 EARTH_RADIUS_KM = 6371.0
 PROXIMITY_NM = 5.0           # 1단계 근접 필터 반경
 MIN_SOG_KTS = 1.0            # 2단계 정지/저속 선박 제외 기준 (GPS 오차 + 조류 영향 감안)
-DCPA_DANGER_NM = 0.5         # 위험: DCPA < 0.5nm
-DCPA_WARNING_NM = 1.0        # 경고: DCPA < 1.0nm
 TCPA_MAX_MIN = 20            # TCPA 20분 이내만 관심
 TCPA_MIN_MIN = 1.0           # TCPA 1분 미만은 이미 해소 직전 → 스킵
 
-# 조우 유형별 DCPA 임계값 (head-on은 정상 교행이 많아 엄격하게)
 HEAD_ON_ANGLE = 30.0         # COG 차이 150~210도 → head-on 판정
-DCPA_DANGER_HEAD_ON_NM = 0.3 # head-on 위험: DCPA < 0.3nm
-DCPA_WARNING_HEAD_ON_NM = 0.5  # head-on 경고: DCPA < 0.5nm
 
 # --- Class A/B 조합별 임계값 ---
 CLASS_THRESHOLDS = {
