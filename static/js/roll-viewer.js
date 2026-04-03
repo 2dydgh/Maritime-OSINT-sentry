@@ -12,6 +12,8 @@ var RollViewer = (function() {
 
     var shipGroup = null;
     var waterMesh = null;
+    var composer = null;
+    var waterNormals = null;
 
     var animFrameId = null;
     var clockStart = null;
@@ -206,6 +208,8 @@ var RollViewer = (function() {
         camera.lookAt(0, 0, 0);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 0.6;
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(w, h);
         renderer.domElement.style.display = 'block';
@@ -277,18 +281,6 @@ var RollViewer = (function() {
         var skyMesh = new THREE.Mesh(skyGeo, skyMat);
         scene.add(skyMesh);
 
-        // Horizon glow ring — thin ring at water level for soft horizon line
-        var ringGeo = new THREE.RingGeometry(180, 400, 64);
-        ringGeo.rotateX(-Math.PI / 2);
-        var ringMat = new THREE.MeshBasicMaterial({
-            color: 0x4a6a8a,
-            transparent: true,
-            opacity: 0.3,
-            side: THREE.DoubleSide
-        });
-        var ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.position.y = -0.1;
-        scene.add(ring);
     }
 
     // ── buildCompass() — wave direction arrow + compass ring ──
@@ -394,60 +386,41 @@ var RollViewer = (function() {
         scene.add(sprite);
     }
 
-    // ── buildWater() ──
+    // ── buildWater() — Three.js Water shader with reflection/refraction ──
     function buildWater() {
         var THREE = window.THREE;
 
-        var geo = new THREE.PlaneGeometry(200, 200, 128, 128);
-        geo.rotateX(-Math.PI / 2);
+        var waterGeometry = new THREE.PlaneGeometry(2000, 2000);
 
-        var mat = new THREE.MeshPhongMaterial({
-            color: 0x1a6fa0,
-            transparent: true,
-            opacity: 0.85,
-            side: THREE.DoubleSide,
-            shininess: 30,
-            specular: new THREE.Color(0x224466)
+        var loader = new THREE.TextureLoader();
+        waterNormals = loader.load(
+            'https://raw.githubusercontent.com/mrdoob/three.js/r137/examples/textures/waternormals.jpg',
+            function(texture) {
+                texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            }
+        );
+
+        waterMesh = new THREE.Water(waterGeometry, {
+            textureWidth: 512,
+            textureHeight: 512,
+            waterNormals: waterNormals,
+            sunDirection: new THREE.Vector3(0.7, 0.5, 0.3).normalize(),
+            sunColor: 0xffffff,
+            waterColor: 0x001e3d,
+            distortionScale: Math.max(weather.waveHeight * 1.5, 1.0),
+            fog: scene.fog !== undefined
         });
 
-        waterMesh = new THREE.Mesh(geo, mat);
+        waterMesh.rotation.x = -Math.PI / 2;
         waterMesh.position.y = 0;
         scene.add(waterMesh);
     }
 
-    // ── animateWater(time) ──
+    // ── animateWater(time) — update Water shader uniforms ──
     function animateWater(time) {
-        if (!waterMesh) return;
-        var geo = waterMesh.geometry;
-        var pos = geo.attributes.position;
-        var amplitude = weather.waveHeight * 0.5;
-        var freq = 0.04;
-
-        // Wave direction: meteorological degrees → radians
-        // Open-Meteo wave_direction = direction waves are coming FROM
-        var dirRad = (weather.waveDirection || 0) * Math.PI / 180;
-        var dx = Math.sin(dirRad);  // x component of wave travel
-        var dz = Math.cos(dirRad);  // z component of wave travel
-        // Wave speed from period (longer period = faster travel)
-        var speed = 1.2 / Math.max(weather.wavePeriod || 8, 1);
-
-        for (var i = 0; i < pos.count; i++) {
-            var x = pos.getX(i);
-            var z = pos.getZ(i);
-            // Project position onto wave direction for directional travel
-            var along = x * dx + z * dz;
-            var across = -x * dz + z * dx;
-            // Primary wave: travels in wave direction
-            var y = amplitude * Math.sin(along * freq + time * speed)
-            // Cross wave: smaller, perpendicular swell
-                  + amplitude * 0.3 * Math.sin(across * freq * 1.5 + time * speed * 0.7)
-            // Detail ripple
-                  + amplitude * 0.15 * Math.sin(x * freq * 3 + z * freq * 2.5 + time * 1.8);
-            pos.setY(i, y);
-        }
-
-        pos.needsUpdate = true;
-        geo.computeVertexNormals();
+        if (!waterMesh || !waterMesh.material || !waterMesh.material.uniforms) return;
+        var speed = 0.8 / Math.max(weather.wavePeriod || 8, 1);
+        waterMesh.material.uniforms['time'].value = time * speed;
     }
 
     // ── buildShip(type) ──
