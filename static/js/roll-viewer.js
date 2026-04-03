@@ -234,8 +234,8 @@ var RollViewer = (function() {
         var THREE = window.THREE;
 
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x1a2a3a);
-        scene.fog = new THREE.FogExp2(0x1a2a3a, 0.004);
+        scene.background = new THREE.Color(0x2a4a6a);
+        scene.fog = new THREE.FogExp2(0x3a5a7a, 0.003);
 
         var w = container.clientWidth;
         var h = container.clientHeight;
@@ -247,7 +247,7 @@ var RollViewer = (function() {
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 0.6;
+        renderer.toneMappingExposure = 0.8;
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(w, h);
         renderer.domElement.style.display = 'block';
@@ -312,14 +312,25 @@ var RollViewer = (function() {
         var skyGeo = new THREE.SphereGeometry(400, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
         var skyVertCount = skyGeo.attributes.position.count;
         var colors = new Float32Array(skyVertCount * 3);
-        var topColor = new THREE.Color(0x1a2a4a);    // deep navy at zenith
-        var horizonColor = new THREE.Color(0x3a5a7a); // lighter at horizon
+        var topColor = new THREE.Color(0x0a1a3a);      // deep dark at zenith
+        var midColor = new THREE.Color(0x2a4a7a);      // mid-sky blue
+        var horizonColor = new THREE.Color(0x6a8aaa);   // lighter blue-gray at horizon
+        var horizonWarm = new THREE.Color(0x8a7a6a);    // warm haze near horizon line
         var tmp = new THREE.Color();
 
         for (var i = 0; i < skyVertCount; i++) {
             var y = skyGeo.attributes.position.getY(i);
             var t = Math.max(0, y / 400); // 0 at horizon, 1 at top
-            tmp.copy(horizonColor).lerp(topColor, t);
+            if (t < 0.05) {
+                // Warm haze band right at horizon — blends into water edge
+                tmp.copy(horizonWarm).lerp(horizonColor, t / 0.05);
+            } else if (t < 0.3) {
+                // Horizon to mid-sky gradient
+                tmp.copy(horizonColor).lerp(midColor, (t - 0.05) / 0.25);
+            } else {
+                // Mid-sky to zenith
+                tmp.copy(midColor).lerp(topColor, (t - 0.3) / 0.7);
+            }
             colors[i * 3] = tmp.r;
             colors[i * 3 + 1] = tmp.g;
             colors[i * 3 + 2] = tmp.b;
@@ -459,6 +470,7 @@ var RollViewer = (function() {
     }
 
     // ── buildSpray() — bow spray particle system ──
+    // ── buildSpray() — sea mist / fog particle system ──
     function buildSpray() {
         var THREE = window.THREE;
 
@@ -468,27 +480,28 @@ var RollViewer = (function() {
         sprayVelocities = [];
 
         for (var i = 0; i < SPRAY_COUNT; i++) {
-            positions[i * 3]     = 7 + Math.random() * 2;
-            positions[i * 3 + 1] = 1 + Math.random() * 0.5;
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 3;
+            // Spread around the ship, near waterline
+            positions[i * 3]     = (Math.random() - 0.3) * 30;   // wide x spread
+            positions[i * 3 + 1] = Math.random() * 2;             // low, near water
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 30;   // wide z spread
 
             sprayVelocities.push({
-                vx: 0.5 + Math.random() * 1.5,
-                vy: 2 + Math.random() * 3,
-                vz: (Math.random() - 0.5) * 2,
-                life: 0,
-                maxLife: 0.8 + Math.random() * 1.2
+                vx: (Math.random() - 0.5) * 0.3,   // slow drift
+                vy: 0.05 + Math.random() * 0.15,    // gentle rise
+                vz: (Math.random() - 0.5) * 0.3,
+                life: Math.random() * 5,             // stagger start
+                maxLife: 3 + Math.random() * 4       // long-lived
             });
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
         var material = new THREE.PointsMaterial({
-            color: 0xffffff,
-            size: 0.4,
+            color: 0xb0c4de,         // light steel blue — mist color
+            size: 1.5,               // larger, softer
             transparent: true,
-            opacity: 0.6,
-            blending: THREE.AdditiveBlending,
+            opacity: 0.12,           // very subtle
+            blending: THREE.NormalBlending,
             depthWrite: false,
             sizeAttenuation: true
         });
@@ -497,29 +510,29 @@ var RollViewer = (function() {
         scene.add(sprayPoints);
     }
 
-    // ── animateSpray(dt) — update spray particles each frame ──
+    // ── animateSpray(dt) — drift sea mist particles ──
     function animateSpray(dt) {
         if (!sprayPoints) return;
 
         var pos = sprayPoints.geometry.attributes.position;
-        var intensity = Math.min(weather.waveHeight / 3, 1) * 0.8 + 0.2;
-        var gravity = -6;
+        var intensity = Math.min(weather.waveHeight / 3, 1) * 0.7 + 0.3;
 
         for (var i = 0; i < SPRAY_COUNT; i++) {
             var v = sprayVelocities[i];
             v.life += dt;
 
             if (v.life >= v.maxLife) {
+                // Respawn — scattered around ship area
                 pos.setXYZ(i,
-                    7 + Math.random() * 2,
-                    1 + Math.random() * 0.5,
-                    (Math.random() - 0.5) * 3
+                    (Math.random() - 0.3) * 30,
+                    Math.random() * 0.5,
+                    (Math.random() - 0.5) * 30
                 );
-                v.vx = (0.5 + Math.random() * 1.5) * intensity;
-                v.vy = (2 + Math.random() * 3) * intensity;
-                v.vz = (Math.random() - 0.5) * 2 * intensity;
+                v.vx = (Math.random() - 0.5) * 0.3 * intensity;
+                v.vy = (0.05 + Math.random() * 0.15) * intensity;
+                v.vz = (Math.random() - 0.5) * 0.3 * intensity;
                 v.life = 0;
-                v.maxLife = 0.8 + Math.random() * 1.2;
+                v.maxLife = 3 + Math.random() * 4;
                 continue;
             }
 
@@ -527,9 +540,8 @@ var RollViewer = (function() {
             var y = pos.getY(i) + v.vy * dt;
             var z = pos.getZ(i) + v.vz * dt;
 
-            v.vy += gravity * dt;
-
-            if (y < 0) {
+            // Fade out at top, reset if too high
+            if (y > 3.5) {
                 v.life = v.maxLife;
                 y = 0;
             }
@@ -537,7 +549,8 @@ var RollViewer = (function() {
             pos.setXYZ(i, x, y, z);
         }
 
-        sprayPoints.material.opacity = 0.5 * intensity;
+        // Very subtle opacity, scales with wave conditions
+        sprayPoints.material.opacity = 0.08 + 0.07 * intensity;
         pos.needsUpdate = true;
     }
 
@@ -1196,14 +1209,14 @@ var RollViewer = (function() {
                     smooth: true,
                     symbol: 'none',
                     data: pitchHistory.slice(),
-                    lineStyle: { color: '#f97316', width: 1.5 },
+                    lineStyle: { color: '#2dd4bf', width: 1.5 },
                     areaStyle: {
                         color: {
                             type: 'linear',
                             x: 0, y: 0, x2: 0, y2: 1,
                             colorStops: [
-                                { offset: 0, color: 'rgba(249,115,22,0.2)' },
-                                { offset: 1, color: 'rgba(249,115,22,0)' }
+                                { offset: 0, color: 'rgba(45,212,191,0.2)' },
+                                { offset: 1, color: 'rgba(45,212,191,0)' }
                             ]
                         }
                     }
