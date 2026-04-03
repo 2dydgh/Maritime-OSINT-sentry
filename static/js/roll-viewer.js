@@ -247,9 +247,23 @@ var RollViewer = (function() {
             camera.aspect = ww / (hh || 1);
             camera.updateProjectionMatrix();
             renderer.setSize(ww, hh);
+            if (composer) composer.setSize(ww, hh);
         };
         window.addEventListener('resize', _resizeHandler);
         renderer._rollViewerResizeHandler = _resizeHandler;
+
+        // ── Post-processing ──
+        var renderPass = new THREE.RenderPass(scene, camera);
+        var bloomPass = new THREE.UnrealBloomPass(
+            new THREE.Vector2(w, h),
+            0.4,   // strength
+            0.5,   // radius
+            0.7    // threshold
+        );
+
+        composer = new THREE.EffectComposer(renderer);
+        composer.addPass(renderPass);
+        composer.addPass(bloomPass);
     }
 
     // ── buildSky() — gradient sky dome + horizon ──
@@ -468,7 +482,7 @@ var RollViewer = (function() {
         var winMat = new THREE.MeshPhongMaterial({
             color: 0x38bdf8,
             emissive: new THREE.Color(0x38bdf8),
-            emissiveIntensity: 0.3
+            emissiveIntensity: 0.8
         });
         var win = new THREE.Mesh(winGeo, winMat);
         win.position.set(-1.45, 4.8, 0);
@@ -528,7 +542,11 @@ var RollViewer = (function() {
             if (pitchHistory.length > 60) pitchHistory.shift();
 
             if (controls) controls.update();
-            if (renderer && scene && camera) renderer.render(scene, camera);
+            if (composer) {
+                composer.render();
+            } else if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
         }
 
         loop();
@@ -830,6 +848,12 @@ var RollViewer = (function() {
                     }
                 }
             });
+        }
+
+        // Dispose composer
+        if (composer) {
+            composer.dispose();
+            composer = null;
         }
 
         // Dispose controls
