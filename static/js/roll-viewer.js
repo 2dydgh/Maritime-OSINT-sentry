@@ -335,6 +335,26 @@ var RollViewer = (function() {
 
     }
 
+    // ── Ship model helpers ──
+    function shipMat(color, opts) {
+        var THREE = window.THREE;
+        var params = {
+            color: new THREE.Color(color),
+            roughness: (opts && opts.roughness !== undefined) ? opts.roughness : 0.7,
+            metalness: (opts && opts.metalness !== undefined) ? opts.metalness : 0.3
+        };
+        if (opts && opts.emissive) {
+            params.emissive = new THREE.Color(opts.emissive);
+            params.emissiveIntensity = opts.emissiveIntensity || 0.8;
+        }
+        return new THREE.MeshStandardMaterial(params);
+    }
+
+    function addToShip(mesh) {
+        shipGroup.add(mesh);
+        return mesh;
+    }
+
     // ── buildCompass() — wave direction arrow + compass ring ──
     function buildCompass() {
         var THREE = window.THREE;
@@ -558,73 +578,355 @@ var RollViewer = (function() {
         waterMesh.material.uniforms['time'].value = time * speed;
     }
 
-    // ── buildShip(type) ──
+    // ── buildShip(type) — high-quality ship model per type ──
     function buildShip(type) {
         var THREE = window.THREE;
         var color = (window.SHIP_COLORS && window.SHIP_COLORS[type]) || '#6b7280';
 
         shipGroup = new THREE.Group();
 
-        // Hull via ExtrudeGeometry
-        var shape = new THREE.Shape();
-        shape.moveTo(-6, -2);
-        shape.lineTo(-6, 2);
-        shape.lineTo(4, 1.2);
-        shape.lineTo(8, 0);
-        shape.lineTo(4, -1.2);
-        shape.closePath();
-
-        var extrudeSettings = { depth: 3, bevelEnabled: false };
-        var hullGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        hullGeo.rotateX(-Math.PI / 2);
-
-        var hullMat = new THREE.MeshPhongMaterial({ color: new THREE.Color(color) });
-        var hull = new THREE.Mesh(hullGeo, hullMat);
-        hull.position.y = 1.5;
-        hull.position.z = -1.5; // center the extrude depth
-        shipGroup.add(hull);
-
-        // Deck
-        var deckGeo = new THREE.BoxGeometry(12, 0.3, 3.5);
-        var deckMat = new THREE.MeshPhongMaterial({ color: 0x3f3f46 });
-        var deck = new THREE.Mesh(deckGeo, deckMat);
-        deck.position.set(0, 3.1, 0);
-        shipGroup.add(deck);
-
-        // Bridge
-        var bridgeGeo = new THREE.BoxGeometry(3, 2.5, 2.8);
-        var bridgeMat = new THREE.MeshPhongMaterial({ color: 0x52525b });
-        var bridge = new THREE.Mesh(bridgeGeo, bridgeMat);
-        bridge.position.set(-3, 4.5, 0);
-        shipGroup.add(bridge);
-
-        // Bridge windows
-        var winGeo = new THREE.BoxGeometry(0.1, 0.6, 2.2);
-        var winMat = new THREE.MeshPhongMaterial({
-            color: 0x38bdf8,
-            emissive: new THREE.Color(0x38bdf8),
-            emissiveIntensity: 0.8
-        });
-        var win = new THREE.Mesh(winGeo, winMat);
-        win.position.set(-1.45, 4.8, 0);
-        shipGroup.add(win);
-
-        // Funnel
-        var funnelGeo = new THREE.CylinderGeometry(0.4, 0.5, 2, 8);
-        var funnelMat = new THREE.MeshPhongMaterial({ color: 0x27272a });
-        var funnel = new THREE.Mesh(funnelGeo, funnelMat);
-        funnel.position.set(-4.5, 5, 0);
-        shipGroup.add(funnel);
-
-        // Mast
-        var mastGeo = new THREE.CylinderGeometry(0.05, 0.05, 3, 4);
-        var mastMat = new THREE.MeshPhongMaterial({ color: 0x71717a });
-        var mast = new THREE.Mesh(mastGeo, mastMat);
-        mast.position.set(-3, 7, 0);
-        shipGroup.add(mast);
+        switch (type) {
+            case 'tanker':    buildTanker(THREE, color); break;
+            case 'cargo':     buildCargo(THREE, color); break;
+            case 'passenger': buildPassenger(THREE, color); break;
+            case 'fishing':   buildFishing(THREE, color); break;
+            case 'military':  buildMilitary(THREE, color); break;
+            case 'tug':       buildTug(THREE, color); break;
+            default:          buildGenericShip(THREE, color); break;
+        }
 
         shipGroup.position.y = 1;
         scene.add(shipGroup);
+    }
+
+    // ── Tanker: 낮고 긴 선체, 파이프라인, 매니폴드 ──
+    function buildTanker(THREE, color) {
+        var hullShape = new THREE.Shape();
+        hullShape.moveTo(-8, -2.2);
+        hullShape.lineTo(-8, 2.2);
+        hullShape.quadraticCurveTo(6, 2, 10, 0);
+        hullShape.quadraticCurveTo(6, -2, -8, -2.2);
+
+        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.5, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.2, bevelSegments: 3 });
+        hullGeo.rotateX(-Math.PI / 2);
+        var hull = new THREE.Mesh(hullGeo, shipMat(color));
+        hull.position.set(0, 1.2, -1.75);
+        addToShip(hull);
+
+        var deckGeo = new THREE.BoxGeometry(16, 0.2, 4.2);
+        addToShip(new THREE.Mesh(deckGeo, shipMat('#3f3f46'))).position.set(0, 3.0, 0);
+
+        for (var p = -1; p <= 1; p++) {
+            var pipeGeo = new THREE.CylinderGeometry(0.08, 0.08, 12, 8);
+            pipeGeo.rotateZ(Math.PI / 2);
+            addToShip(new THREE.Mesh(pipeGeo, shipMat('#71717a', { metalness: 0.6 }))).position.set(0, 3.3, p * 1.2);
+        }
+
+        var manifoldGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 12);
+        addToShip(new THREE.Mesh(manifoldGeo, shipMat('#52525b', { metalness: 0.7 }))).position.set(0, 3.5, 0);
+
+        for (var r = -1; r <= 1; r++) {
+            var riserGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.8, 6);
+            addToShip(new THREE.Mesh(riserGeo, shipMat('#71717a', { metalness: 0.6 }))).position.set(0, 3.5, r * 1.2);
+        }
+
+        var bridgeGeo = new THREE.BoxGeometry(3.5, 2.5, 3.5);
+        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#3f3f46'))).position.set(-5.5, 4.3, 0);
+
+        var winGeo = new THREE.BoxGeometry(0.1, 0.5, 2.8);
+        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-3.7, 4.6, 0);
+
+        var funnelGeo = new THREE.CylinderGeometry(0.4, 0.5, 2.2, 8);
+        addToShip(new THREE.Mesh(funnelGeo, shipMat('#27272a'))).position.set(-6.5, 5.5, 0);
+
+        var stripeGeo = new THREE.CylinderGeometry(0.52, 0.52, 0.3, 8);
+        addToShip(new THREE.Mesh(stripeGeo, shipMat(color))).position.set(-6.5, 5.8, 0);
+    }
+
+    // ── Cargo: 컨테이너 적재, 크레인, 높은 브릿지 ──
+    function buildCargo(THREE, color) {
+        var hullShape = new THREE.Shape();
+        hullShape.moveTo(-7, -2);
+        hullShape.lineTo(-7, 2);
+        hullShape.lineTo(5, 1.5);
+        hullShape.lineTo(9, 0);
+        hullShape.lineTo(5, -1.5);
+        hullShape.closePath();
+
+        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.8, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.2, bevelSegments: 3 });
+        hullGeo.rotateX(-Math.PI / 2);
+        var hull = new THREE.Mesh(hullGeo, shipMat(color));
+        hull.position.set(0, 1.2, -1.9);
+        addToShip(hull);
+
+        var deckGeo = new THREE.BoxGeometry(15, 0.2, 3.8);
+        addToShip(new THREE.Mesh(deckGeo, shipMat('#3f3f46'))).position.set(0.5, 3.0, 0);
+
+        var containerColors = ['#dc2626', '#2563eb', '#16a34a', '#ca8a04', '#9333ea', '#0891b2'];
+        var rows = [
+            { x: 3.5, layers: 3 },
+            { x: 1.5, layers: 2 },
+            { x: -0.5, layers: 3 },
+            { x: -2.5, layers: 2 }
+        ];
+
+        rows.forEach(function(row) {
+            for (var layer = 0; layer < row.layers; layer++) {
+                for (var z = -1; z <= 1; z++) {
+                    var cGeo = new THREE.BoxGeometry(1.6, 0.9, 1.1);
+                    var cColor = containerColors[Math.floor(Math.random() * containerColors.length)];
+                    var container = new THREE.Mesh(cGeo, shipMat(cColor, { roughness: 0.8, metalness: 0.2 }));
+                    container.position.set(row.x, 3.6 + layer * 0.95, z * 1.2);
+                    addToShip(container);
+                }
+            }
+        });
+
+        var craneBaseGeo = new THREE.BoxGeometry(0.4, 3, 0.4);
+        addToShip(new THREE.Mesh(craneBaseGeo, shipMat('#fbbf24', { metalness: 0.5 }))).position.set(-4, 4.5, 1.2);
+        addToShip(new THREE.Mesh(craneBaseGeo.clone(), shipMat('#fbbf24', { metalness: 0.5 }))).position.set(-4, 4.5, -1.2);
+
+        var craneBoomGeo = new THREE.CylinderGeometry(0.1, 0.1, 4, 6);
+        craneBoomGeo.rotateZ(Math.PI / 4);
+        addToShip(new THREE.Mesh(craneBoomGeo, shipMat('#fbbf24', { metalness: 0.5 }))).position.set(-3, 6.5, 0);
+
+        var bridgeGeo = new THREE.BoxGeometry(3, 3.5, 3.5);
+        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#3f3f46'))).position.set(-5.5, 4.8, 0);
+
+        var winGeo = new THREE.BoxGeometry(0.1, 0.6, 2.8);
+        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-3.95, 5.2, 0);
+
+        var funnelGeo = new THREE.CylinderGeometry(0.35, 0.45, 2, 8);
+        addToShip(new THREE.Mesh(funnelGeo, shipMat('#27272a'))).position.set(-6.5, 6.5, 0);
+    }
+
+    // ── Passenger: 다층 데크, 넓은 상부구조, 큰 펀넬 ──
+    function buildPassenger(THREE, color) {
+        var hullShape = new THREE.Shape();
+        hullShape.moveTo(-7, -2.5);
+        hullShape.lineTo(-7, 2.5);
+        hullShape.quadraticCurveTo(5, 2.2, 10, 0);
+        hullShape.quadraticCurveTo(5, -2.2, -7, -2.5);
+
+        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.5, bevelEnabled: true, bevelThickness: 0.4, bevelSize: 0.3, bevelSegments: 4 });
+        hullGeo.rotateX(-Math.PI / 2);
+        var hull = new THREE.Mesh(hullGeo, shipMat('#f8fafc', { roughness: 0.5 }));
+        hull.position.set(0, 1.0, -1.75);
+        addToShip(hull);
+
+        var deckWidths = [13, 12, 10, 8];
+        var deckDepths = [4.5, 4.0, 3.5, 2.8];
+        for (var d = 0; d < 4; d++) {
+            var dGeo = new THREE.BoxGeometry(deckWidths[d], 1.0, deckDepths[d]);
+            var deck = new THREE.Mesh(dGeo, shipMat('#e2e8f0', { roughness: 0.6 }));
+            deck.position.set(-0.5 + d * 0.3, 3.4 + d * 1.05, 0);
+            addToShip(deck);
+
+            var winStripGeo = new THREE.BoxGeometry(deckWidths[d] - 1, 0.15, deckDepths[d] + 0.02);
+            var winStrip = new THREE.Mesh(winStripGeo, shipMat('#fbbf24', { emissive: '#fbbf24', emissiveIntensity: 0.5, roughness: 0.3 }));
+            winStrip.position.set(-0.5 + d * 0.3, 3.7 + d * 1.05, 0);
+            addToShip(winStrip);
+        }
+
+        var bridgeGeo = new THREE.BoxGeometry(3, 1.5, 2.5);
+        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#cbd5e1'))).position.set(-1, 8.2, 0);
+
+        var winGeo = new THREE.BoxGeometry(3.02, 0.4, 2.52);
+        addToShip(new THREE.Mesh(winGeo, shipMat('#0ea5e9', { emissive: '#0ea5e9', emissiveIntensity: 0.8 }))).position.set(-1, 8.5, 0);
+
+        var funnelGeo = new THREE.CylinderGeometry(0.6, 0.8, 3, 12);
+        addToShip(new THREE.Mesh(funnelGeo, shipMat(color))).position.set(-3, 8.5, 0);
+
+        var topGeo = new THREE.CylinderGeometry(0.7, 0.6, 0.5, 12);
+        addToShip(new THREE.Mesh(topGeo, shipMat('#1e293b'))).position.set(-3, 10.1, 0);
+    }
+
+    // ── Fishing: 작은 선체, 아웃리거/붐, 마스트 ──
+    function buildFishing(THREE, color) {
+        var hullShape = new THREE.Shape();
+        hullShape.moveTo(-4, -1.5);
+        hullShape.lineTo(-4, 1.5);
+        hullShape.lineTo(2, 1);
+        hullShape.lineTo(5, 0);
+        hullShape.lineTo(2, -1);
+        hullShape.closePath();
+
+        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 2.5, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.15, bevelSegments: 2 });
+        hullGeo.rotateX(-Math.PI / 2);
+        var hull = new THREE.Mesh(hullGeo, shipMat(color));
+        hull.position.set(0, 1.0, -1.25);
+        addToShip(hull);
+
+        var deckGeo = new THREE.BoxGeometry(8, 0.15, 2.8);
+        addToShip(new THREE.Mesh(deckGeo, shipMat('#4b5563'))).position.set(0.5, 2.5, 0);
+
+        var bridgeGeo = new THREE.BoxGeometry(2, 1.8, 2);
+        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#374151'))).position.set(-2, 3.5, 0);
+
+        var winGeo = new THREE.BoxGeometry(0.1, 0.35, 1.5);
+        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-0.95, 3.7, 0);
+
+        var mastGeo = new THREE.CylinderGeometry(0.04, 0.06, 5, 6);
+        addToShip(new THREE.Mesh(mastGeo, shipMat('#9ca3af', { metalness: 0.5 }))).position.set(0, 5.0, 0);
+
+        var boomGeo = new THREE.CylinderGeometry(0.03, 0.05, 5, 6);
+        var boom1 = new THREE.Mesh(boomGeo, shipMat('#9ca3af', { metalness: 0.5 }));
+        boom1.position.set(0, 5.5, 1.5);
+        boom1.rotation.x = -0.5;
+        boom1.rotation.z = 0.3;
+        addToShip(boom1);
+
+        var boom2 = new THREE.Mesh(boomGeo.clone(), shipMat('#9ca3af', { metalness: 0.5 }));
+        boom2.position.set(0, 5.5, -1.5);
+        boom2.rotation.x = 0.5;
+        boom2.rotation.z = 0.3;
+        addToShip(boom2);
+
+        var reelGeo = new THREE.CylinderGeometry(0.3, 0.3, 1.5, 8);
+        reelGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(reelGeo, shipMat('#6b7280', { metalness: 0.4 }))).position.set(-3.5, 2.8, 0);
+    }
+
+    // ── Military: 날렵한 선체, 스텔스 상부구조, 무장 ──
+    function buildMilitary(THREE, color) {
+        var hullShape = new THREE.Shape();
+        hullShape.moveTo(-7, -1.8);
+        hullShape.lineTo(-7, 1.8);
+        hullShape.lineTo(4, 1.0);
+        hullShape.lineTo(10, 0);
+        hullShape.lineTo(4, -1.0);
+        hullShape.closePath();
+
+        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 2.8, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 2 });
+        hullGeo.rotateX(-Math.PI / 2);
+        var hull = new THREE.Mesh(hullGeo, shipMat('#6b7280', { roughness: 0.6 }));
+        hull.position.set(0, 1.2, -1.4);
+        addToShip(hull);
+
+        var deckGeo = new THREE.BoxGeometry(15, 0.15, 3.2);
+        addToShip(new THREE.Mesh(deckGeo, shipMat('#4b5563'))).position.set(0.5, 2.9, 0);
+
+        var superShape = new THREE.Shape();
+        superShape.moveTo(-3, -1.3);
+        superShape.lineTo(-3, 1.3);
+        superShape.lineTo(-2.5, 1.5);
+        superShape.lineTo(2.5, 1.5);
+        superShape.lineTo(3, 1.3);
+        superShape.lineTo(3, -1.3);
+        superShape.lineTo(2.5, -1.5);
+        superShape.lineTo(-2.5, -1.5);
+        superShape.closePath();
+
+        var superGeo = new THREE.ExtrudeGeometry(superShape, { depth: 2.5, bevelEnabled: false });
+        superGeo.rotateX(-Math.PI / 2);
+        var superstructure = new THREE.Mesh(superGeo, shipMat('#52525b'));
+        superstructure.position.set(-2, 3.0, -1.25);
+        addToShip(superstructure);
+
+        var winGeo = new THREE.BoxGeometry(5, 0.25, 2.8);
+        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.6 }))).position.set(-2, 4.8, 0);
+
+        var turretBase = new THREE.CylinderGeometry(0.6, 0.7, 0.5, 12);
+        addToShip(new THREE.Mesh(turretBase, shipMat('#4b5563', { metalness: 0.5 }))).position.set(4, 3.3, 0);
+
+        var barrelGeo = new THREE.CylinderGeometry(0.06, 0.08, 2.5, 6);
+        barrelGeo.rotateZ(-Math.PI / 2);
+        addToShip(new THREE.Mesh(barrelGeo, shipMat('#374151', { metalness: 0.6 }))).position.set(5.5, 3.5, 0);
+
+        var mastGeo = new THREE.CylinderGeometry(0.05, 0.08, 4, 6);
+        addToShip(new THREE.Mesh(mastGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(-2, 7.3, 0);
+
+        var radarGeo = new THREE.BoxGeometry(2, 0.08, 0.5);
+        addToShip(new THREE.Mesh(radarGeo, shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-2, 9, 0);
+
+        var funnelGeo = new THREE.BoxGeometry(1.2, 1.5, 1.8);
+        addToShip(new THREE.Mesh(funnelGeo, shipMat('#3f3f46'))).position.set(-5, 4.5, 0);
+    }
+
+    // ── Tug: 짧고 넓은 선체, 큰 브릿지, 예인 장비 ──
+    function buildTug(THREE, color) {
+        var hullShape = new THREE.Shape();
+        hullShape.moveTo(-3, -1.8);
+        hullShape.lineTo(-3, 1.8);
+        hullShape.lineTo(2, 1.5);
+        hullShape.lineTo(4, 0);
+        hullShape.lineTo(2, -1.5);
+        hullShape.closePath();
+
+        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.5, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.2, bevelSegments: 3 });
+        hullGeo.rotateX(-Math.PI / 2);
+        var hull = new THREE.Mesh(hullGeo, shipMat(color));
+        hull.position.set(0, 1.2, -1.75);
+        addToShip(hull);
+
+        var deckGeo = new THREE.BoxGeometry(6, 0.2, 3.2);
+        addToShip(new THREE.Mesh(deckGeo, shipMat('#4b5563'))).position.set(0.5, 3.0, 0);
+
+        var bridgeGeo = new THREE.BoxGeometry(2.5, 2.8, 2.8);
+        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#374151'))).position.set(0, 4.5, 0);
+
+        var winFront = new THREE.BoxGeometry(0.1, 0.5, 2.2);
+        addToShip(new THREE.Mesh(winFront, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(1.3, 4.8, 0);
+
+        var winSide1 = new THREE.BoxGeometry(2, 0.5, 0.1);
+        addToShip(new THREE.Mesh(winSide1, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.6 }))).position.set(0, 4.8, 1.45);
+        addToShip(new THREE.Mesh(winSide1.clone(), shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.6 }))).position.set(0, 4.8, -1.45);
+
+        var funnelGeo = new THREE.CylinderGeometry(0.35, 0.4, 1.5, 8);
+        addToShip(new THREE.Mesh(funnelGeo, shipMat('#1e293b'))).position.set(-1.5, 5.5, 0);
+
+        var winchGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.2, 10);
+        winchGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(winchGeo, shipMat('#fbbf24', { metalness: 0.5 }))).position.set(-2.5, 3.3, 0);
+
+        var bittGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.6, 6);
+        addToShip(new THREE.Mesh(bittGeo, shipMat('#374151', { metalness: 0.6 }))).position.set(-3, 3.3, 0.5);
+        addToShip(new THREE.Mesh(bittGeo.clone(), shipMat('#374151', { metalness: 0.6 }))).position.set(-3, 3.3, -0.5);
+
+        var fenderGeo = new THREE.TorusGeometry(0.25, 0.1, 8, 12);
+        for (var f = -1; f <= 2; f++) {
+            var fender1 = new THREE.Mesh(fenderGeo, shipMat('#1e293b', { roughness: 0.9 }));
+            fender1.position.set(f * 1.5, 2.0, 1.9);
+            fender1.rotation.y = Math.PI / 2;
+            addToShip(fender1);
+
+            var fender2 = new THREE.Mesh(fenderGeo.clone(), shipMat('#1e293b', { roughness: 0.9 }));
+            fender2.position.set(f * 1.5, 2.0, -1.9);
+            fender2.rotation.y = Math.PI / 2;
+            addToShip(fender2);
+        }
+    }
+
+    // ── Generic/Other: 기본 선박 모델 ──
+    function buildGenericShip(THREE, color) {
+        var hullShape = new THREE.Shape();
+        hullShape.moveTo(-6, -2);
+        hullShape.lineTo(-6, 2);
+        hullShape.lineTo(4, 1.2);
+        hullShape.lineTo(8, 0);
+        hullShape.lineTo(4, -1.2);
+        hullShape.closePath();
+
+        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.15, bevelSegments: 2 });
+        hullGeo.rotateX(-Math.PI / 2);
+        var hull = new THREE.Mesh(hullGeo, shipMat(color));
+        hull.position.set(0, 1.5, -1.5);
+        addToShip(hull);
+
+        var deckGeo = new THREE.BoxGeometry(12, 0.2, 3.5);
+        addToShip(new THREE.Mesh(deckGeo, shipMat('#3f3f46'))).position.set(0, 3.1, 0);
+
+        var bridgeGeo = new THREE.BoxGeometry(3, 2.5, 2.8);
+        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#52525b'))).position.set(-3, 4.5, 0);
+
+        var winGeo = new THREE.BoxGeometry(0.1, 0.6, 2.2);
+        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-1.45, 4.8, 0);
+
+        var funnelGeo = new THREE.CylinderGeometry(0.4, 0.5, 2, 8);
+        addToShip(new THREE.Mesh(funnelGeo, shipMat('#27272a'))).position.set(-4.5, 5, 0);
+
+        var mastGeo = new THREE.CylinderGeometry(0.05, 0.05, 3, 4);
+        addToShip(new THREE.Mesh(mastGeo, shipMat('#71717a'))).position.set(-3, 7, 0);
     }
 
     // ── startAnimation() ──
