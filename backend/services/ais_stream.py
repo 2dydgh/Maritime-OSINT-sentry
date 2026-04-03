@@ -306,6 +306,7 @@ def get_ais_vessels() -> list[dict]:
                 "beam": v.get("beam", 0),
                 "draught": v.get("draught", 0),
                 "eta": v.get("eta", ""),
+                "ais_class": v.get("ais_class", "A"),
             })
         ais_vessels_active.set(len(result))
         return result
@@ -393,6 +394,7 @@ def _ais_stream_loop():
                         heading = report.get("TrueHeading", 511)
                         vessel["heading"] = heading if heading != 511 else report.get("Cog", 0)
                         vessel["_updated"] = time.time()
+                        vessel["ais_class"] = "B" if msg_type == "StandardClassBPositionReport" else "A"
                         # Use metadata name if we don't have one yet
                         if not vessel.get("name") or vessel["name"] == "UNKNOWN":
                             vessel["name"] = metadata.get("ShipName", "UNKNOWN").strip() or "UNKNOWN"
