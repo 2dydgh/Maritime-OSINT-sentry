@@ -28,6 +28,10 @@ var RollViewer = (function() {
     var shipType = 'other';
     var rollParams = null;
 
+    var sprayPoints = null;
+    var sprayVelocities = [];
+    var SPRAY_COUNT = 80;
+
     var cameraAnimating = false;
     var cameraAnimStart = 0;
     var CAMERA_ANIM_DURATION = 2.0; // seconds
@@ -210,6 +214,7 @@ var RollViewer = (function() {
         buildWater();
         buildCompass();
         buildShip(shipType);
+        buildSpray();
         startAnimation();
 
         // Init ECharts roll chart
@@ -433,6 +438,89 @@ var RollViewer = (function() {
         scene.add(sprite);
     }
 
+    // ── buildSpray() — bow spray particle system ──
+    function buildSpray() {
+        var THREE = window.THREE;
+
+        var geometry = new THREE.BufferGeometry();
+        var positions = new Float32Array(SPRAY_COUNT * 3);
+
+        sprayVelocities = [];
+
+        for (var i = 0; i < SPRAY_COUNT; i++) {
+            positions[i * 3]     = 7 + Math.random() * 2;
+            positions[i * 3 + 1] = 1 + Math.random() * 0.5;
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 3;
+
+            sprayVelocities.push({
+                vx: 0.5 + Math.random() * 1.5,
+                vy: 2 + Math.random() * 3,
+                vz: (Math.random() - 0.5) * 2,
+                life: 0,
+                maxLife: 0.8 + Math.random() * 1.2
+            });
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        var material = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 0.4,
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            sizeAttenuation: true
+        });
+
+        sprayPoints = new THREE.Points(geometry, material);
+        scene.add(sprayPoints);
+    }
+
+    // ── animateSpray(dt) — update spray particles each frame ──
+    function animateSpray(dt) {
+        if (!sprayPoints) return;
+
+        var pos = sprayPoints.geometry.attributes.position;
+        var intensity = Math.min(weather.waveHeight / 3, 1) * 0.8 + 0.2;
+        var gravity = -6;
+
+        for (var i = 0; i < SPRAY_COUNT; i++) {
+            var v = sprayVelocities[i];
+            v.life += dt;
+
+            if (v.life >= v.maxLife) {
+                pos.setXYZ(i,
+                    7 + Math.random() * 2,
+                    1 + Math.random() * 0.5,
+                    (Math.random() - 0.5) * 3
+                );
+                v.vx = (0.5 + Math.random() * 1.5) * intensity;
+                v.vy = (2 + Math.random() * 3) * intensity;
+                v.vz = (Math.random() - 0.5) * 2 * intensity;
+                v.life = 0;
+                v.maxLife = 0.8 + Math.random() * 1.2;
+                continue;
+            }
+
+            var x = pos.getX(i) + v.vx * dt;
+            var y = pos.getY(i) + v.vy * dt;
+            var z = pos.getZ(i) + v.vz * dt;
+
+            v.vy += gravity * dt;
+
+            if (y < 0) {
+                v.life = v.maxLife;
+                y = 0;
+            }
+
+            pos.setXYZ(i, x, y, z);
+        }
+
+        sprayPoints.material.opacity = 0.5 * intensity;
+        pos.needsUpdate = true;
+    }
+
     // ── buildWater() — Three.js Water shader with reflection/refraction ──
     function buildWater() {
         var THREE = window.THREE;
@@ -555,6 +643,7 @@ var RollViewer = (function() {
 
             animateWater(elapsed);
             animateCamera(elapsed);
+            animateSpray(1 / 60);
 
             // Roll & Pitch calculation
             var roll = rollParams.amp * Math.sin(elapsed * rollParams.freq * Math.PI * 2)
@@ -915,6 +1004,8 @@ var RollViewer = (function() {
         camera = null;
         shipGroup = null;
         waterMesh = null;
+        sprayPoints = null;
+        sprayVelocities = [];
         clockStart = null;
         cameraAnimating = false;
         weather = null;
