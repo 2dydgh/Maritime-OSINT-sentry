@@ -376,19 +376,30 @@
                 <svg class="risk-sparkline" id="riskSparkline" viewBox="0 0 80 30" preserveAspectRatio="none"></svg>
             </div>
         </div>
-        <div class="stat-card" id="statWind">
-            <div class="stat-card-info">
-                <span class="stat-card-label">WIND MAX</span>
+        <div class="stat-card stat-card-compact" id="statWindWave">
+            <div class="wind-wave-row">
+                <span class="stat-card-label">WIND</span>
                 <span class="stat-card-value" id="bottomWind">--<span class="stat-card-unit">kt</span></span>
             </div>
-            <span class="stat-card-loc" id="bottomWindLoc"></span>
-        </div>
-        <div class="stat-card" id="statWave">
-            <div class="stat-card-info">
-                <span class="stat-card-label">WAVE MAX</span>
+            <div class="wind-wave-divider"></div>
+            <div class="wind-wave-row">
+                <span class="stat-card-label">WAVE</span>
                 <span class="stat-card-value" id="bottomWave">--<span class="stat-card-unit">m</span></span>
             </div>
-            <span class="stat-card-loc" id="bottomWaveLoc"></span>
+        </div>
+        <div class="stat-card stat-card-bar" id="statFlag">
+            <div class="stat-card-info">
+                <span class="stat-card-label">FLAG</span>
+                <span class="stat-card-value" id="bottomFlagCount">0</span>
+            </div>
+            <div class="flag-bars" id="flagBars"></div>
+        </div>
+        <div class="stat-card stat-card-density" id="statDensity">
+            <div class="stat-card-info">
+                <span class="stat-card-label">DENSITY</span>
+                <span class="stat-card-sublabel">5×5</span>
+            </div>
+            <div class="density-grid" id="densityGrid"></div>
         </div>
     </div>
 

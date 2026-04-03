@@ -322,15 +322,6 @@
     color: var(--text-dim);
 }
 
-.stat-card-loc {
-    font-family: 'Pretendard Variable', 'Inter', sans-serif;
-    font-size: 0.55rem;
-    color: var(--text-dim);
-    white-space: nowrap;
-    text-align: right;
-    min-width: 0;
-    flex-shrink: 0;
-}
 
 .stat-card-chart {
     flex: 1;
@@ -407,6 +398,101 @@
 .mini-bar-danger { background: #ef4444; }
 .mini-bar-warning { background: #fb923c; }
 .mini-bar-caution { background: #eab308; }
+
+/* Wind·Wave merged card */
+.stat-card-compact {
+    flex: 0.7;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+}
+
+.wind-wave-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.wind-wave-row .stat-card-value {
+    font-size: 0.8rem;
+}
+
+.wind-wave-divider {
+    height: 1px;
+    background: rgba(148, 163, 184, 0.1);
+}
+
+/* FLAG country distribution */
+.flag-bars {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    justify-content: center;
+    min-width: 0;
+}
+
+.flag-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.flag-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.35rem;
+    color: var(--text-dim);
+    width: 14px;
+    flex-shrink: 0;
+}
+
+.flag-bar-bg {
+    height: 4px;
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.flag-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+}
+
+.flag-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.35rem;
+    color: var(--text-dim);
+    min-width: 12px;
+    text-align: right;
+}
+
+/* DENSITY heatmap grid */
+.stat-card-density {
+    flex: 0.8;
+}
+
+.stat-card-sublabel {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.density-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    flex: 1;
+    height: 32px;
+    min-width: 0;
+}
+
+.density-cell {
+    border-radius: 1px;
+    min-width: 0;
+}
 .mini-bar-safe { background: rgba(148, 163, 184, 0.2); }
 
 /* Dedicated Screen */

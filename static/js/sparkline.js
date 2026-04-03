@@ -151,11 +151,101 @@ var BottomBar = (function() {
         }
     }
 
+    // FLAG — country distribution Top 5
+    var FLAG_BAR_COLORS = ['#406FD8', '#5b8ce8', '#7ba3ff', '#9bb8ff', '#b8cdff'];
+
+    function updateFlagDistribution(vessels) {
+        var container = document.getElementById('flagBars');
+        var countEl = document.getElementById('bottomFlagCount');
+        if (!container) return;
+
+        var countryMap = {};
+        var uniqueCountries = 0;
+        vessels.forEach(function(v) {
+            var c = v.country || v.flag || '';
+            if (!c) return;
+            if (!countryMap[c]) { countryMap[c] = 0; uniqueCountries++; }
+            countryMap[c]++;
+        });
+
+        if (countEl) countEl.textContent = uniqueCountries;
+
+        var sorted = Object.keys(countryMap).map(function(k) {
+            return { code: k, count: countryMap[k] };
+        }).sort(function(a, b) { return b.count - a.count; }).slice(0, 5);
+
+        if (sorted.length === 0) { container.innerHTML = ''; return; }
+
+        var maxCount = sorted[0].count;
+        var html = '';
+        sorted.forEach(function(item, i) {
+            var pct = (item.count / maxCount * 100).toFixed(0);
+            var color = FLAG_BAR_COLORS[i] || FLAG_BAR_COLORS[4];
+            html += '<div class="flag-row">' +
+                '<span class="flag-code">' + item.code + '</span>' +
+                '<div class="flag-bar-bg"><div class="flag-bar-fill" style="width:' + pct + '%;background:' + color + ';"></div></div>' +
+                '<span class="flag-count">' + item.count + '</span>' +
+                '</div>';
+        });
+        container.innerHTML = html;
+    }
+
+    // DENSITY — 5x5 heatmap grid
+    function updateDensityGrid(vessels, viewBounds) {
+        var container = document.getElementById('densityGrid');
+        if (!container) return;
+
+        var ROWS = 5, COLS = 5;
+        var grid = [];
+        for (var i = 0; i < ROWS * COLS; i++) grid[i] = 0;
+
+        if (!viewBounds || !viewBounds.west) {
+            container.innerHTML = '';
+            return;
+        }
+
+        var west = viewBounds.west, east = viewBounds.east;
+        var south = viewBounds.south, north = viewBounds.north;
+        var lonRange = east - west;
+        var latRange = north - south;
+        if (lonRange <= 0 || latRange <= 0) return;
+
+        vessels.forEach(function(v) {
+            if (v.lng < west || v.lng > east || v.lat < south || v.lat > north) return;
+            var col = Math.min(Math.floor((v.lng - west) / lonRange * COLS), COLS - 1);
+            var row = Math.min(Math.floor((north - v.lat) / latRange * ROWS), ROWS - 1);
+            grid[row * COLS + col]++;
+        });
+
+        var maxDensity = Math.max.apply(null, grid);
+        if (maxDensity === 0) maxDensity = 1;
+
+        var html = '';
+        for (var i = 0; i < ROWS * COLS; i++) {
+            var ratio = grid[i] / maxDensity;
+            var color, opacity;
+            if (ratio > 0.7) {
+                color = '244,63,94';
+                opacity = 0.3 + ratio * 0.6;
+            } else if (ratio > 0.4) {
+                color = '249,115,22';
+                opacity = 0.2 + ratio * 0.5;
+            } else {
+                color = '64,111,216';
+                opacity = ratio * 0.5;
+            }
+            html += '<div class="density-cell" style="background:rgba(' + color + ',' + opacity.toFixed(2) + ');"></div>';
+        }
+        container.innerHTML = html;
+    }
+
     return {
         pushData: pushData,
         updateVesselTypes: updateVesselTypes,
         updateRiskLevels: updateRiskLevels,
-        updateValue: updateValue
+        updateValue: updateValue,
+        updateFlagDistribution: updateFlagDistribution,
+        updateDensityGrid: updateDensityGrid
     };
 })();
 
