@@ -350,21 +350,22 @@ def _make_ship_info(v: dict) -> dict:
 
 
 def analyze_distance_risks(proximity_pairs: list[dict]) -> list[dict]:
-    """거리 기반 DCPA/TCPA 임계값 판정. 조우 유형별 차등 임계값 적용."""
+    """거리 기반 DCPA/TCPA 임계값 판정. Class 조합 + 조우 유형별 차등 적용."""
     risks = []
     now_ts = datetime.now(timezone.utc).isoformat()
 
     for pair in proximity_pairs:
         dcpa = pair["dcpa_nm"]
         encounter = pair.get("encounter", "crossing")
+        pair_class = pair.get("pair_class", "AA")
+        thresholds = CLASS_THRESHOLDS[pair_class]
 
-        # head-on은 정상 교행이 많으므로 임계값을 엄격하게 적용
         if encounter == "head-on":
-            danger_thresh = DCPA_DANGER_HEAD_ON_NM
-            warning_thresh = DCPA_WARNING_HEAD_ON_NM
+            danger_thresh = thresholds["dcpa_danger_head_on"]
+            warning_thresh = thresholds["dcpa_warning_head_on"]
         else:
-            danger_thresh = DCPA_DANGER_NM
-            warning_thresh = DCPA_WARNING_NM
+            danger_thresh = thresholds["dcpa_danger"]
+            warning_thresh = thresholds["dcpa_warning"]
 
         if dcpa > warning_thresh:
             continue
@@ -379,6 +380,7 @@ def analyze_distance_risks(proximity_pairs: list[dict]) -> list[dict]:
             "current_dist_nm": pair["current_dist_nm"],
             "severity": severity,
             "encounter": encounter,
+            "pair_class": pair_class,
             "ts": now_ts,
         })
 

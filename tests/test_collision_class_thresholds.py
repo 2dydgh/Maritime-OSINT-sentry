@@ -66,3 +66,63 @@ def test_bb_pair_filtered_by_shorter_tcpa_max():
     assert len(pairs_bb) == 0
     # A-A: TCPA ~12분 < tcpa_max 20분 → 유지
     assert len(pairs_aa) >= 1
+
+
+# --- Task 4: Class 기반 DCPA 임계값 테스트 ---
+
+def test_analyze_distance_risks_class_ab_thresholds():
+    """A-B 쌍은 A-B 임계값(dcpa_warning=0.7nm)을 적용한다."""
+    pair_aa = {
+        "ship_a": _make_vessel(4001, 33.5, 125.0, ais_class="A"),
+        "ship_b": _make_vessel(4002, 33.5, 125.01, ais_class="A"),
+        "tcpa_min": 5.0,
+        "dcpa_nm": 0.8,
+        "current_dist_nm": 1.5,
+        "encounter": "crossing",
+        "pair_class": "AA",
+    }
+    pair_ab = {
+        "ship_a": _make_vessel(5001, 33.5, 125.0, ais_class="A"),
+        "ship_b": _make_vessel(5002, 33.5, 125.01, ais_class="B"),
+        "tcpa_min": 5.0,
+        "dcpa_nm": 0.8,
+        "current_dist_nm": 1.5,
+        "encounter": "crossing",
+        "pair_class": "AB",
+    }
+
+    risks_aa = collision_analyzer.analyze_distance_risks([pair_aa])
+    risks_ab = collision_analyzer.analyze_distance_risks([pair_ab])
+
+    assert len(risks_aa) == 1
+    assert risks_aa[0]["severity"] == "warning"
+    assert len(risks_ab) == 0
+
+
+def test_analyze_distance_risks_head_on_class_bb():
+    """B-B head-on은 dcpa_warning_head_on=0.3nm 적용."""
+    pair_aa = {
+        "ship_a": _make_vessel(6001, 33.5, 125.0, cog=90, ais_class="A"),
+        "ship_b": _make_vessel(6002, 33.5, 125.01, cog=270, ais_class="A"),
+        "tcpa_min": 3.0,
+        "dcpa_nm": 0.4,
+        "current_dist_nm": 1.0,
+        "encounter": "head-on",
+        "pair_class": "AA",
+    }
+    pair_bb = {
+        "ship_a": _make_vessel(7001, 33.5, 125.0, cog=90, ais_class="B"),
+        "ship_b": _make_vessel(7002, 33.5, 125.01, cog=270, ais_class="B"),
+        "tcpa_min": 3.0,
+        "dcpa_nm": 0.4,
+        "current_dist_nm": 1.0,
+        "encounter": "head-on",
+        "pair_class": "BB",
+    }
+
+    risks_aa = collision_analyzer.analyze_distance_risks([pair_aa])
+    risks_bb = collision_analyzer.analyze_distance_risks([pair_bb])
+
+    assert len(risks_aa) == 1
+    assert risks_aa[0]["severity"] == "warning"
+    assert len(risks_bb) == 0
