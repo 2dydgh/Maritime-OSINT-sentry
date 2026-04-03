@@ -36,6 +36,39 @@ HEAD_ON_ANGLE = 30.0         # COG 차이 150~210도 → head-on 판정
 DCPA_DANGER_HEAD_ON_NM = 0.3 # head-on 위험: DCPA < 0.3nm
 DCPA_WARNING_HEAD_ON_NM = 0.5  # head-on 경고: DCPA < 0.5nm
 
+# --- Class A/B 조합별 임계값 ---
+CLASS_THRESHOLDS = {
+    "AA": {
+        "dcpa_danger": 0.5,       # nm
+        "dcpa_warning": 1.0,      # nm
+        "dcpa_danger_head_on": 0.3,
+        "dcpa_warning_head_on": 0.5,
+        "tcpa_max": 20,           # 분
+    },
+    "AB": {
+        "dcpa_danger": 0.3,
+        "dcpa_warning": 0.7,
+        "dcpa_danger_head_on": 0.18,
+        "dcpa_warning_head_on": 0.42,
+        "tcpa_max": 15,
+    },
+    "BB": {
+        "dcpa_danger": 0.2,
+        "dcpa_warning": 0.5,
+        "dcpa_danger_head_on": 0.12,
+        "dcpa_warning_head_on": 0.3,
+        "tcpa_max": 10,
+    },
+}
+
+
+def _get_pair_class(ship_a: dict, ship_b: dict) -> str:
+    """두 선박의 ais_class 조합 키를 반환. 항상 알파벳 순 정렬."""
+    ca = ship_a.get("ais_class", "A")
+    cb = ship_b.get("ais_class", "A")
+    return "".join(sorted([ca, cb]))
+
+
 # 그리드 셀 크기 (도 단위, ~5nm ≈ 0.083도)
 GRID_CELL_DEG = 0.1
 
@@ -279,8 +312,12 @@ def _build_proximity_pairs(vessels: list[dict]) -> list[dict]:
                     other["lat"], other["lng"], other["sog"], other["cog"],
                 )
 
+                # Class 조합별 TCPA 상한 적용
+                pair_class = _get_pair_class(v, other)
+                tcpa_max = CLASS_THRESHOLDS[pair_class]["tcpa_max"]
+
                 # TCPA가 음수(이미 지나감), 해소 직전(< 1분), 너무 먼 미래면 스킵
-                if tcpa < TCPA_MIN_MIN or tcpa > TCPA_MAX_MIN:
+                if tcpa < TCPA_MIN_MIN or tcpa > tcpa_max:
                     continue
 
                 encounter = _classify_encounter(v["cog"], other["cog"])
@@ -292,6 +329,7 @@ def _build_proximity_pairs(vessels: list[dict]) -> list[dict]:
                     "dcpa_nm": round(dcpa, 3),
                     "current_dist_nm": round(dist, 2),
                     "encounter": encounter,
+                    "pair_class": pair_class,
                 })
 
     return pairs
