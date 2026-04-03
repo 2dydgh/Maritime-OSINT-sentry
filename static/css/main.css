@@ -551,8 +551,8 @@
 }
 
 .roll-viewer-section {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--panel-border);
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .roll-viewer-section-title {
@@ -562,6 +562,8 @@
     letter-spacing: 1px;
     text-transform: uppercase;
     margin-bottom: 8px;
+    padding-left: 8px;
+    border-left: 2px solid var(--secondary);
 }
 
 .rv-info-row {
@@ -584,11 +586,12 @@
 
 .roll-gauge {
     position: relative;
-    height: 24px;
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 4px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
     overflow: hidden;
     margin-top: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .roll-gauge-fill {
@@ -619,10 +622,10 @@
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
-.roll-gauge-safe .roll-gauge-fill { background: var(--secondary); }
-.roll-gauge-caution .roll-gauge-fill { background: var(--secondary); }
-.roll-gauge-warning .roll-gauge-fill { background: var(--accent-amber); }
-.roll-gauge-danger .roll-gauge-fill { background: var(--accent-red); }
+.roll-gauge-safe .roll-gauge-fill { background: linear-gradient(90deg, var(--secondary), rgba(64, 111, 216, 0.6)); }
+.roll-gauge-caution .roll-gauge-fill { background: linear-gradient(90deg, var(--secondary), #fbbf24); }
+.roll-gauge-warning .roll-gauge-fill { background: linear-gradient(90deg, #f59e0b, var(--accent-amber)); }
+.roll-gauge-danger .roll-gauge-fill { background: linear-gradient(90deg, #f97316, var(--accent-red)); }
 
 /* ── Tilt Indicator ── */
 .rv-tilt-row {
@@ -645,11 +648,12 @@
     border-radius: 50%;
     border: 2px solid var(--secondary);
     overflow: hidden;
-    transition: border-color 0.3s ease;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 0 8px rgba(64, 111, 216, 0.15);
 }
 
-.rv-tilt-indicator[data-level="warning"] .rv-tilt-ring { border-color: var(--accent-amber); }
-.rv-tilt-indicator[data-level="danger"] .rv-tilt-ring { border-color: var(--accent-red); }
+.rv-tilt-indicator[data-level="warning"] .rv-tilt-ring { border-color: var(--accent-amber); box-shadow: 0 0 8px rgba(245, 158, 11, 0.2); }
+.rv-tilt-indicator[data-level="danger"] .rv-tilt-ring { border-color: var(--accent-red); box-shadow: 0 0 12px rgba(239, 68, 68, 0.3); }
 
 .rv-tilt-horizon {
     position: absolute;
