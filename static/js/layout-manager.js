@@ -50,8 +50,19 @@ var LayoutManager = (function() {
     }
 
     function handleIconClick(panel, action) {
-        // Toggle: same icon clicked again → deactivate
+        // Same panel clicked again
         if (panel === activePanel) {
+            // For dedicated-screen models, check if MMSI changed → re-activate
+            if (action === 'dedicated-screen') {
+                var m = window.ModelRegistry && ModelRegistry.get(panel);
+                if (m && m._selectedMmsi !== undefined) {
+                    // Re-activate with new MMSI (deactivate first to reset state)
+                    deactivate(panel, action);
+                    activate(panel, action);
+                    return;
+                }
+            }
+            // Otherwise toggle off
             deactivate(panel, action);
             activePanel = null;
             activeAction = null;
@@ -216,11 +227,21 @@ var LayoutManager = (function() {
         return activePanel;
     }
 
+    /** Explicitly close the active dedicated-screen (used by back buttons). */
+    function closeDedicatedPanel() {
+        if (activePanel && activeAction === 'dedicated-screen') {
+            deactivate(activePanel, activeAction);
+            activePanel = null;
+            activeAction = null;
+        }
+    }
+
     return {
         init: init,
         handleIconClick: handleIconClick,
         openRightPanel: openRightPanel,
         closeRightPanel: closeRightPanel,
+        closeDedicatedPanel: closeDedicatedPanel,
         showShipInfo: showShipInfo,
         showDedicatedScreen: showDedicatedScreen,
         getActivePanel: getActivePanel

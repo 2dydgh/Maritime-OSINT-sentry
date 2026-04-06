@@ -1,14 +1,14 @@
 // ── Maritime OSINT Sentry — UI Controls ──
 
-// ── Header UTC Clock ──
+// ── Header KST Clock ──
 function updateHeaderClock() {
     var el = document.getElementById('headerUtcClock');
     if (!el) return;
-    var now = new Date();
-    var h = String(now.getUTCHours()).padStart(2, '0');
-    var m = String(now.getUTCMinutes()).padStart(2, '0');
-    var s = String(now.getUTCSeconds()).padStart(2, '0');
-    el.textContent = h + ':' + m + ':' + s + ' UTC';
+    var now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    var h = String(now.getHours()).padStart(2, '0');
+    var m = String(now.getMinutes()).padStart(2, '0');
+    var s = String(now.getSeconds()).padStart(2, '0');
+    el.textContent = h + ':' + m + ':' + s + ' KST';
 }
 setInterval(updateHeaderClock, 1000);
 updateHeaderClock();
@@ -586,7 +586,8 @@ viewer.clock.onTick.addEventListener(function(clock) {
     if (timeMode !== 'history') return;
 
     var jsDate = Cesium.JulianDate.toDate(clock.currentTime);
-    var displayTime = jsDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+    var kst = new Date(jsDate.getTime() + 9 * 60 * 60 * 1000);
+    var displayTime = kst.toISOString().replace('T', ' ').substring(0, 19) + ' KST';
     var tdEl = document.getElementById('tcb-time-display');
     if (tdEl) tdEl.textContent = displayTime;
     var luEl = document.getElementById('last-update');

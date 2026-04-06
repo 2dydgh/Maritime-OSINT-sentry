@@ -200,18 +200,18 @@ var ModelRegistry = (function() {
 
         Object.keys(models).forEach(function(id) {
             var m = models[id];
+            if (m.type === 'globe-layer') return;
             if (typeof m.getShipSummary !== 'function') return;
 
             var summary = m.getShipSummary(mmsi);
             if (!summary) return;
 
             var card = document.createElement('div');
-            card.className = 'model-card model-card-' + (summary.level || 'safe');
+            card.className = 'model-card';
             card.dataset.modelId = id;
             card.innerHTML =
                 '<div class="model-card-icon"><i class="fa-solid ' + (summary.icon || 'fa-circle') + '"></i></div>' +
-                '<div class="model-card-label">' + summary.label + '</div>' +
-                '<div class="model-card-value">' + summary.status + '</div>';
+                '<div class="model-card-label">' + summary.label + '</div>';
 
             // Click card → navigate to that model
             card.addEventListener('click', function() {

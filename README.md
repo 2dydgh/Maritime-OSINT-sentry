@@ -133,7 +133,7 @@ AIS 선박 추적, 위성 궤도 전파, 이상 징후 탐지, ML 기반 충돌 
 ## 시작하기
 
 ### 사전 요구사항
-- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - PostgreSQL + PostGIS
 - AISStream.io API Key
 
@@ -150,12 +150,12 @@ AIS_API_KEY=your_aisstream_key
 
 ### 설치
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 실행
 ```bash
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8001
+uv run uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
 ## 모니터링

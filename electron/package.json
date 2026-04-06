@@ -6,7 +6,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:backend": "cd .. && ./venv/bin/pyinstaller electron/backend.spec --distpath electron/dist --workpath electron/build --clean -y",
+    "build:backend": "cd .. && uv run pyinstaller electron/backend.spec --distpath electron/dist --workpath electron/build --clean -y",
     "dist": "npm run build:backend && electron-builder",
     "dist:win": "electron-builder --win",
     "dist:linux": "npm run build:backend && electron-builder --linux",
@@ -38,8 +38,8 @@
         "to": "app/backend/ais_proxy.js"
       },
       {
-        "from": "../requirements-lite.txt",
-        "to": "app/requirements-lite.txt"
+        "from": "../pyproject.toml",
+        "to": "app/pyproject.toml"
       }
     ],
     "linux": {

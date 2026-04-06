@@ -39,7 +39,7 @@ var RouteViewer = (function() {
     var ROUTE_ALT = 500;
     var SHIP_ICON_URL = 'data:image/svg+xml,' + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">' +
-        '<polygon points="16,2 28,28 16,22 4,28" fill="#7BA3FF" stroke="#3058B0" stroke-width="1.5"/>' +
+        '<polygon points="16,2 28,28 16,22 4,28" fill="#eab308" stroke="#a16207" stroke-width="1.5"/>' +
         '</svg>'
     );
 
@@ -550,7 +550,7 @@ var RouteViewer = (function() {
                 positions: dashPositions,
                 width: 5,
                 material: new Cesium.PolylineDashMaterialProperty({
-                    color: Cesium.Color.fromCssColorString('#7BA3FF'),
+                    color: Cesium.Color.fromCssColorString('#eab308'),
                     dashLength: 8,
                 }),
                 arcType: Cesium.ArcType.RHUMB,
@@ -860,6 +860,36 @@ var RouteViewer = (function() {
             .catch(function() {});
     }
 
+    function showRouteOverlay() {
+        // Vignette
+        var vig = document.getElementById('route-vignette');
+        if (!vig) {
+            vig = document.createElement('div');
+            vig.id = 'route-vignette';
+            vig.className = 'route-vignette';
+            document.getElementById('dedicated-route-inference').appendChild(vig);
+        }
+        vig.classList.add('active');
+
+        // Mode bar
+        var bar = document.getElementById('route-mode-bar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'route-mode-bar';
+            bar.className = 'route-mode-bar';
+            bar.innerHTML = '<i class="fa-solid fa-route"></i> 항로 추론 모드';
+            document.getElementById('dedicated-route-inference').appendChild(bar);
+        }
+        bar.classList.add('active');
+    }
+
+    function hideRouteOverlay() {
+        var vig = document.getElementById('route-vignette');
+        if (vig) vig.classList.remove('active');
+        var bar = document.getElementById('route-mode-bar');
+        if (bar) bar.classList.remove('active');
+    }
+
     function activate() {
         if (active) return;
         active = true;
@@ -869,6 +899,7 @@ var RouteViewer = (function() {
         hideExistingLayers();
         moveGlobeToRoute();
         setupGlobeClickHandler();
+        showRouteOverlay();
 
         if (!eventsWired) {
             eventsWired = true;
@@ -886,6 +917,7 @@ var RouteViewer = (function() {
         if (!active) return;
         active = false;
 
+        hideRouteOverlay();
         clearRoute();
         hidePlaybar();
         destroyGlobeClickHandler();

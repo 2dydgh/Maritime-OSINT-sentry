@@ -484,43 +484,16 @@ function initWebSocket() {
 
                 // Bottom bar vessel count + type distribution
                 if (typeof BottomBar !== 'undefined') {
-                    BottomBar.updateValue('bottomVessels', totalCount);
-                    var typeCounts = {};
-                    _lastShipsData.forEach(function(s) {
-                        var t = s.type || 'other';
-                        typeCounts[t] = (typeCounts[t] || 0) + 1;
-                    });
-                    BottomBar.updateVesselTypes(typeCounts);
-
                     // FLAG country distribution
                     BottomBar.updateFlagDistribution(_lastShipsData);
+                    BottomBar._storeVessels(_lastShipsData);
 
-                    // DENSITY heatmap from current viewport
-                    var viewBounds = null;
-                    if (typeof viewer !== 'undefined' && viewer.camera) {
-                        var rect = viewer.camera.computeViewRectangle();
-                        if (rect) {
-                            viewBounds = {
-                                west: Cesium.Math.toDegrees(rect.west),
-                                east: Cesium.Math.toDegrees(rect.east),
-                                south: Cesium.Math.toDegrees(rect.south),
-                                north: Cesium.Math.toDegrees(rect.north)
-                            };
-                        }
-                    }
-                    if (typeof leafletMap !== 'undefined' && leafletMap && currentMapMode === '2d') {
-                        var b = leafletMap.getBounds();
-                        viewBounds = {
-                            west: b.getWest(), east: b.getEast(),
-                            south: b.getSouth(), north: b.getNorth()
-                        };
-                    }
-                    BottomBar.updateDensityGrid(_lastShipsData, viewBounds);
                 }
 
                 if (data.timestamp) {
                     var updated = new Date(data.timestamp);
-                    document.getElementById('last-update').textContent = updated.toISOString().substring(11, 19);
+                    var kst = new Date(updated.getTime() + 9 * 60 * 60 * 1000);
+                    document.getElementById('last-update').textContent = kst.toISOString().substring(11, 19);
                 }
 
                 // Update header latency indicator

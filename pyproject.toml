@@ -1,0 +1,42 @@
+[project]
+name = "4dwar"
+version = "1.0.0"
+description = "Maritime OSINT Sentry — 실시간 해양 상황인식(MSA) 플랫폼"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.1",
+    "asyncpg>=0.29.0",
+    "pydantic>=2.7.4",
+    "python-dotenv>=1.0.1",
+    "apscheduler>=3.10.0",
+    "sgp4>=2.23",
+    "cachetools>=5.3.0",
+    "requests>=2.31.0",
+    "redis>=5.0.0",
+    "prometheus_client>=0.20.0",
+    "structlog>=24.1.0",
+    "httpx>=0.27.0",
+    "shapely>=2.0",
+    "pyshp>=2.3",
+    "searoute>=1.5.0",
+    "websockets>=16.0",
+]
+
+[dependency-groups]
+lite = [
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.1",
+    "pydantic>=2.7.4",
+    "python-dotenv>=1.0.1",
+    "apscheduler>=3.10.0",
+    "sgp4>=2.23",
+    "cachetools>=5.3.0",
+    "requests>=2.31.0",
+    "shapely>=2.0",
+    "pyshp>=2.3",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
