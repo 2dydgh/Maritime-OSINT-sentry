@@ -420,13 +420,23 @@ def _ais_stream_loop():
 
                     ais_messages_total.labels(message_type="position").inc()
 
-                    # --- Anomaly: Speeding vessel ---
+                    # --- Anomaly: SOG not available (AIS 10-bit max = 102.3) ---
                     sog = report.get("Sog", 0)
                     v_name = vessel.get("name", "UNKNOWN")
                     v_type = vessel.get("type", "unknown")
-                    # Alert on cargo/tanker/military going faster than 25 knots (very fast for large ships)
-                    # Or any vessel > 35 knots (abnormal for any commercial vessel)
-                    if sog and ((sog > 25 and v_type in ("cargo", "tanker", "military_vessel")) or sog > 35):
+                    if sog and abs(sog - 102.3) < 0.1:
+                        _maybe_alert("signal_lost", mmsi, {
+                            "name": v_name,
+                            "lat": lat,
+                            "lng": lng,
+                            "sog": round(sog, 1),
+                            "vessel_type": v_type,
+                            "country": get_country_from_mmsi(mmsi),
+                            "message": f"속도 신호 없음 (SOG=102.3, 유형: {v_type})",
+                            "severity": "medium",
+                        })
+                    # --- Anomaly: Speeding vessel ---
+                    elif sog and ((sog > 25 and v_type in ("cargo", "tanker", "military_vessel")) or sog > 35):
                         _maybe_alert("speeding", mmsi, {
                             "name": v_name,
                             "lat": lat,

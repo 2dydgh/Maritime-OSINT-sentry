@@ -87,10 +87,13 @@ if (tabDist) tabDist.addEventListener('click', function() { switchCollisionTab('
 if (tabMl) tabMl.addEventListener('click', function() { switchCollisionTab('ml'); });
 
 function collisionSeverityBadge(severity) {
-    var colors = { danger: '#f43f5e', warning: '#eab308' };
-    var labels = { danger: '\u26A0 위험', warning: '\u25B2 주의' };
-    var bg = severity === 'danger' ? 'rgba(244,63,94,0.2)' : 'rgba(234,179,8,0.2)';
-    return '<span class="collision-badge" style="background:' + bg + ';color:' + colors[severity] + '">' + labels[severity] + '</span>';
+    var colors = { danger: '#f43f5e', caution: '#f97316', warning: '#eab308' };
+    var labels = { danger: '\u26A0 위험', caution: '\u25C6 경고', warning: '\u25B2 주의' };
+    var bgs = { danger: 'rgba(244,63,94,0.2)', caution: 'rgba(249,115,22,0.2)', warning: 'rgba(234,179,8,0.2)' };
+    var c = colors[severity] || '#eab308';
+    var bg = bgs[severity] || 'rgba(234,179,8,0.2)';
+    var lbl = labels[severity] || severity;
+    return '<span class="collision-badge" style="background:' + bg + ';color:' + c + '">' + lbl + '</span>';
 }
 
 function mlRiskBadge(level, label) {
@@ -145,10 +148,10 @@ function renderCollisionList() {
             dangerN = countByLevel[3]; warnN = countByLevel[2]; cautionN = countByLevel[1];
             dangerLabel = '위험'; warnLabel = '경고'; cautionLabel = '주의';
         } else {
-            dangerN = risks.filter(function(r) { return r.severity === 'high' || r.severity === 'danger'; }).length;
-            warnN = risks.filter(function(r) { return r.severity === 'medium' || r.severity === 'warning'; }).length;
-            cautionN = risks.length - dangerN - warnN;
-            dangerLabel = '고위험'; warnLabel = '경고'; cautionLabel = '주의';
+            dangerN = risks.filter(function(r) { return r.severity === 'danger'; }).length;
+            warnN = risks.filter(function(r) { return r.severity === 'caution'; }).length;
+            cautionN = risks.filter(function(r) { return r.severity === 'warning'; }).length;
+            dangerLabel = '위험'; warnLabel = '경고'; cautionLabel = '주의';
         }
         function pill(cls, label, count) {
             var zero = count === 0 ? ' s-zero' : '';
@@ -184,9 +187,16 @@ function renderCollisionList() {
     var hudCol = document.getElementById('hudCollision');
     if (hudCol) hudCol.textContent = mlSerious;
 
+    // Hide ML summary when not on ML tab
     if (collisionActiveTab !== 'ml' && fixedSummary) {
         fixedSummary.style.display = 'none';
         fixedSummary.innerHTML = '';
+    }
+    // Hide distance summary when not on distance tab
+    var distSummary = document.getElementById('distRiskSummaryFixed');
+    if (collisionActiveTab !== 'distance' && distSummary) {
+        distSummary.style.display = 'none';
+        distSummary.innerHTML = '';
     }
 
     if (risks.length === 0) {
@@ -201,16 +211,68 @@ function renderCollisionList() {
     }
 
     if (collisionActiveTab === 'distance') {
-        var rowsHtml = risks.map(function(r) { return '\
-            <div class="collision-row"\
-                 data-mmsi-a="' + r.ship_a.mmsi + '" data-mmsi-b="' + r.ship_b.mmsi + '"\
-                 data-lat-a="' + r.ship_a.lat + '" data-lng-a="' + r.ship_a.lng + '" data-lat-b="' + r.ship_b.lat + '" data-lng-b="' + r.ship_b.lng + '">\
-                <span class="col-severity">' + collisionSeverityBadge(r.severity) + '</span>\
-                <span class="col-pairs">' + r.ship_a.name + ' <small>\u2192</small> ' + r.ship_b.name + '</span>\
-                <span class="col-area">' + _seaAreaShort(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '</span>\
-            </div>';
-        }).join('');
-        _renderCollisionTicker(list, rowsHtml, risks.length);
+        var dangerCount = risks.filter(function(r) { return r.severity === 'danger'; }).length;
+        var cautionCount = risks.filter(function(r) { return r.severity === 'caution'; }).length;
+        var warningCount = risks.filter(function(r) { return r.severity === 'warning'; }).length;
+
+        // Render distance filter bar
+        if (distSummary) {
+            distSummary.style.display = 'block';
+            var distIsActive = function(sev) { return distRiskFilter === sev ? 'active' : ''; };
+            var distDefaultActive = distRiskFilter === null ? 'active' : '';
+            distSummary.innerHTML = '\
+                <div class="ml-risk-summary">\
+                    <div class="risk-stat ' + distIsActive('danger') + '" data-dist-filter="danger" style="--stat-color: #f43f5e; --stat-bg: rgba(244,63,94,0.15);">\
+                        <span class="risk-stat-count">' + dangerCount + '</span>\
+                        <span class="risk-stat-label">\uc704\ud5d8</span>\
+                    </div>\
+                    <div class="risk-stat ' + distIsActive('caution') + '" data-dist-filter="caution" style="--stat-color: #f97316; --stat-bg: rgba(249,115,22,0.15);">\
+                        <span class="risk-stat-count">' + cautionCount + '</span>\
+                        <span class="risk-stat-label">\uacbd\uace0</span>\
+                    </div>\
+                    <div class="risk-stat ' + distIsActive('warning') + '" data-dist-filter="warning" style="--stat-color: #eab308; --stat-bg: rgba(234,179,8,0.15);">\
+                        <span class="risk-stat-count">' + warningCount + '</span>\
+                        <span class="risk-stat-label">\uc8fc\uc758</span>\
+                    </div>\
+                    <div class="risk-stat ' + distDefaultActive + '" data-dist-filter="all" style="--stat-color: var(--text-dim); --stat-bg: rgba(255,255,255,0.08);">\
+                        <span class="risk-stat-count">' + risks.length + '</span>\
+                        <span class="risk-stat-label">\uc804\uccb4</span>\
+                    </div>\
+                </div>';
+
+            distSummary.querySelectorAll('.risk-stat[data-dist-filter]').forEach(function(stat) {
+                stat.addEventListener('click', function() {
+                    var val = stat.dataset.distFilter;
+                    if (val === 'all') {
+                        distRiskFilter = null;
+                    } else {
+                        distRiskFilter = distRiskFilter === val ? null : val;
+                    }
+                    renderCollisionList();
+                });
+            });
+        }
+
+        // Apply filter
+        var distFiltered = risks;
+        if (distRiskFilter) {
+            distFiltered = risks.filter(function(r) { return r.severity === distRiskFilter; });
+        }
+
+        if (distFiltered.length === 0) {
+            list.innerHTML = '<div class="collision-empty">\ud574\ub2f9 \ub4f1\uae09\uc758 \uc704\ud5d8\uc774 \uc5c6\uc2b5\ub2c8\ub2e4</div>';
+        } else {
+            var rowsHtml = distFiltered.map(function(r) { return '\
+                <div class="collision-row"\
+                     data-mmsi-a="' + r.ship_a.mmsi + '" data-mmsi-b="' + r.ship_b.mmsi + '"\
+                     data-lat-a="' + r.ship_a.lat + '" data-lng-a="' + r.ship_a.lng + '" data-lat-b="' + r.ship_b.lat + '" data-lng-b="' + r.ship_b.lng + '">\
+                    <span class="col-severity">' + collisionSeverityBadge(r.severity) + '</span>\
+                    <span class="col-pairs">' + r.ship_a.name + ' <small>\u2192</small> ' + r.ship_b.name + '</span>\
+                    <span class="col-area">' + _seaAreaShort(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '</span>\
+                </div>';
+            }).join('');
+            _renderCollisionTicker(list, rowsHtml, distFiltered.length);
+        }
     } else {
         var countByLevel = { 1: 0, 2: 0, 3: 0 };
         risks.forEach(function(r) { if (countByLevel[r.risk_level] !== undefined) countByLevel[r.risk_level]++; });
@@ -294,6 +356,21 @@ function _handleCollisionCardClick(card) {
     var lngA = shipA ? shipA.lng : parseFloat(card.dataset.lngA);
     var latB = shipB ? shipB.lat : parseFloat(card.dataset.latB);
     var lngB = shipB ? shipB.lng : parseFloat(card.dataset.lngB);
+
+    // 클릭 시점에 실시간 CPA 재검증 — 이미 해소된 위험이면 알림 후 리스트 갱신
+    if (shipA && shipB) {
+        var cpa = computeCpa(shipA, shipB);
+        var curDist = haversineNm(shipA.lat, shipA.lng, shipB.lat, shipB.lng);
+        // DCPA가 warning 임계값(1.0nm) 초과이거나 멀어지는 중(TCPA <= 0)이면 해소
+        if (cpa.dcpaNm > 1.0 || cpa.tcpaMin <= 0) {
+            _showCollisionToast(
+                '\u2713 \uc704\ud5d8 \ud574\uc81c',
+                (shipA.name || mmsiA) + ' \u2194 ' + (shipB.name || mmsiB) + ' \u2014 \ud604\uc7ac \uc548\uc804 (CPA ' + cpa.dcpaNm.toFixed(2) + 'nm)'
+            );
+            fetchCollisionRisks();  // 리스트 즉시 갱신
+            return;
+        }
+    }
 
     var midLat = (latA + latB) / 2;
     var midLng = (lngA + lngB) / 2;

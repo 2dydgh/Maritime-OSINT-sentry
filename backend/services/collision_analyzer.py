@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 NM_TO_KM = 1.852
 EARTH_RADIUS_KM = 6371.0
 PROXIMITY_NM = 5.0           # 1단계 근접 필터 반경
-MIN_SOG_KTS = 1.0            # 2단계 정지/저속 선박 제외 기준 (GPS 오차 + 조류 영향 감안)
+MIN_SOG_KTS = 2.0            # 2단계 정지/저속 선박 제외 기준 (GPS 드리프트+조류 감안, 1.0→2.0 상향)
 TCPA_MAX_MIN = 20            # TCPA 20분 이내만 관심
 TCPA_MIN_MIN = 1.0           # TCPA 1분 미만은 이미 해소 직전 → 스킵
 
@@ -34,23 +34,29 @@ HEAD_ON_ANGLE = 30.0         # COG 차이 150~210도 → head-on 판정
 # --- Class A/B 조합별 임계값 ---
 CLASS_THRESHOLDS = {
     "AA": {
-        "dcpa_danger": 0.5,       # nm
-        "dcpa_warning": 1.0,      # nm
+        "dcpa_danger": 0.5,       # nm — 위험
+        "dcpa_caution": 0.75,     # nm — 경고
+        "dcpa_warning": 1.0,      # nm — 주의
         "dcpa_danger_head_on": 0.3,
+        "dcpa_caution_head_on": 0.4,
         "dcpa_warning_head_on": 0.5,
         "tcpa_max": 20,           # 분
     },
     "AB": {
         "dcpa_danger": 0.3,
+        "dcpa_caution": 0.5,
         "dcpa_warning": 0.7,
         "dcpa_danger_head_on": 0.18,
+        "dcpa_caution_head_on": 0.3,
         "dcpa_warning_head_on": 0.42,
         "tcpa_max": 15,
     },
     "BB": {
         "dcpa_danger": 0.2,
+        "dcpa_caution": 0.35,
         "dcpa_warning": 0.5,
         "dcpa_danger_head_on": 0.12,
+        "dcpa_caution_head_on": 0.2,
         "dcpa_warning_head_on": 0.3,
         "tcpa_max": 10,
     },
@@ -315,6 +321,11 @@ def _build_proximity_pairs(vessels: list[dict]) -> list[dict]:
                 if tcpa < TCPA_MIN_MIN or tcpa > tcpa_max:
                     continue
 
+                # 현재 거리 대비 DCPA 감소율이 너무 낮으면 실질 위험 아님
+                # (예: 4.5nm 거리인데 DCPA 0.9nm → 접근은 하지만 위험 수준 아님)
+                if dist > 2.0 and dcpa > dist * 0.5:
+                    continue
+
                 encounter = _classify_encounter(v["cog"], other["cog"])
 
                 pairs.append({
@@ -357,15 +368,22 @@ def analyze_distance_risks(proximity_pairs: list[dict]) -> list[dict]:
 
         if encounter == "head-on":
             danger_thresh = thresholds["dcpa_danger_head_on"]
+            caution_thresh = thresholds["dcpa_caution_head_on"]
             warning_thresh = thresholds["dcpa_warning_head_on"]
         else:
             danger_thresh = thresholds["dcpa_danger"]
+            caution_thresh = thresholds["dcpa_caution"]
             warning_thresh = thresholds["dcpa_warning"]
 
         if dcpa > warning_thresh:
             continue
 
-        severity = "danger" if dcpa < danger_thresh else "warning"
+        if dcpa < danger_thresh:
+            severity = "danger"
+        elif dcpa < caution_thresh:
+            severity = "caution"
+        else:
+            severity = "warning"
 
         risks.append({
             "ship_a": _make_ship_info(pair["ship_a"]),
@@ -379,7 +397,8 @@ def analyze_distance_risks(proximity_pairs: list[dict]) -> list[dict]:
             "ts": now_ts,
         })
 
-    risks.sort(key=lambda r: (0 if r["severity"] == "danger" else 1, r["tcpa_min"]))
+    _sev_order = {"danger": 0, "caution": 1, "warning": 2}
+    risks.sort(key=lambda r: (_sev_order.get(r["severity"], 9), r["tcpa_min"]))
     return risks
 
 

@@ -180,9 +180,10 @@ async function findNearbyVessels(mmsi, radiusNm, maxCount) {
 }
 
 function proximityColor(distNm) {
-    if (distNm < 2) return { css: '#ef4444', cesium: Cesium.Color.fromCssColorString('#ef4444') };
-    if (distNm < 5) return { css: '#eab308', cesium: Cesium.Color.fromCssColorString('#eab308') };
-    return { css: '#10b981', cesium: Cesium.Color.fromCssColorString('#10b981') };
+    // 중립 색상 — 가까울수록 약간 밝게, 위험 표시는 risk 매칭으로만
+    if (distNm < 2) return { css: '#94a3b8', cesium: Cesium.Color.fromCssColorString('#94a3b8') };
+    if (distNm < 5) return { css: '#64748b', cesium: Cesium.Color.fromCssColorString('#64748b') };
+    return { css: '#475569', cesium: Cesium.Color.fromCssColorString('#475569') };
 }
 window.proximityColor = proximityColor;
 
@@ -216,7 +217,7 @@ function enrichNearbyWithMlRisk(selectedMmsi, nearbyVessels) {
         }
     });
 
-    var DIST_SEVERITY_LABELS = { danger: '\uc704\ud5d8', warning: '\uacbd\uace0' };
+    var DIST_SEVERITY_LABELS = { danger: '\uc704\ud5d8', caution: '\uacbd\uace0', warning: '\uc8fc\uc758' };
 
     nearbyVessels.forEach(function(nv) {
         var mlMatch = mlRiskMap[nv.mmsi];
@@ -256,16 +257,27 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
     var closestMmsi = nearbyVessels[0].mmsi;
     var _linesAdded = 0;
 
+    var DIST_SEV_COLORS = { danger: '#f43f5e', caution: '#f97316', warning: '#eab308' };
+
     nearbyVessels.forEach(function(nv) {
         var isCollisionTarget = collisionTargetMmsi != null && (nv.mmsi == collisionTargetMmsi);
-        var isMlPair = nv.mlRiskLevel != null;
-        var color = isMlPair
-            ? mlRiskColor(nv.mlRiskLevel)
-            : isCollisionTarget
-                ? { css: '#f43f5e', cesium: Cesium.Color.fromCssColorString('#f43f5e') }
-                : proximityColor(nv.distance);
-        var isHighlight = isMlPair || isCollisionTarget || nv.mmsi === closestMmsi;
-        var showCollisionViz = isMlPair || isCollisionTarget;
+        var isMlPair = nv.mlRiskLevel != null && nv.mlRiskLevel > 0;
+        var isDistPair = nv.distSeverity != null;
+        var isRiskPair = isMlPair || isDistPair;
+
+        var color;
+        if (isMlPair) {
+            color = mlRiskColor(nv.mlRiskLevel);
+        } else if (isDistPair) {
+            var dc = DIST_SEV_COLORS[nv.distSeverity] || '#f97316';
+            color = { css: dc, cesium: Cesium.Color.fromCssColorString(dc) };
+        } else if (isCollisionTarget) {
+            color = { css: '#f43f5e', cesium: Cesium.Color.fromCssColorString('#f43f5e') };
+        } else {
+            color = proximityColor(nv.distance);
+        }
+        var isHighlight = isRiskPair || isCollisionTarget;
+        var showCollisionViz = isRiskPair || isCollisionTarget;
 
         // shipDataMap 우선, 없으면 nv에 포함된 좌표를 fallback으로 사용
         var sel = selected || (nv._selData ? nv._selData : null);
@@ -274,8 +286,8 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
         if (!sel || !tgt) { console.warn('[proximity] renderLines skip: sel=', !!sel, 'tgt=', !!tgt, 'mmsi=', nv.mmsi); return; }
 
         // 근접 라인 — PolylineCollection (높이 10m, 해수면 바로 위)
-        var lineWidth = isMlPair ? 4 : isCollisionTarget ? 4 : isHighlight ? 3 : 2;
-        var lineColor = isHighlight ? color.cesium.withAlpha(0.8) : color.cesium.withAlpha(0.6);
+        var lineWidth = isRiskPair ? 4 : isCollisionTarget ? 4 : 1.5;
+        var lineColor = isHighlight ? color.cesium.withAlpha(0.8) : color.cesium.withAlpha(0.35);
 
         var line = proximityLines.add({
             positions: Cesium.Cartesian3.fromDegreesArrayHeights([
@@ -400,31 +412,33 @@ function renderNearbyPanel(nearbyVessels) {
     list.innerHTML = nearbyVessels.map(function(nv) {
         var isCollisionTarget = collisionTargetMmsi != null && (nv.mmsi == collisionTargetMmsi);
         var hasMlRisk = nv.mlRiskLevel != null && nv.mlRiskLevel > 0;
-        var mlColor = hasMlRisk ? ML_RISK_COLORS[nv.mlRiskLevel] : null;
+        var hasDistRiskDot = nv.distSeverity != null;
+        var DIST_DOT_COLORS = { danger: '#f43f5e', caution: '#f97316', warning: '#eab308' };
         var color = hasMlRisk
-            ? { css: mlColor }
-            : isCollisionTarget
-                ? { css: '#f43f5e' }
-                : proximityColor(nv.distance);
-        var ML_BADGE_COLORS = { 3: '#002878', 2: '#406FD8', 1: '#6989E0' };
-        var mlBadgeColor = hasMlRisk ? (ML_BADGE_COLORS[nv.mlRiskLevel] || '#002878') : null;
+            ? { css: ML_RISK_COLORS[nv.mlRiskLevel] }
+            : hasDistRiskDot
+                ? { css: DIST_DOT_COLORS[nv.distSeverity] || '#f97316' }
+                : isCollisionTarget
+                    ? { css: '#f43f5e' }
+                    : { css: '#64748b' };
+        var ML_RISK_BADGE = { 3: { color: '#f43f5e', bg: 'rgba(244,63,94,0.2)' }, 2: { color: '#f97316', bg: 'rgba(249,115,22,0.2)' }, 1: { color: '#eab308', bg: 'rgba(234,179,8,0.2)' } };
+        var mlBadgeStyle = hasMlRisk ? ML_RISK_BADGE[nv.mlRiskLevel] || ML_RISK_BADGE[1] : null;
 
         var hasDistRisk = nv.distSeverity != null;
-        var DIST_SEVERITY_COLORS = { danger: '#f43f5e', warning: '#f97316' };
-        var distColor = hasDistRisk ? (DIST_SEVERITY_COLORS[nv.distSeverity] || '#f97316') : null;
-        var highlight = hasMlRisk
-            ? 'background:' + mlBadgeColor + '15;border:1px solid ' + mlBadgeColor + '40;border-radius:6px;'
-            : hasDistRisk
-                ? 'background:' + distColor + '15;border:1px solid ' + distColor + '40;border-radius:6px;'
-                : isCollisionTarget
-                    ? 'background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.3);border-radius:6px;'
-                    : '';
+        var DIST_RISK_BADGE = { danger: { color: '#f43f5e', bg: 'rgba(244,63,94,0.2)' }, caution: { color: '#f97316', bg: 'rgba(249,115,22,0.2)' }, warning: { color: '#eab308', bg: 'rgba(234,179,8,0.2)' } };
+        var distBadgeStyle = hasDistRisk ? DIST_RISK_BADGE[nv.distSeverity] || DIST_RISK_BADGE['warning'] : null;
+
+        var riskStyle = mlBadgeStyle || distBadgeStyle || null;
+        var highlight = riskStyle
+            ? 'background:' + riskStyle.bg + ';border:1px solid ' + riskStyle.color + '30;border-radius:6px;'
+            : isCollisionTarget
+                ? 'background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.3);border-radius:6px;'
+                : '';
         var mlBadge = hasMlRisk
-            ? '<span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:' + mlBadgeColor + '25;color:' + mlBadgeColor + ';font-weight:600;flex-shrink:0;">AI \uc608\uce21 ' + nv.mlRiskLabel + '</span>'
+            ? '<span class="collision-badge" style="background:' + mlBadgeStyle.bg + ';color:' + mlBadgeStyle.color + ';flex-shrink:0;">AI ' + nv.mlRiskLabel + '</span>'
             : '';
-        var DIST_BADGE_LABELS = { '\uc704\ud5d8': '\uc704\ud5d8', '\uacbd\uace0': '\uacbd\uace0' };
         var distBadge = hasDistRisk
-            ? '<span style="font-size:0.6rem;padding:1px 5px;border-radius:3px;background:' + distColor + '25;color:' + distColor + ';font-weight:600;flex-shrink:0;">\uac70\ub9ac \uae30\ubc18 \uc811\uadfc ' + nv.distRiskLabel + '</span>'
+            ? '<span class="collision-badge" style="background:' + distBadgeStyle.bg + ';color:' + distBadgeStyle.color + ';flex-shrink:0;">CPA ' + nv.distRiskLabel + '</span>'
             : '';
         var anyRisk = hasMlRisk || hasDistRisk || isCollisionTarget;
         return '<div class="nearby-row" data-mmsi="' + nv.mmsi + '" data-lat="' + nv.lat + '" data-lng="' + nv.lng + '" style="' + highlight + '">\

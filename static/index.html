@@ -263,12 +263,13 @@
                 <button class="right-panel-close" id="rightPanelClose">&#x2715;</button>
             </div>
             <div class="drawer-tab-row">
-                <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">거리기반</button>
+                <button class="collision-tab-btn active" data-tab="distance" id="collisionTabDistance">CPA 분석</button>
                 <button class="collision-tab-btn" data-tab="ml" id="collisionTabMl">AI분석</button>
             </div>
             <div id="collisionSection">
                 <span id="collision-count" style="display:none;">0</span>
                 <span id="collision-count-summary" style="display:none;">0</span>
+                <div id="distRiskSummaryFixed" style="display:none; flex-shrink:0;"></div>
                 <div id="mlRiskSummaryFixed" style="display:none; flex-shrink:0;"></div>
                 <div class="collision-table-header">
                     <span class="col-severity">위험도</span>

@@ -1093,7 +1093,7 @@ function showShipInfo(entityOrMmsi) {
         <tr><th>MMSI</th><td>' + s.mmsi + '</td></tr>\
         <tr><th>Type</th><td>' + (s.type || 'unknown') + '</td></tr>\
         <tr><th>Country</th><td>' + (s.country || 'UNKNOWN') + '</td></tr>\
-        <tr><th>SOG</th><td>' + (s.sog || 0) + ' kts</td></tr>\
+        <tr><th>SOG</th><td>' + (s.sog && Math.abs(parseFloat(s.sog) - 102.3) < 0.2 ? '신호없음 (SOG N/A)' : (s.sog || 0) + ' kts') + '</td></tr>\
         <tr><th>COG</th><td>' + (s.cog || 0) + '\u00b0</td></tr>\
         <tr><th>Heading</th><td>' + (s.heading || 0) + '\u00b0</td></tr>';
     if (s.length) rows += '<tr><th>Length</th><td>' + s.length + ' m</td></tr>';

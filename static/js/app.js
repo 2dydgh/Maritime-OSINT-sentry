@@ -52,6 +52,7 @@ var latestWsShipsMmsis = new Set();
 var collisionData = { distance: { risks: [] }, ml: { risks: [] } };
 var collisionActiveTab = 'distance';
 var mlRiskFilter = null;
+var distRiskFilter = null;
 var timeMode = 'live';
 var _lastShipsData = null; // 마지막 WebSocket 선박 데이터 캐시 (카메라 이동 후 리렌더용)
 
