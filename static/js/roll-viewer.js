@@ -13,6 +13,7 @@ var RollViewer = (function () {
     var shipGroup = null;
     var waterMesh = null;
     var composer = null;
+    var mainDirLight = null;
     var waterNormals = null;
 
     var animFrameId = null;
@@ -27,6 +28,7 @@ var RollViewer = (function () {
     var weather = null;
     var shipType = 'other';
     var rollParams = null;
+    var sogSignalLost = false;
 
     var sprayPoints = null;
     var sprayVelocities = [];
@@ -47,6 +49,10 @@ var RollViewer = (function () {
     var shipSpeed = 12;           // knots — set from actual SOG, capped
     var shipWorldPos = { x: 0, z: 0 };  // ship position in world space
     var camFollow = { x: 0, z: 0 };     // smoothed camera target
+    var camFollowHeading = 0;              // smoothed camera heading (radians)
+    var smoothSpeed = 12;                  // lerp-smoothed current speed
+    var smoothRoll = 0;                    // lerp-smoothed roll angle
+    var smoothPitch = 0;                   // lerp-smoothed pitch angle
 
     // Turning cycle timings (seconds)
     var TURN_TIMING = {
@@ -59,13 +65,13 @@ var RollViewer = (function () {
 
     // Turn-induced roll multiplier per ship type (higher = more roll during turns)
     var TURN_ROLL_MULT = {
-        cargo: 3.0,
-        tanker: 2.5,
-        passenger: 2.0,
-        fishing: 3.5,
-        military: 2.2,
-        tug: 3.0,
-        other: 2.8
+        cargo: 1.8,
+        tanker: 1.5,
+        passenger: 1.4,
+        fishing: 2.2,
+        military: 1.5,
+        tug: 1.8,
+        other: 1.6
     };
 
     // ── Roll simulation params per ship type ──
@@ -197,7 +203,7 @@ var RollViewer = (function () {
             container.style.position = 'relative';
             var backBtn = document.createElement('button');
             backBtn.className = 'roll-viewer-back';
-            backBtn.innerHTML = '<i class="fa-solid fa-arrow-left"></i><span>지구본으로</span>';
+            backBtn.innerHTML = '<i class="fa-solid fa-arrow-left"></i> <span>지구본으로</span>';
             backBtn.addEventListener('click', function () {
                 if (window.LayoutManager) {
                     LayoutManager.closeDedicatedPanel();
@@ -219,11 +225,14 @@ var RollViewer = (function () {
 
         // Set ship speed from SOG, capped to realistic range (max 30kt for most ships)
         var rawSog = parseFloat(ship.sog);
-        if (!isNaN(rawSog) && rawSog > 0 && rawSog <= 35) {
+        sogSignalLost = false;
+        var defaultSpeeds = { cargo: 12, tanker: 11, passenger: 18, fishing: 8, military: 20, tug: 10, other: 12 };
+        if (!isNaN(rawSog) && Math.abs(rawSog - 102.3) < 0.2) {
+            sogSignalLost = true;
+            shipSpeed = defaultSpeeds[shipType] || 12;
+        } else if (!isNaN(rawSog) && rawSog > 0 && rawSog <= 35) {
             shipSpeed = rawSog;
         } else {
-            // Fallback: realistic speed by ship type
-            var defaultSpeeds = { cargo: 12, tanker: 11, passenger: 18, fishing: 8, military: 20, tug: 10, other: 12 };
             shipSpeed = defaultSpeeds[shipType] || 12;
         }
 
@@ -241,7 +250,7 @@ var RollViewer = (function () {
         // Back button overlay
         var backBtn = document.createElement('button');
         backBtn.className = 'roll-viewer-back';
-        backBtn.innerHTML = '<i class="fa-solid fa-arrow-left"></i><span>지구본으로</span>';
+        backBtn.innerHTML = '<i class="fa-solid fa-arrow-left"></i> <span>지구본으로</span>';
         backBtn.addEventListener('click', function () {
             if (window.LayoutManager) {
                 LayoutManager.closeDedicatedPanel();
@@ -268,7 +277,6 @@ var RollViewer = (function () {
         buildShip(shipType);
         buildSeagulls();
         buildSeaMarkers();
-        buildWakeTrail();
         buildRadarIndicator();
         startAnimation();
 
@@ -303,6 +311,8 @@ var RollViewer = (function () {
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         var todPal = SKY_PALETTES[getTimeOfDay()];
         renderer.toneMappingExposure = todPal.exposure || 0.8;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(w, h);
         renderer.domElement.style.display = 'block';
@@ -322,8 +332,19 @@ var RollViewer = (function () {
         // Lights — adjusted by time of day
         var tod = getTimeOfDay();
         var pal = SKY_PALETTES[tod];
-        var dirLight = new THREE.DirectionalLight(pal.sunColor, pal.sunIntensity);
+        mainDirLight = new THREE.DirectionalLight(pal.sunColor, pal.sunIntensity);
+        var dirLight = mainDirLight;
         dirLight.position.set(30, 40, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.near = 1;
+        dirLight.shadow.camera.far = 100;
+        dirLight.shadow.camera.left = -25;
+        dirLight.shadow.camera.right = 25;
+        dirLight.shadow.camera.top = 25;
+        dirLight.shadow.camera.bottom = -25;
+        dirLight.shadow.bias = -0.002;
         scene.add(dirLight);
 
         var fillLight = new THREE.DirectionalLight(0xaaccff, tod === 'night' ? 0.2 : 0.5);
@@ -348,12 +369,12 @@ var RollViewer = (function () {
 
         // ── Post-processing ──
         var renderPass = new THREE.RenderPass(scene, camera);
-        var bloomStrength = todPal.bloom !== undefined ? todPal.bloom : 0.4;
+        var bloomStrength = todPal.bloom !== undefined ? todPal.bloom : 0.5;
         var bloomPass = new THREE.UnrealBloomPass(
             new THREE.Vector2(w, h),
             bloomStrength,   // strength
-            0.5,   // radius
-            0.7    // threshold
+            0.6,   // radius — wider glow spread
+            0.6    // threshold — catch more bright surfaces
         );
 
         composer = new THREE.EffectComposer(renderer);
@@ -466,79 +487,191 @@ var RollViewer = (function () {
         buildClouds(THREE, tod);
     }
 
+    var _cloudSprites = [];  // for per-sprite animation
+
+    function _makeCloudCanvas(w, h, painter) {
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        painter(c.getContext('2d'), w, h);
+        return new THREE.CanvasTexture(c);
+    }
+
     function buildClouds(THREE, tod) {
         cloudGroup = new THREE.Group();
+        _cloudSprites = [];
+        var isNight = tod === 'night';
+        var isDusk = tod === 'dusk' || tod === 'dawn';
 
-        // ── Layer 1: Horizon mist band — wide, flat, subtle ──
-        var mistCanvas = document.createElement('canvas');
-        mistCanvas.width = 512;
-        mistCanvas.height = 64;
-        var mCtx = mistCanvas.getContext('2d');
-        var mistColor = tod === 'day' ? [220, 235, 250] : tod === 'night' ? [15, 20, 35] : [180, 150, 120];
-        var grad = mCtx.createLinearGradient(0, 0, 0, 64);
-        grad.addColorStop(0, 'rgba(' + mistColor.join(',') + ',0)');
-        grad.addColorStop(0.3, 'rgba(' + mistColor.join(',') + ',0.4)');
-        grad.addColorStop(0.6, 'rgba(' + mistColor.join(',') + ',0.3)');
-        grad.addColorStop(1, 'rgba(' + mistColor.join(',') + ',0)');
-        mCtx.fillStyle = grad;
-        mCtx.fillRect(0, 0, 512, 64);
-        var mistTex = new THREE.CanvasTexture(mistCanvas);
-
-        // Ring of mist panels around horizon
-        var mistCount = 12;
-        for (var m = 0; m < mistCount; m++) {
-            var a = (m / mistCount) * Math.PI * 2;
-            var mat = new THREE.SpriteMaterial({
-                map: mistTex,
-                transparent: true,
-                opacity: tod === 'day' ? 0.5 : 0.3,
-                depthWrite: false
-            });
-            var sprite = new THREE.Sprite(mat);
-            sprite.position.set(280 * Math.cos(a), 15 + Math.random() * 10, 280 * Math.sin(a));
-            sprite.scale.set(180, 25, 1);
-            cloudGroup.add(sprite);
+        // ── Layer 1: Horizon mist band ──
+        var mistTex = _makeCloudCanvas(512, 64, function(ctx, w, h) {
+            var mc = isNight ? [15, 20, 35] : isDusk ? [180, 150, 120] : [220, 235, 250];
+            var g = ctx.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, 'rgba(' + mc.join(',') + ',0)');
+            g.addColorStop(0.3, 'rgba(' + mc.join(',') + ',0.35)');
+            g.addColorStop(0.6, 'rgba(' + mc.join(',') + ',0.25)');
+            g.addColorStop(1, 'rgba(' + mc.join(',') + ',0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, w, h);
+        });
+        for (var m = 0; m < 14; m++) {
+            var ma = (m / 14) * Math.PI * 2;
+            var mMat = new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: isNight ? 0.25 : 0.45, depthWrite: false });
+            var mSp = new THREE.Sprite(mMat);
+            mSp.position.set(280 * Math.cos(ma), 12 + Math.random() * 8, 280 * Math.sin(ma));
+            mSp.scale.set(200, 28, 1);
+            cloudGroup.add(mSp);
         }
 
-        // ── Layer 2: High wispy clouds — thin, elongated ──
-        if (tod !== 'night') {
-            var wispCanvas = document.createElement('canvas');
-            wispCanvas.width = 512;
-            wispCanvas.height = 64;
-            var wCtx = wispCanvas.getContext('2d');
-            wCtx.clearRect(0, 0, 512, 64);
-
-            // Paint thin wispy strokes
-            wCtx.globalAlpha = 0.6;
-            for (var s = 0; s < 6; s++) {
-                var sx = 40 + Math.random() * 100;
-                var sy = 20 + Math.random() * 24;
-                var ex = sx + 150 + Math.random() * 200;
-                var cy = sy + (Math.random() - 0.5) * 16;
-                wCtx.strokeStyle = 'rgba(255,255,255,' + (0.3 + Math.random() * 0.4) + ')';
-                wCtx.lineWidth = 2 + Math.random() * 4;
-                wCtx.lineCap = 'round';
-                wCtx.beginPath();
-                wCtx.moveTo(sx, sy);
-                wCtx.quadraticCurveTo((sx + ex) / 2, cy, ex, sy + (Math.random() - 0.5) * 8);
-                wCtx.stroke();
+        // ── Layer 2: Cumulus puffs — volumetric-look billboards ──
+        if (!isNight) {
+            // Generate several unique cumulus textures
+            var cumulusTextures = [];
+            for (var ct = 0; ct < 4; ct++) {
+                var seed = ct;
+                cumulusTextures.push(_makeCloudCanvas(256, 256, function(ctx, w, h) {
+                    ctx.clearRect(0, 0, w, h);
+                    // Build up cloud from overlapping radial gradients
+                    var cx = w / 2, cy = h / 2;
+                    var puffs = 8 + Math.floor(Math.random() * 6);
+                    for (var p = 0; p < puffs; p++) {
+                        var px = cx + (Math.random() - 0.5) * w * 0.5;
+                        var py = cy + (Math.random() - 0.5) * h * 0.35 + h * 0.05;
+                        var pr = 30 + Math.random() * 55;
+                        var rg = ctx.createRadialGradient(px, py, 0, px, py, pr);
+                        var baseAlpha = 0.25 + Math.random() * 0.2;
+                        if (isDusk) {
+                            // warm tint for dawn/dusk
+                            rg.addColorStop(0, 'rgba(255,230,200,' + (baseAlpha + 0.1) + ')');
+                            rg.addColorStop(0.4, 'rgba(255,220,190,' + baseAlpha + ')');
+                            rg.addColorStop(1, 'rgba(255,210,180,0)');
+                        } else {
+                            rg.addColorStop(0, 'rgba(255,255,255,' + (baseAlpha + 0.15) + ')');
+                            rg.addColorStop(0.3, 'rgba(250,252,255,' + baseAlpha + ')');
+                            rg.addColorStop(0.7, 'rgba(240,245,255,' + (baseAlpha * 0.4) + ')');
+                            rg.addColorStop(1, 'rgba(230,240,250,0)');
+                        }
+                        ctx.fillStyle = rg;
+                        ctx.fillRect(0, 0, w, h);
+                    }
+                    // Soft bottom shadow for depth
+                    var sg = ctx.createLinearGradient(0, h * 0.55, 0, h);
+                    sg.addColorStop(0, 'rgba(0,0,0,0)');
+                    sg.addColorStop(0.5, 'rgba(100,120,150,0.08)');
+                    sg.addColorStop(1, 'rgba(80,100,130,0)');
+                    ctx.fillStyle = sg;
+                    ctx.fillRect(0, 0, w, h);
+                }));
             }
-            var wispTex = new THREE.CanvasTexture(wispCanvas);
 
-            var wispCount = 6;
-            for (var w = 0; w < wispCount; w++) {
-                var wa = (w / wispCount) * Math.PI * 2 + Math.random() * 0.5;
-                var wd = 150 + Math.random() * 100;
-                var wMat = new THREE.SpriteMaterial({
-                    map: wispTex,
-                    transparent: true,
-                    opacity: 0.6 + Math.random() * 0.3,
-                    depthWrite: false
+            var cumulusCount = 14;
+            for (var ci = 0; ci < cumulusCount; ci++) {
+                var ca = (ci / cumulusCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
+                var cd = 120 + Math.random() * 160;
+                var cTex = cumulusTextures[ci % cumulusTextures.length];
+                var cMat = new THREE.SpriteMaterial({ map: cTex, transparent: true, opacity: 0.7 + Math.random() * 0.25, depthWrite: false });
+                var cSp = new THREE.Sprite(cMat);
+                var cHeight = 35 + Math.random() * 30;
+                var cScaleX = 50 + Math.random() * 40;
+                var cScaleY = 20 + Math.random() * 15;
+                cSp.position.set(cd * Math.cos(ca), cHeight, cd * Math.sin(ca));
+                cSp.scale.set(cScaleX, cScaleY, 1);
+                cloudGroup.add(cSp);
+                _cloudSprites.push({
+                    sprite: cSp,
+                    baseY: cHeight,
+                    driftSpeed: 0.3 + Math.random() * 0.8,
+                    bobAmp: 0.5 + Math.random() * 1.0,
+                    bobFreq: 0.1 + Math.random() * 0.15,
+                    angle: ca,
+                    dist: cd,
+                    baseOpacity: cMat.opacity,
+                    mat: cMat
                 });
-                var wSprite = new THREE.Sprite(wMat);
-                wSprite.position.set(wd * Math.cos(wa), 60 + Math.random() * 40, wd * Math.sin(wa));
-                wSprite.scale.set(120 + Math.random() * 80, 12 + Math.random() * 8, 1);
-                cloudGroup.add(wSprite);
+            }
+        }
+
+        // ── Layer 3: Cirrus wisps — high altitude, thin streaks ──
+        if (!isNight) {
+            var cirrusTextures = [];
+            for (var wt = 0; wt < 3; wt++) {
+                cirrusTextures.push(_makeCloudCanvas(512, 64, function(ctx, w, h) {
+                    ctx.clearRect(0, 0, w, h);
+                    var strokes = 4 + Math.floor(Math.random() * 5);
+                    for (var s = 0; s < strokes; s++) {
+                        var sx = 20 + Math.random() * 80;
+                        var sy = 15 + Math.random() * 34;
+                        var ex = sx + 180 + Math.random() * 250;
+                        var cy = sy + (Math.random() - 0.5) * 20;
+                        ctx.strokeStyle = isDusk
+                            ? 'rgba(255,220,190,' + (0.25 + Math.random() * 0.35) + ')'
+                            : 'rgba(255,255,255,' + (0.2 + Math.random() * 0.35) + ')';
+                        ctx.lineWidth = 1.5 + Math.random() * 3;
+                        ctx.lineCap = 'round';
+                        ctx.filter = 'blur(1px)';
+                        ctx.beginPath();
+                        ctx.moveTo(sx, sy);
+                        ctx.bezierCurveTo(sx + 60, cy - 5, ex - 60, cy + 5, ex, sy + (Math.random() - 0.5) * 10);
+                        ctx.stroke();
+                        ctx.filter = 'none';
+                    }
+                }));
+            }
+
+            var cirrusCount = 8;
+            for (var wi = 0; wi < cirrusCount; wi++) {
+                var wa = (wi / cirrusCount) * Math.PI * 2 + Math.random() * 0.4;
+                var wd = 130 + Math.random() * 120;
+                var wTex = cirrusTextures[wi % cirrusTextures.length];
+                var wMat = new THREE.SpriteMaterial({ map: wTex, transparent: true, opacity: 0.5 + Math.random() * 0.3, depthWrite: false });
+                var wSp = new THREE.Sprite(wMat);
+                var wH = 70 + Math.random() * 40;
+                wSp.position.set(wd * Math.cos(wa), wH, wd * Math.sin(wa));
+                wSp.scale.set(130 + Math.random() * 90, 10 + Math.random() * 8, 1);
+                cloudGroup.add(wSp);
+                _cloudSprites.push({
+                    sprite: wSp,
+                    baseY: wH,
+                    driftSpeed: 0.6 + Math.random() * 1.0,
+                    bobAmp: 0.3,
+                    bobFreq: 0.05 + Math.random() * 0.05,
+                    angle: wa,
+                    dist: wd,
+                    baseOpacity: wMat.opacity,
+                    mat: wMat
+                });
+            }
+        }
+
+        // ── Night: subtle dark clouds for moonlit silhouettes ──
+        if (isNight) {
+            var nightTex = _makeCloudCanvas(256, 128, function(ctx, w, h) {
+                ctx.clearRect(0, 0, w, h);
+                for (var p = 0; p < 6; p++) {
+                    var px = w * 0.3 + Math.random() * w * 0.4;
+                    var py = h * 0.4 + Math.random() * h * 0.2;
+                    var pr = 25 + Math.random() * 35;
+                    var rg = ctx.createRadialGradient(px, py, 0, px, py, pr);
+                    rg.addColorStop(0, 'rgba(30,35,55,0.2)');
+                    rg.addColorStop(0.6, 'rgba(20,25,45,0.1)');
+                    rg.addColorStop(1, 'rgba(10,15,30,0)');
+                    ctx.fillStyle = rg;
+                    ctx.fillRect(0, 0, w, h);
+                }
+            });
+            for (var ni = 0; ni < 6; ni++) {
+                var na = (ni / 6) * Math.PI * 2 + Math.random() * 0.5;
+                var nd = 150 + Math.random() * 100;
+                var nMat = new THREE.SpriteMaterial({ map: nightTex, transparent: true, opacity: 0.35, depthWrite: false });
+                var nSp = new THREE.Sprite(nMat);
+                var nH = 40 + Math.random() * 25;
+                nSp.position.set(nd * Math.cos(na), nH, nd * Math.sin(na));
+                nSp.scale.set(80 + Math.random() * 50, 20 + Math.random() * 12, 1);
+                cloudGroup.add(nSp);
+                _cloudSprites.push({
+                    sprite: nSp, baseY: nH, driftSpeed: 0.2 + Math.random() * 0.3,
+                    bobAmp: 0.3, bobFreq: 0.04, angle: na, dist: nd,
+                    baseOpacity: 0.35, mat: nMat
+                });
             }
         }
 
@@ -747,23 +880,41 @@ var RollViewer = (function () {
     var WAKE_TRAIL_MAX = 600;       // max trail points
     var wakeTrailData = [];         // { x, z, age }
     var wakeTrailTimer = 0;
-    var WAKE_TRAIL_INTERVAL = 0.08; // seconds between drops
-    var WAKE_TRAIL_LIFETIME = 25;   // seconds before fade out
+    var WAKE_TRAIL_INTERVAL = 0.04; // seconds between drops — denser for smooth trail
+    var WAKE_TRAIL_LIFETIME = 30;   // seconds before fade out
 
     function buildWakeTrail() {
         var THREE = window.THREE;
 
-        // Foam dot texture
+        // Procedural foam splash texture — irregular, organic blobs (64px for detail)
         var canvas = document.createElement('canvas');
-        canvas.width = 16;
-        canvas.height = 16;
+        canvas.width = 64;
+        canvas.height = 64;
         var ctx = canvas.getContext('2d');
-        var grad = ctx.createRadialGradient(8, 8, 0, 8, 8, 8);
-        grad.addColorStop(0, 'rgba(255,255,255,0.9)');
-        grad.addColorStop(0.4, 'rgba(200,220,240,0.4)');
-        grad.addColorStop(1, 'rgba(200,220,240,0)');
+        // Soft radial base
+        var grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+        grad.addColorStop(0.25, 'rgba(230,240,255,0.7)');
+        grad.addColorStop(0.5, 'rgba(200,225,245,0.35)');
+        grad.addColorStop(0.8, 'rgba(180,210,235,0.1)');
+        grad.addColorStop(1, 'rgba(180,210,235,0)');
         ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 16, 16);
+        ctx.fillRect(0, 0, 64, 64);
+        // Overlay irregular foam blobs for organic look
+        for (var fb = 0; fb < 8; fb++) {
+            var angle = fb * Math.PI * 2 / 8 + 0.3;
+            var dist = 6 + (fb % 3) * 5;
+            var bx = 32 + Math.cos(angle) * dist;
+            var by = 32 + Math.sin(angle) * dist;
+            var br = 4 + (fb % 4) * 2.5;
+            var bg = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+            bg.addColorStop(0, 'rgba(255,255,255,0.6)');
+            bg.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = bg;
+            ctx.beginPath();
+            ctx.arc(bx, by, br, 0, Math.PI * 2);
+            ctx.fill();
+        }
         var tex = new THREE.CanvasTexture(canvas);
 
         var positions = new Float32Array(WAKE_TRAIL_MAX * 3);
@@ -772,11 +923,11 @@ var RollViewer = (function () {
         geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geo.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
 
-        // Custom shader for per-point alpha
+        // Custom shader: per-point alpha
         var mat = new THREE.ShaderMaterial({
             uniforms: {
                 uTexture: { value: tex },
-                uSize: { value: 30.0 * window.devicePixelRatio }
+                uSize: { value: 50.0 * window.devicePixelRatio }
             },
             vertexShader: [
                 'attribute float alpha;',
@@ -805,28 +956,93 @@ var RollViewer = (function () {
         scene.add(wakeTrail);
     }
 
-    function animateWakeTrail(dt, shipX, shipZ, headingRad) {
+    function animateWakeTrail(dt, shipX, shipZ, headingRad, rudderAngle) {
         if (!wakeTrail) return;
 
         wakeTrailTimer += dt;
+        var isTurning = turnScenarioActive && typeof rudderAngle === 'number' && Math.abs(rudderAngle) > 1;
+        var turnIntensity = isTurning ? Math.min(Math.abs(rudderAngle) / 25, 1) : 0;
+        var turnOuter = rudderAngle > 0 ? -1 : 1;
+        var turnInner = -turnOuter;
 
-        // Drop new trail points at stern (behind ship)
-        if (wakeTrailTimer >= WAKE_TRAIL_INTERVAL) {
+        // Drop interval: denser during turns for thick foam trail
+        var dropInterval = isTurning
+            ? WAKE_TRAIL_INTERVAL * (1 - turnIntensity * 0.5)
+            : WAKE_TRAIL_INTERVAL;
+
+        if (wakeTrailTimer >= dropInterval) {
             wakeTrailTimer = 0;
-            var sternDist = 8;
-            // Two points: port and starboard stern
-            for (var side = -1; side <= 1; side += 2) {
-                var sx = shipX - Math.cos(headingRad) * sternDist + Math.sin(headingRad) * side * 1.5;
-                var sz = shipZ + Math.sin(headingRad) * sternDist + Math.cos(headingRad) * side * 1.5;
-                wakeTrailData.push({ x: sx, z: sz, age: 0 });
+
+            var fwdX = Math.cos(headingRad);
+            var fwdZ = -Math.sin(headingRad);
+            var sideX = Math.sin(headingRad);
+            var sideZ = Math.cos(headingRad);
+            var baseSpread = 1.5;
+            var turnSpread = isTurning ? turnIntensity * 3.0 : 0;
+
+            // — Central stern foam strip (multiple particles across width) —
+            var stripCount = 3 + (isTurning ? Math.floor(turnIntensity * 4) : 0);
+            for (var sc = 0; sc < stripCount; sc++) {
+                var stripT = (sc / (stripCount - 1)) * 2 - 1; // -1..+1
+                var sternDist = 7 + Math.random() * 2;
+                var lateralSpread = baseSpread * 0.8;
+                var px = shipX - fwdX * sternDist + sideX * stripT * lateralSpread + (Math.random() - 0.5) * 0.6;
+                var pz = shipZ - fwdZ * sternDist + sideZ * stripT * lateralSpread + (Math.random() - 0.5) * 0.6;
+                wakeTrailData.push({
+                    x: px, z: pz, age: 0,
+                    // Each particle gets random size for organic variety
+                    sz: 0.6 + Math.random() * 0.8,
+                    // Slight drift velocity — foam disperses outward
+                    vx: sideX * stripT * 0.15 + (Math.random() - 0.5) * 0.1,
+                    vz: sideZ * stripT * 0.15 + (Math.random() - 0.5) * 0.1,
+                    bright: 0
+                });
             }
-            // Cap length
+
+            // — V-wake arms: two lines spreading from stern —
+            for (var side = -1; side <= 1; side += 2) {
+                var isOuter = (side === turnOuter);
+                var spread = baseSpread + (isOuter ? turnSpread * 0.7 : turnSpread * 0.4);
+                for (var vi = 0; vi < 2; vi++) {
+                    var vDist = 8 + vi * 2 + Math.random() * 1.5;
+                    var vSpread = spread * (0.8 + Math.random() * 0.4);
+                    var vx = shipX - fwdX * vDist + sideX * side * vSpread + (Math.random() - 0.5) * 0.5;
+                    var vz = shipZ - fwdZ * vDist + sideZ * side * vSpread + (Math.random() - 0.5) * 0.5;
+                    wakeTrailData.push({
+                        x: vx, z: vz, age: 0,
+                        sz: 0.5 + Math.random() * 1.0,
+                        vx: sideX * side * (0.2 + Math.random() * 0.15),
+                        vz: sideZ * side * (0.2 + Math.random() * 0.15),
+                        bright: isTurning ? 1 : 0
+                    });
+                }
+            }
+
+            // — Extra turn foam: dense spray on outer + inner hull —
+            if (isTurning && turnIntensity > 0.2) {
+                var extraCount = Math.floor(turnIntensity * 6);
+                for (var e = 0; e < extraCount; e++) {
+                    var eSide = (e % 2 === 0) ? turnOuter : turnInner;
+                    var eDist = 2 + Math.random() * 7;
+                    var eSpread = baseSpread + turnSpread * (0.3 + Math.random() * 0.7);
+                    var ex = shipX - fwdX * eDist + sideX * eSide * eSpread + (Math.random() - 0.5) * 1.2;
+                    var ez = shipZ - fwdZ * eDist + sideZ * eSide * eSpread + (Math.random() - 0.5) * 1.2;
+                    wakeTrailData.push({
+                        x: ex, z: ez, age: 0,
+                        sz: 0.4 + Math.random() * 1.2,
+                        vx: sideX * eSide * (0.3 + Math.random() * 0.3),
+                        vz: sideZ * eSide * (0.3 + Math.random() * 0.3),
+                        bright: 1
+                    });
+                }
+            }
+
             while (wakeTrailData.length > WAKE_TRAIL_MAX) {
                 wakeTrailData.shift();
             }
         }
 
-        // Update geometry
+        // Update geometry — age particles, apply drift, fade
         var pos = wakeTrail.geometry.attributes.position;
         var alp = wakeTrail.geometry.attributes.alpha;
 
@@ -834,14 +1050,24 @@ var RollViewer = (function () {
             if (i < wakeTrailData.length) {
                 var p = wakeTrailData[i];
                 p.age += dt;
+
+                // Foam drifts outward + slows down over time
+                var driftDecay = Math.max(0, 1 - p.age * 0.3);
+                p.x += p.vx * dt * driftDecay;
+                p.z += p.vz * dt * driftDecay;
+
                 pos.array[i * 3] = p.x;
                 pos.array[i * 3 + 1] = 0.08;
                 pos.array[i * 3 + 2] = p.z;
-                // Fade: full opacity for first few seconds, then fade
-                var fade = 1 - Math.min(p.age / WAKE_TRAIL_LIFETIME, 1);
-                alp.array[i] = fade * fade * 0.5; // quadratic fade, max 0.5
+
+                // Alpha: quick appear, slow fade, cubic falloff
+                var life = Math.min(p.age / WAKE_TRAIL_LIFETIME, 1);
+                var fadeIn = Math.min(p.age * 8, 1);
+                var fadeOut = (1 - life);
+                var baseAlpha = fadeIn * fadeOut * fadeOut * 0.55;
+                alp.array[i] = p.bright ? baseAlpha * (1 + turnIntensity * 0.6) : baseAlpha;
             } else {
-                pos.array[i * 3 + 1] = -10; // hide unused
+                pos.array[i * 3 + 1] = -10;
                 alp.array[i] = 0;
             }
         }
@@ -850,7 +1076,6 @@ var RollViewer = (function () {
         alp.needsUpdate = true;
         wakeTrail.geometry.setDrawRange(0, wakeTrailData.length);
 
-        // Remove expired points
         while (wakeTrailData.length > 0 && wakeTrailData[0].age > WAKE_TRAIL_LIFETIME) {
             wakeTrailData.shift();
         }
@@ -873,7 +1098,7 @@ var RollViewer = (function () {
         radarSweep = new THREE.Mesh(
             new THREE.BufferGeometry(),
             new THREE.MeshBasicMaterial({
-                color: 0x22c55e, transparent: true, opacity: 0.35,
+                color: 0x22c55e, transparent: true, opacity: 0.55,
                 side: THREE.DoubleSide, depthWrite: false
             })
         );
@@ -1057,6 +1282,7 @@ var RollViewer = (function () {
                 turnBtnEl.classList.remove('active');
             }
             turnHeading = 0;
+            camFollowHeading = 0;
         }
     }
 
@@ -1137,17 +1363,169 @@ var RollViewer = (function () {
         };
     }
 
+    // ── Turn splash particles — bow wave and side spray during turns ──
+    var turnSplashPoints = null;
+    var turnSplashData = [];
+    var TURN_SPLASH_COUNT = 120;
+
+    function buildTurnSplash() {
+        var THREE = window.THREE;
+        var geo = new THREE.BufferGeometry();
+        var positions = new Float32Array(TURN_SPLASH_COUNT * 3);
+        var alphas = new Float32Array(TURN_SPLASH_COUNT);
+        var sizes = new Float32Array(TURN_SPLASH_COUNT);
+        turnSplashData = [];
+        for (var i = 0; i < TURN_SPLASH_COUNT; i++) {
+            positions[i * 3] = 0;
+            positions[i * 3 + 1] = -10; // hidden below water
+            positions[i * 3 + 2] = 0;
+            alphas[i] = 0;
+            sizes[i] = 1;
+            turnSplashData.push({ x: 0, y: -10, z: 0, vx: 0, vy: 0, vz: 0, life: 999, maxLife: 1, active: false });
+        }
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geo.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+        geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+        var mat = new THREE.PointsMaterial({
+            color: 0xddeeff,
+            size: 1.2,
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            sizeAttenuation: true
+        });
+        turnSplashPoints = new THREE.Points(geo, mat);
+        scene.add(turnSplashPoints);
+    }
+
+    function animateTurnSplash(dt, shipX, shipZ, headingRad, rudderAngle, isturning) {
+        if (!turnSplashPoints) return;
+        var pos = turnSplashPoints.geometry.attributes.position;
+        var alp = turnSplashPoints.geometry.attributes.alpha;
+        var siz = turnSplashPoints.geometry.attributes.size;
+
+        var intensity = Math.min(Math.abs(rudderAngle) / 25, 1);
+        var spawnRate = isturning ? 8 + intensity * 20 : 0;
+        var spawnAccum = spawnRate * dt;
+
+        // Ship directions
+        var fwdX = Math.cos(headingRad);
+        var fwdZ = -Math.sin(headingRad);
+        var sideX = -fwdZ; // perpendicular
+        var sideZ = fwdX;
+        var turnSide = rudderAngle > 0 ? 1 : -1; // outer side of turn
+
+        // Spawn new particles
+        for (var si = 0; si < TURN_SPLASH_COUNT && spawnAccum > 0; si++) {
+            var sd = turnSplashData[si];
+            if (sd.active) continue;
+            spawnAccum -= 1;
+
+            var isBow = Math.random() < 0.4;
+            if (isBow) {
+                // Bow splash — forward of ship
+                var bx = shipX + fwdX * (8 + Math.random() * 3) + sideX * (Math.random() - 0.5) * 4;
+                var bz = shipZ + fwdZ * (8 + Math.random() * 3) + sideZ * (Math.random() - 0.5) * 4;
+                sd.x = bx; sd.y = 0.2; sd.z = bz;
+                sd.vx = fwdX * (2 + Math.random() * 3) + (Math.random() - 0.5) * 1.5;
+                sd.vy = 1.5 + Math.random() * 3;
+                sd.vz = fwdZ * (2 + Math.random() * 3) + (Math.random() - 0.5) * 1.5;
+            } else {
+                // Side splash — outer side of turn, along hull
+                var along = -2 + Math.random() * 10;
+                var sx = shipX + fwdX * along + sideX * turnSide * (3 + Math.random() * 2);
+                var sz = shipZ + fwdZ * along + sideZ * turnSide * (3 + Math.random() * 2);
+                sd.x = sx; sd.y = 0.1; sd.z = sz;
+                sd.vx = sideX * turnSide * (1.5 + Math.random() * 3 * intensity);
+                sd.vy = 0.8 + Math.random() * 2.5 * intensity;
+                sd.vz = sideZ * turnSide * (1.5 + Math.random() * 3 * intensity);
+            }
+            sd.life = 0;
+            sd.maxLife = 0.8 + Math.random() * 1.2;
+            sd.active = true;
+        }
+
+        // Update particles
+        for (var i = 0; i < TURN_SPLASH_COUNT; i++) {
+            var p = turnSplashData[i];
+            if (!p.active) {
+                alp.setX(i, 0);
+                continue;
+            }
+            p.life += dt;
+            if (p.life >= p.maxLife) {
+                p.active = false;
+                pos.setXYZ(i, 0, -10, 0);
+                alp.setX(i, 0);
+                continue;
+            }
+            // Gravity
+            p.vy -= 6.0 * dt;
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.z += p.vz * dt;
+            // Water surface collision
+            if (p.y < 0) {
+                p.y = 0;
+                p.vy *= -0.2;
+                p.vx *= 0.7;
+                p.vz *= 0.7;
+            }
+            pos.setXYZ(i, p.x, p.y, p.z);
+            var t = p.life / p.maxLife;
+            alp.setX(i, (1 - t) * 0.7 * intensity);
+            siz.setX(i, 0.5 + t * 1.5);
+        }
+
+        pos.needsUpdate = true;
+        alp.needsUpdate = true;
+        siz.needsUpdate = true;
+        turnSplashPoints.material.opacity = 0.4 + intensity * 0.4;
+    }
+
+    // (bow wave removed — looked too artificial)
+
     // ── Cloud group for animation ──
     var cloudGroup = null;
 
     // ── Ship model helpers ──
+    var shipEnvMap = null;
+
+    function buildShipEnvMap() {
+        var THREE = window.THREE;
+        // Simple gradient cubemap for subtle reflections
+        var size = 64;
+        var faces = [];
+        for (var f = 0; f < 6; f++) {
+            var canvas = document.createElement('canvas');
+            canvas.width = size; canvas.height = size;
+            var ctx = canvas.getContext('2d');
+            var grad = ctx.createLinearGradient(0, 0, 0, size);
+            grad.addColorStop(0, '#4a6fa5');
+            grad.addColorStop(0.5, '#1a2a3a');
+            grad.addColorStop(1, '#0a1520');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, size, size);
+            faces.push(canvas);
+        }
+        var cubeTexture = new THREE.CubeTexture(faces);
+        cubeTexture.needsUpdate = true;
+        shipEnvMap = cubeTexture;
+    }
+
     function shipMat(color, opts) {
         var THREE = window.THREE;
         var params = {
             color: new THREE.Color(color),
-            roughness: (opts && opts.roughness !== undefined) ? opts.roughness : 0.7,
-            metalness: (opts && opts.metalness !== undefined) ? opts.metalness : 0.3
+            roughness: (opts && opts.roughness !== undefined) ? opts.roughness : 0.55,
+            metalness: (opts && opts.metalness !== undefined) ? opts.metalness : 0.35
         };
+        if (shipEnvMap) {
+            params.envMap = shipEnvMap;
+            params.envMapIntensity = (opts && opts.envMapIntensity !== undefined) ? opts.envMapIntensity : 0.4;
+        }
         if (opts && opts.emissive) {
             params.emissive = new THREE.Color(opts.emissive);
             params.emissiveIntensity = opts.emissiveIntensity || 0.8;
@@ -1158,6 +1536,14 @@ var RollViewer = (function () {
     function addToShip(mesh) {
         shipGroup.add(mesh);
         return mesh;
+    }
+
+    // Waterline stripe — red band at hull waterline
+    function addWaterline(THREE, hullLength, hullWidth, yPos) {
+        var stripeGeo = new THREE.BoxGeometry(hullLength * 0.85, 0.15, hullWidth + 0.05);
+        var stripe = new THREE.Mesh(stripeGeo, shipMat('#991b1b', { roughness: 0.8, metalness: 0.1, envMapIntensity: 0.1 }));
+        stripe.position.set(0, yPos, 0);
+        addToShip(stripe);
     }
 
     // ── buildCompass() — wave direction arrow + compass ring (grouped) ──
@@ -1173,7 +1559,7 @@ var RollViewer = (function () {
         var ringGeo = new THREE.RingGeometry(14, 14.3, 64);
         ringGeo.rotateX(-Math.PI / 2);
         var ringMat = new THREE.MeshBasicMaterial({
-            color: 0xffffff, transparent: true, opacity: 0.15, side: THREE.DoubleSide
+            color: 0xffffff, transparent: true, opacity: 0.3, side: THREE.DoubleSide
         });
         var compassRing = new THREE.Mesh(ringGeo, ringMat);
         compassRing.position.y = 0.2;
@@ -1196,7 +1582,7 @@ var RollViewer = (function () {
             cx.textBaseline = 'middle';
             cx.fillText(c.label, 32, 32);
             var tex = new THREE.CanvasTexture(cv);
-            var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.6 }));
+            var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.85 }));
             sp.position.set(Math.sin(c.angle) * 15.5, 1.0, Math.cos(c.angle) * 15.5);
             sp.scale.set(2.5, 2.5, 1);
             compassGroup.add(sp);
@@ -1212,7 +1598,7 @@ var RollViewer = (function () {
         ctx.textAlign = 'center';
         ctx.fillText('WAVE ' + Math.round(weather.waveDirection) + '°', 64, 22);
         var texture = new THREE.CanvasTexture(canvas);
-        var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.7 }));
+        var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.9 }));
         sprite.position.set(arrowDir.x * 14, 1.5, arrowDir.z * 14);
         sprite.scale.set(6, 1.5, 1);
         compassGroup.add(sprite);
@@ -1261,29 +1647,53 @@ var RollViewer = (function () {
         scene.add(sprayPoints);
     }
 
-    // ── animateSpray(dt) — drift sea mist particles ──
-    function animateSpray(dt) {
+    // ── animateSpray(dt) — drift sea mist particles, amplified during turns ──
+    function animateSpray(dt, headingRad, rudderAngle) {
         if (!sprayPoints) return;
 
         var pos = sprayPoints.geometry.attributes.position;
         var intensity = Math.min(weather.waveHeight / 3, 1) * 0.7 + 0.3;
+        var isTurning = turnScenarioActive && typeof rudderAngle === 'number' && Math.abs(rudderAngle) > 1;
+        var turnIntensity = isTurning ? Math.min(Math.abs(rudderAngle) / 25, 1) : 0;
+        var turnOuter = (rudderAngle || 0) > 0 ? 1 : -1;
+
+        // Side vector relative to heading
+        var sideX = typeof headingRad === 'number' ? Math.sin(headingRad) : 0;
+        var sideZ = typeof headingRad === 'number' ? Math.cos(headingRad) : 0;
+        var fwdX = typeof headingRad === 'number' ? Math.cos(headingRad) : 1;
+        var fwdZ = typeof headingRad === 'number' ? -Math.sin(headingRad) : 0;
 
         for (var i = 0; i < SPRAY_COUNT; i++) {
             var v = sprayVelocities[i];
             v.life += dt;
 
             if (v.life >= v.maxLife) {
-                // Respawn — scattered around ship area
-                pos.setXYZ(i,
-                    (Math.random() - 0.3) * 30,
-                    Math.random() * 0.5,
-                    (Math.random() - 0.5) * 30
-                );
-                v.vx = (Math.random() - 0.5) * 0.3 * intensity;
-                v.vy = (0.05 + Math.random() * 0.15) * intensity;
-                v.vz = (Math.random() - 0.5) * 0.3 * intensity;
+                if (isTurning && Math.random() < 0.5 + turnIntensity * 0.4) {
+                    // Respawn on turn inner side — more concentrated spray
+                    var along = -2 + Math.random() * 14;
+                    var spread = 3 + Math.random() * 4 * turnIntensity;
+                    pos.setXYZ(i,
+                        fwdX * along + sideX * turnOuter * spread,
+                        Math.random() * 0.3,
+                        fwdZ * along + sideZ * turnOuter * spread
+                    );
+                    v.vx = sideX * turnOuter * (0.3 + Math.random() * 0.8 * turnIntensity) + (Math.random() - 0.5) * 0.2;
+                    v.vy = (0.1 + Math.random() * 0.4) * (1 + turnIntensity);
+                    v.vz = sideZ * turnOuter * (0.3 + Math.random() * 0.8 * turnIntensity) + (Math.random() - 0.5) * 0.2;
+                    v.maxLife = 1.5 + Math.random() * 2.5;
+                } else {
+                    // Normal respawn — scattered
+                    pos.setXYZ(i,
+                        (Math.random() - 0.3) * 30,
+                        Math.random() * 0.5,
+                        (Math.random() - 0.5) * 30
+                    );
+                    v.vx = (Math.random() - 0.5) * 0.3 * intensity;
+                    v.vy = (0.05 + Math.random() * 0.15) * intensity;
+                    v.vz = (Math.random() - 0.5) * 0.3 * intensity;
+                    v.maxLife = 3 + Math.random() * 4;
+                }
                 v.life = 0;
-                v.maxLife = 3 + Math.random() * 4;
                 continue;
             }
 
@@ -1291,8 +1701,7 @@ var RollViewer = (function () {
             var y = pos.getY(i) + v.vy * dt;
             var z = pos.getZ(i) + v.vz * dt;
 
-            // Fade out at top, reset if too high
-            if (y > 3.5) {
+            if (y > 3.5 + turnIntensity * 2) {
                 v.life = v.maxLife;
                 y = 0;
             }
@@ -1300,8 +1709,8 @@ var RollViewer = (function () {
             pos.setXYZ(i, x, y, z);
         }
 
-        // Very subtle opacity, scales with wave conditions
-        sprayPoints.material.opacity = 0.08 + 0.07 * intensity;
+        sprayPoints.material.opacity = 0.08 + 0.07 * intensity + turnIntensity * 0.1;
+        sprayPoints.material.size = 1.5 + turnIntensity * 1.0;
         pos.needsUpdate = true;
     }
 
@@ -1349,6 +1758,8 @@ var RollViewer = (function () {
         var THREE = window.THREE;
         var color = (window.SHIP_COLORS && window.SHIP_COLORS[type]) || '#6b7280';
 
+        if (!shipEnvMap) buildShipEnvMap();
+
         shipGroup = new THREE.Group();
 
         switch (type) {
@@ -1360,6 +1771,27 @@ var RollViewer = (function () {
             case 'tug': buildTug(THREE, color); break;
             default: buildGenericShip(THREE, color); break;
         }
+
+        // Waterline red stripe per ship type
+        var wlMap = {
+            tanker: [16, 4.2, 1.6], cargo: [14, 3.8, 1.6], passenger: [16, 4.5, 1.4],
+            fishing: [8, 2.8, 1.4], military: [14, 3.2, 1.6], tug: [6, 3.2, 1.6], other: [10, 3.2, 1.5]
+        };
+        var wl = wlMap[type] || wlMap['other'];
+        addWaterline(THREE, wl[0], wl[1], wl[2]);
+
+        // Rim light — backlight for silhouette definition
+        var rimLight = new THREE.DirectionalLight(0x88aacc, 0.6);
+        rimLight.position.set(-15, 8, -10);
+        shipGroup.add(rimLight);
+
+        // Enable shadows on all ship meshes
+        shipGroup.traverse(function (child) {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
 
         shipGroup.position.y = -0.8;   // waterline — hull partially submerged
         scene.add(shipGroup);
@@ -1738,22 +2170,35 @@ var RollViewer = (function () {
             var elapsed = (now - clockStart) / 1000;
 
             animateCamera(elapsed);
-            if (cloudGroup) cloudGroup.rotation.y = elapsed * 0.01;
+            // ── Cloud animation: slow drift + gentle bobbing ──
+            if (cloudGroup) {
+                cloudGroup.rotation.y = elapsed * 0.008;
+                for (var ci = 0; ci < _cloudSprites.length; ci++) {
+                    var cs = _cloudSprites[ci];
+                    // Gentle vertical bob
+                    cs.sprite.position.y = cs.baseY + Math.sin(elapsed * cs.bobFreq * Math.PI * 2 + ci) * cs.bobAmp;
+                    // Subtle opacity breathing
+                    cs.mat.opacity = cs.baseOpacity + Math.sin(elapsed * 0.15 + ci * 1.5) * 0.05;
+                }
+            }
 
             // ── Turn scenario computation ──
             var turnState = computeTurnState(dt);
 
             // ── Ship heading & speed ──
             var headingRad = turnScenarioActive ? (turnHeading * Math.PI / 180) : 0;
-            var currentSpeed = shipSpeed;
+            var targetSpeed = shipSpeed;
             if (turnScenarioActive && turnPhase === 'turning') {
-                currentSpeed = shipSpeed * 0.7;
+                targetSpeed = shipSpeed * 0.7;
             } else if (turnScenarioActive && (turnPhase === 'entering' || turnPhase === 'exiting')) {
-                currentSpeed = shipSpeed * 0.85;
+                targetSpeed = shipSpeed * 0.85;
             }
+            // Smooth speed transitions — no sudden jumps between phases
+            var speedLerp = 1 - Math.pow(0.05, dt);
+            smoothSpeed += (targetSpeed - smoothSpeed) * speedLerp;
 
             // ── Move ship forward in world space ──
-            var moveRate = currentSpeed * 0.8; // scene units/sec
+            var moveRate = smoothSpeed * 0.8; // scene units/sec
             shipWorldPos.x += Math.cos(headingRad) * moveRate * dt;
             shipWorldPos.z -= Math.sin(headingRad) * moveRate * dt;
 
@@ -1770,40 +2215,49 @@ var RollViewer = (function () {
                 cloudGroup.position.x = shipWorldPos.x;
                 cloudGroup.position.z = shipWorldPos.z;
             }
-
             // ── Animate sea markers (stationary in world, ship passes them) ──
             animateSeaMarkers(dt, headingRad, 0);
 
             animateWater(elapsed);
             // (old static wake removed — wakeTrail handles this now)
-            animateWakeTrail(dt, shipWorldPos.x, shipWorldPos.z, headingRad);
+            // (wakeTrail removed — water reflections provide sufficient visual cue)
 
             // Update HUD speed display
             var speedEl = document.getElementById('rv-turn-speed');
-            if (speedEl) speedEl.textContent = currentSpeed.toFixed(1) + ' kt';
+            if (speedEl) speedEl.textContent = smoothSpeed.toFixed(1) + ' kt';
 
             // Roll & Pitch calculation — scaled by wave height (2m baseline)
             var waveScale = Math.max(weather.waveHeight / 2.0, 0.3);
             var freqScale = weather.wavePeriod ? (8 / weather.wavePeriod) : 1;
 
-            // Base wave-induced roll — primary swell + secondary harmonic for realism
-            var primaryRoll = rollParams.amp * waveScale * Math.sin(elapsed * rollParams.freq * Math.PI * 2 * freqScale);
-            var secondaryRoll = rollParams.amp * 0.3 * waveScale * Math.sin(elapsed * rollParams.freq * 1.7 * Math.PI * 2 * freqScale + 1.2);
-            var noise = (Math.random() - 0.5) * 0.4 * waveScale; // subtle noise
-            var waveRoll = primaryRoll + secondaryRoll + noise;
+            // Base wave-induced roll — primary swell + secondary + tertiary harmonics
+            // (no Math.random — deterministic harmonics prevent per-frame jitter)
+            var w1 = elapsed * rollParams.freq * Math.PI * 2 * freqScale;
+            var primaryRoll = rollParams.amp * waveScale * Math.sin(w1);
+            var secondaryRoll = rollParams.amp * 0.3 * waveScale * Math.sin(w1 * 1.7 + 1.2);
+            var tertiaryRoll = rollParams.amp * 0.12 * waveScale * Math.sin(w1 * 3.1 + 2.7);
+            var waveRoll = primaryRoll + secondaryRoll + tertiaryRoll;
 
             // Turn-induced heel: steady inward lean during turn
             var turnHeel = 0;
             if (turnScenarioActive && turnState.rudderAngle !== 0) {
-                turnHeel = -turnState.rudderAngle * 0.2;
+                turnHeel = -turnState.rudderAngle * 0.22;
             }
 
-            // Combined roll: wave roll amplified during turn + steady heel
-            var roll = waveRoll * turnState.rollMultiplier + turnHeel;
+            // Combined roll — cap to realistic max ~18°
+            var rawRoll = waveRoll * turnState.rollMultiplier + turnHeel;
+            if (rawRoll > 18) rawRoll = 18;
+            if (rawRoll < -18) rawRoll = -18;
 
-            // Pitch: longer period, smaller amplitude
-            var pitch = (rollParams.amp * 0.25) * waveScale * Math.sin(elapsed * rollParams.freq * 0.6 * Math.PI * 2 * freqScale)
-                + (Math.random() - 0.5) * 0.2 * waveScale;
+            // Pitch: longer period, smaller amplitude, deterministic noise
+            var pitchScale = turnScenarioActive ? Math.min(waveScale, 0.6) : waveScale;
+            var rawPitch = (rollParams.amp * 0.12) * pitchScale * Math.sin(w1 * 0.6)
+                + rollParams.amp * 0.04 * pitchScale * Math.sin(w1 * 1.3 + 0.8);
+
+            // Smooth roll & pitch — exponential lerp removes any remaining jitter
+            var motionLerp = 1 - Math.pow(0.015, dt);  // ~τ=0.24s, smooth but responsive
+            smoothRoll += (rawRoll - smoothRoll) * motionLerp;
+            smoothPitch += (rawPitch - smoothPitch) * motionLerp;
 
             // ── Apply ship world position + rotations ──
             if (shipGroup) {
@@ -1811,14 +2265,21 @@ var RollViewer = (function () {
                 shipGroup.position.z = shipWorldPos.z;
                 shipGroup.position.y = -0.8 + weather.waveHeight * 0.1 * Math.sin(elapsed * 0.8);
                 shipGroup.rotation.y = headingRad;
-                shipGroup.rotation.x = roll * (Math.PI / 180);
-                shipGroup.rotation.z = pitch * (Math.PI / 180);
+                shipGroup.rotation.x = smoothRoll * (Math.PI / 180);
+                shipGroup.rotation.z = smoothPitch * (Math.PI / 180);
             }
 
             // ── Compass follows ship ──
             if (compassGroup) {
                 compassGroup.position.x = shipWorldPos.x;
                 compassGroup.position.z = shipWorldPos.z;
+            }
+
+            // ── Shadow light follows ship ──
+            if (mainDirLight) {
+                mainDirLight.position.set(shipWorldPos.x + 30, 40, shipWorldPos.z + 20);
+                mainDirLight.target.position.set(shipWorldPos.x, 0, shipWorldPos.z);
+                mainDirLight.target.updateMatrixWorld();
             }
 
             // ── Radar heading & turn indicator ──
@@ -1837,25 +2298,41 @@ var RollViewer = (function () {
                 b.sprite.scale.set(3 * flap, 1.5, 1);
             }
 
-            // ── Camera always follows ship — preserves user's orbit offset ──
+            // ── Camera follows ship: position + orbit behind heading ──
             if (!cameraAnimating && controls) {
                 var lerpFactor = 1 - Math.pow(0.02, dt);
                 camFollow.x += (shipWorldPos.x - camFollow.x) * lerpFactor;
                 camFollow.z += (shipWorldPos.z - camFollow.z) * lerpFactor;
 
-                // Shift camera + target by the same delta → user's angle/zoom stays intact
                 var dx = camFollow.x - controls.target.x;
                 var dz = camFollow.z - controls.target.z;
                 controls.target.x += dx;
                 controls.target.z += dz;
                 camera.position.x += dx;
                 camera.position.z += dz;
+
+                // Orbit camera around target to stay behind ship
+                if (turnScenarioActive) {
+                    var headingLerp = 1 - Math.pow(0.05, dt);
+                    var dHeading = headingRad - camFollowHeading;
+                    if (dHeading > Math.PI) dHeading -= 2 * Math.PI;
+                    if (dHeading < -Math.PI) dHeading += 2 * Math.PI;
+                    var rotAmount = dHeading * headingLerp;
+                    camFollowHeading += rotAmount;
+
+                    var cx = camera.position.x - controls.target.x;
+                    var cz = camera.position.z - controls.target.z;
+                    var cosR = Math.cos(-rotAmount);
+                    var sinR = Math.sin(-rotAmount);
+                    camera.position.x = controls.target.x + (cx * cosR - cz * sinR);
+                    camera.position.z = controls.target.z + (cx * sinR + cz * cosR);
+                }
             }
 
-            var absRoll = Math.abs(roll);
-            var absPitch = Math.abs(pitch);
-            updateGauge(absRoll, roll);
-            updatePitchGauge(absPitch, pitch);
+            var absRoll = Math.abs(smoothRoll);
+            var absPitch = Math.abs(smoothPitch);
+            updateGauge(absRoll, smoothRoll);
+            updatePitchGauge(absPitch, smoothPitch);
 
             // Push to history, cap at 60
             rollHistory.push(absRoll);
@@ -1886,7 +2363,9 @@ var RollViewer = (function () {
         }[typeKey] || '기타';
 
         // Use the capped shipSpeed instead of raw SOG (AIS can have errors like 102kt)
-        var sogVal = shipSpeed.toFixed(1) + ' kt';
+        var sogVal = sogSignalLost
+            ? shipSpeed.toFixed(1) + ' kt (신호없음, 기본값)'
+            : shipSpeed.toFixed(1) + ' kt';
         var hdgVal = ship.heading !== undefined ? ship.heading + '°' : (ship.cog !== undefined ? parseFloat(ship.cog).toFixed(0) + '°' : '-');
 
         panel.innerHTML =
@@ -2210,6 +2689,7 @@ var RollViewer = (function () {
         skyGroup = null;
         compassGroup = null;
         cloudGroup = null;
+        _cloudSprites = [];
         seagulls = [];
         seaMarkers = [];
         radarSweep = null;
@@ -2225,7 +2705,11 @@ var RollViewer = (function () {
         turnHudEl = null;
         turnBtnEl = null;
         shipWorldPos = { x: 0, z: 0 };
+        smoothSpeed = 12;
+        smoothRoll = 0;
+        smoothPitch = 0;
         camFollow = { x: 0, z: 0 };
+        camFollowHeading = 0;
         weather = null;
         rollParams = null;
         currentMmsi = null;

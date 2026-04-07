@@ -62,23 +62,36 @@ async def get_wind_data():
     if _wind_cache.get("data") and now - _wind_cache.get("ts", 0) < _TTL:
         return _wind_cache["data"]
 
-    lats = ",".join(str(p[0]) for p in _GRID_PAIRS)
-    lons = ",".join(str(p[1]) for p in _GRID_PAIRS)
+    # Split into batches of 40 to avoid Open-Meteo 502 on large requests
+    BATCH = 40
+    all_entries = []
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            for start in range(0, len(_GRID_PAIRS), BATCH):
+                batch = _GRID_PAIRS[start:start + BATCH]
+                lats = ",".join(str(p[0]) for p in batch)
+                lons = ",".join(str(p[1]) for p in batch)
+                url = (
+                    "https://api.open-meteo.com/v1/forecast?"
+                    f"latitude={lats}&longitude={lons}"
+                    "&current=wind_speed_10m,wind_direction_10m,precipitation"
+                    "&timeformat=unixtime"
+                )
+                resp = await client.get(url)
+                resp.raise_for_status()
+                raw = resp.json()
+                entries = raw if isinstance(raw, list) else [raw]
+                all_entries.extend(entries)
+    except Exception:
+        # API down — return stale cache or empty
+        if _wind_cache.get("data"):
+            return _wind_cache["data"]
+        return {"points": [], "timestamp": now, "error": "upstream_unavailable"}
 
-    url = (
-        "https://api.open-meteo.com/v1/forecast?"
-        f"latitude={lats}&longitude={lons}"
-        "&current=wind_speed_10m,wind_direction_10m,precipitation"
-        "&timeformat=unixtime"
-    )
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(url)
-        raw = resp.json()
-
-    entries = raw if isinstance(raw, list) else [raw]
     points = []
-    for i, entry in enumerate(entries):
+    for i, entry in enumerate(all_entries):
+        if i >= len(_GRID_PAIRS):
+            break
         current = entry.get("current", {})
         points.append({
             "lat": _GRID_PAIRS[i][0],

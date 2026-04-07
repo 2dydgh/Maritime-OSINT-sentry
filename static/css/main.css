@@ -271,6 +271,7 @@
     padding: 6px 10px 6px 0;
     align-items: stretch;
     flex-shrink: 0;
+    overflow: hidden;
 }
 
 .stat-card {
@@ -283,6 +284,7 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+    overflow: hidden;
     cursor: pointer;
     transition: border-color 0.15s ease, background 0.15s ease;
 }
@@ -620,9 +622,10 @@
     flex: 1;
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 3px;
     align-items: center;
     min-width: 0;
+    overflow: hidden;
 }
 
 .risk-area-tag {
@@ -631,9 +634,12 @@
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 3px;
-    padding: 2px 6px;
+    padding: 2px 5px;
     white-space: nowrap;
     line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
     animation: riskTagIn 0.3s ease;
 }
 
@@ -870,6 +876,13 @@
     border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.roll-gauge-track {
+    position: relative;
+    height: 100%;
+    width: 100%;
+    border-radius: 4px;
+}
+
 .roll-gauge-fill {
     height: 100%;
     border-radius: 4px;
@@ -1055,9 +1068,9 @@
     top: 12px;
     left: 12px;
     z-index: 5;
-    background: rgba(9, 9, 11, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: var(--text-dim);
+    background: rgba(55, 55, 60, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #c8cdd3;
     padding: 6px 14px;
     border-radius: 8px;
     backdrop-filter: blur(8px);
@@ -1068,8 +1081,12 @@
 }
 
 .roll-viewer-back:hover {
+    background: rgba(70, 70, 75, 0.95);
     color: var(--text-main);
     border-color: rgba(255, 255, 255, 0.25);
+}
+.roll-viewer-back:active {
+    background: rgba(80, 80, 85, 0.95);
 }
 
 /* ── Turn Scenario UI ── */
@@ -1079,9 +1096,9 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 5;
-    background: rgba(9, 9, 11, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: var(--text-dim);
+    background: rgba(55, 55, 60, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #c8cdd3;
     padding: 6px 14px;
     border-radius: 8px;
     backdrop-filter: blur(8px);
@@ -1094,6 +1111,7 @@
     gap: 6px;
 }
 .rv-scenario-btn:hover {
+    background: rgba(70, 70, 75, 0.95);
     color: var(--text-main);
     border-color: rgba(255, 255, 255, 0.25);
 }
@@ -1109,8 +1127,8 @@
     bottom: 12px;
     left: 12px;
     z-index: 5;
-    background: rgba(9, 9, 11, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(55, 55, 60, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 8px;
     backdrop-filter: blur(8px);
     padding: 8px 12px;
@@ -2053,6 +2071,12 @@ header::after {
 .nearby-dist {
     color: var(--text-dim);
     flex-shrink: 0;
+}
+
+.nearby-row .collision-badge {
+    font-size: 0.62rem;
+    padding: 2px 6px;
+    white-space: nowrap;
 }
 
 /* Collision Analysis Section */
