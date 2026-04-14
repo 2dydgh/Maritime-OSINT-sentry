@@ -86,6 +86,10 @@ def classify_aircraft(category: int, icao24: str) -> str:
     if category == 7:
         return "military"
 
+    # No category info (0 or 1) — default to civilian (most aircraft are)
+    if category in (0, 1):
+        return "civilian"
+
     return "other"
 
 
