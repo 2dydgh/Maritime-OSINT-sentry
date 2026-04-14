@@ -579,11 +579,11 @@ function updateAircraftLayer(aircraft) {
                     var bb = billboards.add({
                         position: position,
                         image: getAircraftIcon(AIRCRAFT_COLORS[type] || '#60a5fa', type),
-                        width: 16,
-                        height: 18,
+                        width: 24,
+                        height: 28,
                         rotation: acHeading,
                         alignedAxis: acSurfaceNormal,
-                        scaleByDistance: new Cesium.NearFarScalar(5e5, 1.4, 1.5e7, 0.5),
+                        scaleByDistance: new Cesium.NearFarScalar(5e5, 1.8, 1.5e7, 0.7),
                         disableDepthTestDistance: 5e6
                     });
                     bb._icao24 = ac.icao24;
@@ -641,7 +641,7 @@ function updateAircraftLayer(aircraft) {
             } else {
                 var color = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
                 var marker = L.circleMarker([ac.lat, ac.lng], {
-                    radius: 3,
+                    radius: 5,
                     fillColor: color,
                     fillOpacity: 0.9,
                     color: color,
