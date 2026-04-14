@@ -129,9 +129,8 @@ def get_aircraft() -> list[dict]:
                 "heading": ac.get("heading"),
                 "vertical_rate": ac.get("vertical_rate"),
                 "on_ground": ac.get("on_ground", False),
-                "category": ac.get("category", 0),
+                "category": ac.get("type", "other"),
                 "origin_country": ac.get("origin_country", ""),
-                "type": ac.get("type", "other"),
             })
 
     return result
@@ -179,7 +178,7 @@ def _poll_opensky() -> None:
 
     with _aircraft_lock:
         for sv in states:
-            if not sv or len(sv) < 17:
+            if not sv or len(sv) < 18:
                 continue
 
             icao24 = (sv[0] or "").strip()

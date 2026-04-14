@@ -477,7 +477,7 @@ function showAircraftInfo(icao24) {
     var panel = document.getElementById('shipInfoPanel') || document.getElementById('ship-info');
     if (!panel) return;
 
-    var type = ac.aircraft_type || 'other';
+    var type = ac.category || 'other';
     var color = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
     var altM = ac.altitude != null ? ac.altitude : null;
     var altFt = altM != null ? Math.round(altM * 3.281) : null;
@@ -510,7 +510,7 @@ function updateAircraftLayer(aircraft) {
     aircraft.forEach(function(ac) { aircraftDataMap[ac.icao24] = ac; });
 
     aircraft.forEach(function(ac) {
-        var type = ac.aircraft_type || 'other';
+        var type = ac.category || 'other';
         if (byType[type]) byType[type].push(ac);
         else byType['other'].push(ac);
     });
@@ -558,9 +558,16 @@ function updateAircraftLayer(aircraft) {
                 var alt = ac.altitude != null ? ac.altitude : 0;
                 var position = Cesium.Cartesian3.fromDegrees(ac.lng, ac.lat, alt);
 
+                var acHeading = Cesium.Math.toRadians(-(ac.heading || 0));
+                var acSurfaceNormal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(
+                    Cesium.Cartesian3.fromDegrees(ac.lng, ac.lat)
+                );
+
                 var existingBb = aircraftBillboardMap[String(ac.icao24)];
                 if (existingBb) {
                     existingBb.position = position;
+                    existingBb.rotation = acHeading;
+                    existingBb.alignedAxis = acSurfaceNormal;
                     var existingLabel = aircraftLabelMap[String(ac.icao24)];
                     if (existingLabel) {
                         existingLabel.position = position;
@@ -574,6 +581,8 @@ function updateAircraftLayer(aircraft) {
                         image: getAircraftIcon(AIRCRAFT_COLORS[type] || '#60a5fa', type),
                         width: 16,
                         height: 18,
+                        rotation: acHeading,
+                        alignedAxis: acSurfaceNormal,
                         scaleByDistance: new Cesium.NearFarScalar(5e5, 1.4, 1.5e7, 0.5),
                         disableDepthTestDistance: 5e6
                     });
@@ -624,7 +633,7 @@ function updateAircraftLayer(aircraft) {
     if (currentMapMode === '2d' && leafletMap) {
         var newAcMarkersByType = {};
         aircraft.forEach(function(ac) {
-            var type = ac.aircraft_type || 'other';
+            var type = ac.category || 'other';
             var entry = leafletAircraftMarkers[ac.icao24];
 
             if (entry) {
