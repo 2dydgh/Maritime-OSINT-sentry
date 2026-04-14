@@ -638,16 +638,21 @@ function updateAircraftLayer(aircraft) {
 
             if (entry) {
                 entry.marker.setLatLng([ac.lat, ac.lng]);
+                // Update rotation
+                var el = entry.marker.getElement && entry.marker.getElement();
+                if (el) el.style.transform = el.style.transform.replace(/rotate\([^)]*\)/, '') + ' rotate(' + (ac.heading || 0) + 'deg)';
             } else {
                 var color = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
-                var marker = L.circleMarker([ac.lat, ac.lng], {
-                    radius: 5,
-                    fillColor: color,
-                    fillOpacity: 0.9,
-                    color: color,
-                    weight: 1,
-                    opacity: 0.7
+                var acIcon = L.divIcon({
+                    className: 'aircraft-icon-2d',
+                    html: '<svg viewBox="0 0 32 32" width="20" height="20" style="filter:drop-shadow(0 0 2px rgba(0,0,0,0.6));">' +
+                          '<path d="M16,2 L18,8 L30,17 L30,19 L18,15 L18,26 L22,30 L22,31 L16,29 L10,31 L10,30 L14,26 L14,15 L2,19 L2,17 L14,8 Z" ' +
+                          'fill="' + color + '" stroke="#000" stroke-width="0.5"/></svg>',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
                 });
+                var _acHeading = ac.heading || 0;
+                var marker = L.marker([ac.lat, ac.lng], { icon: acIcon });
 
                 marker.bindTooltip(ac.callsign || ac.icao24 || 'Unknown', {
                     className: 'ship-tooltip-2d',
@@ -658,6 +663,12 @@ function updateAircraftLayer(aircraft) {
                 marker.on('click', function() {
                     showAircraftInfo(ac.icao24);
                 });
+                (function(m, h) {
+                    m.on('add', function() {
+                        var el = m.getElement();
+                        if (el) el.style.transform += ' rotate(' + h + 'deg)';
+                    });
+                })(marker, _acHeading);
 
                 if (!leafletAircraftLayerGroups[type]) {
                     leafletAircraftLayerGroups[type] = L.layerGroup();

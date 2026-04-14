@@ -2995,6 +2995,12 @@ header::after {
     border-top-color: var(--panel-border) !important;
 }
 
+.aircraft-icon-2d {
+    background: transparent;
+    border: none;
+    line-height: 0;
+}
+
 .sat-icon-2d {
     background: transparent;
 }
