@@ -126,6 +126,11 @@
                     <i class="fa-solid fa-cloud-sun"></i> 기상
                     <button class="chip-expand" data-dropdown="weatherFilter" title="상세 필터"><i class="fa-solid fa-chevron-down"></i></button>
                 </div>
+                <div class="layer-chip" data-layer="aircraft">
+                    <i class="fa-solid fa-plane"></i> 항공기
+                    <span class="chip-count" id="chipAircraftCount">0</span>
+                    <button class="chip-expand" data-dropdown="aircraftFilter" title="상세 필터"><i class="fa-solid fa-chevron-down"></i></button>
+                </div>
             </div>
         </div>
 
@@ -225,6 +230,29 @@
                 <div class="filter-item">
                     <label><input type="checkbox" id="layer-sat-footprint" checked> 관측 범위</label>
                 </div>
+            </div>
+        </div>
+
+        <div class="layer-dropdown" id="aircraftFilter">
+            <div class="layer-dropdown-header">
+                <span>항공기 필터</span>
+                <span class="lg-badge" id="total-aircraft">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-ac-civilian"><span class="color-dot" style="background-color: #8b5cf6;"></span> Civilian</label>
+                <span class="filter-count" id="count-ac-civilian">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-ac-military"><span class="color-dot" style="background-color: #ef4444;"></span> Military</label>
+                <span class="filter-count" id="count-ac-military">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-ac-helicopter"><span class="color-dot" style="background-color: #f59e0b;"></span> Helicopter</label>
+                <span class="filter-count" id="count-ac-helicopter">0</span>
+            </div>
+            <div class="filter-item">
+                <label><input type="checkbox" id="filter-ac-other"><span class="color-dot" style="background-color: #9ca3af;"></span> Other</label>
+                <span class="filter-count" id="count-ac-other">0</span>
             </div>
         </div>
 
