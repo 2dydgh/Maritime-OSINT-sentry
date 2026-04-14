@@ -103,7 +103,15 @@ document.addEventListener('DOMContentLoaded', function() {
             if (layer === 'ships') {
                 var checked = chip.classList.contains('active');
                 document.querySelectorAll('[id^="filter-"]').forEach(function(cb) {
-                    if (cb.type === 'checkbox') { cb.checked = checked; cb.dispatchEvent(new Event('change')); }
+                    if (cb.type === 'checkbox' && !cb.id.startsWith('filter-ac-')) {
+                        cb.checked = checked; cb.dispatchEvent(new Event('change'));
+                    }
+                });
+            } else if (layer === 'aircraft') {
+                var acChecked = chip.classList.contains('active');
+                AIRCRAFT_TYPES.forEach(function(t) {
+                    var cb = document.getElementById('filter-ac-' + t);
+                    if (cb) { cb.checked = acChecked; cb.dispatchEvent(new Event('change')); }
                 });
             } else if (layer === 'satellites') {
                 var satCb = document.getElementById('layer-sats');
