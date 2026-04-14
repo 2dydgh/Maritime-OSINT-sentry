@@ -92,6 +92,46 @@ function getShipIcon(colorHex, shipType) {
 }
 window.getShipIcon = getShipIcon;
 
+// Aircraft icon SVG by type
+var _aircraftIconCache = {};
+function getAircraftIcon(colorHex, aircraftType) {
+    var key = colorHex + '|' + (aircraftType || 'other');
+    if (_aircraftIconCache[key]) return _aircraftIconCache[key];
+
+    var c = colorHex;
+    var s = '#000';
+    var glow = '<defs>\
+        <filter id=\'ag\' x=\'-50%\' y=\'-50%\' width=\'200%\' height=\'200%\'>\
+            <feDropShadow dx=\'0\' dy=\'0\' stdDeviation=\'2\' flood-color=\'rgba(0,0,0,0.7)\'/>\
+        </filter>\
+    </defs>';
+
+    var body;
+    switch (aircraftType) {
+        case 'civilian':
+            body = '<path d=\'M16,2 L18,8 L30,18 L30,20 L18,16 L18,28 L22,32 L22,34 L16,32 L10,34 L10,32 L14,28 L14,16 L2,20 L2,18 L14,8 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#ag)\'/>';
+            break;
+        case 'military':
+            body = '<path d=\'M16,1 L18,6 L28,16 L28,18 L18,14 L19,22 L18,28 L22,32 L22,34 L16,30 L10,34 L10,32 L14,28 L13,22 L14,14 L4,18 L4,16 L14,6 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#ag)\'/>\
+                <line x1=\'16\' y1=\'1\' x2=\'16\' y2=\'34\' stroke=\'white\' stroke-width=\'0.8\' opacity=\'0.5\'/>';
+            break;
+        case 'helicopter':
+            body = '<ellipse cx=\'16\' cy=\'18\' rx=\'5\' ry=\'8\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#ag)\'/>\
+                <line x1=\'4\' y1=\'12\' x2=\'28\' y2=\'12\' stroke=\'' + c + '\' stroke-width=\'2\' stroke-linecap=\'round\'/>\
+                <line x1=\'16\' y1=\'26\' x2=\'16\' y2=\'32\' stroke=\'' + c + '\' stroke-width=\'1.5\'/>\
+                <line x1=\'12\' y1=\'32\' x2=\'20\' y2=\'32\' stroke=\'' + c + '\' stroke-width=\'1.5\' stroke-linecap=\'round\'/>';
+            break;
+        default:
+            body = '<path d=\'M16,4 L18,10 L26,18 L26,19 L18,16 L18,26 L21,30 L21,31 L16,29 L11,31 L11,30 L14,26 L14,16 L6,19 L6,18 L14,10 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#ag)\'/>';
+    }
+
+    var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 32 36\'>' + glow + body + '</svg>';
+    var url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    _aircraftIconCache[key] = url;
+    return url;
+}
+window.getAircraftIcon = getAircraftIcon;
+
 // Ship type filter checkbox handlers
 SHIP_TYPES.forEach(function(type) {
     var checkbox = document.getElementById('filter-' + type);
@@ -110,6 +150,27 @@ SHIP_TYPES.forEach(function(type) {
                     leafletShipLayerGroups[type].addTo(leafletMap);
                 } else {
                     leafletMap.removeLayer(leafletShipLayerGroups[type]);
+                }
+            }
+        });
+    }
+});
+
+// Aircraft type filter checkbox handlers
+var leafletAircraftLayerGroups = {};
+var leafletAircraftMarkers = {};
+
+AIRCRAFT_TYPES.forEach(function(type) {
+    var checkbox = document.getElementById('filter-ac-' + type);
+    if (checkbox) {
+        checkbox.addEventListener('change', function() {
+            if (aircraftBillboards[type]) aircraftBillboards[type].show = checkbox.checked;
+            if (aircraftLabels[type]) aircraftLabels[type].show = checkbox.checked;
+            if (currentMapMode === '2d' && leafletMap && leafletAircraftLayerGroups[type]) {
+                if (checkbox.checked) {
+                    leafletAircraftLayerGroups[type].addTo(leafletMap);
+                } else {
+                    leafletMap.removeLayer(leafletAircraftLayerGroups[type]);
                 }
             }
         });
@@ -410,6 +471,230 @@ function updateShipsLayer(ships) {
     }
 }
 
+function showAircraftInfo(icao24) {
+    var ac = aircraftDataMap[icao24] || aircraftDataMap[String(icao24)];
+    if (!ac) return;
+    var panel = document.getElementById('shipInfoPanel') || document.getElementById('ship-info');
+    if (!panel) return;
+
+    var type = ac.aircraft_type || 'other';
+    var color = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
+    var altM = ac.altitude != null ? ac.altitude : null;
+    var altFt = altM != null ? Math.round(altM * 3.281) : null;
+    var velMs = ac.velocity != null ? ac.velocity : null;
+    var velKmh = velMs != null ? Math.round(velMs * 3.6) : null;
+    var velKts = velMs != null ? Math.round(velMs * 1.944) : null;
+
+    var html = '<div style="border-left: 4px solid ' + color + '; padding-left: 10px;">'
+        + '<div style="font-size:13px; font-weight:700; color:' + color + '; margin-bottom:6px;">&#9992; ' + (ac.callsign || ac.icao24 || 'Unknown') + '</div>'
+        + '<table style="width:100%; font-size:11px; border-collapse:collapse;">'
+        + '<tr><td style="color:#9ca3af; padding:2px 0;">ICAO24</td><td>' + (ac.icao24 || '-') + '</td></tr>'
+        + '<tr><td style="color:#9ca3af; padding:2px 0;">Category</td><td>' + type + '</td></tr>'
+        + '<tr><td style="color:#9ca3af; padding:2px 0;">Altitude</td><td>' + (altM != null ? altM + ' m / ' + altFt + ' ft' : '-') + '</td></tr>'
+        + '<tr><td style="color:#9ca3af; padding:2px 0;">Speed</td><td>' + (velKmh != null ? velKmh + ' km/h / ' + velKts + ' kts' : '-') + '</td></tr>'
+        + '<tr><td style="color:#9ca3af; padding:2px 0;">Heading</td><td>' + (ac.heading != null ? ac.heading + '°' : '-') + '</td></tr>'
+        + '<tr><td style="color:#9ca3af; padding:2px 0;">Vertical Rate</td><td>' + (ac.vertical_rate != null ? ac.vertical_rate + ' m/s' : '-') + '</td></tr>'
+        + '<tr><td style="color:#9ca3af; padding:2px 0;">Country</td><td>' + (ac.origin_country || '-') + '</td></tr>'
+        + '</table>'
+        + '</div>';
+
+    panel.innerHTML = html;
+    panel.style.display = 'block';
+}
+window.showAircraftInfo = showAircraftInfo;
+
+function updateAircraftLayer(aircraft) {
+    var byType = {};
+    AIRCRAFT_TYPES.forEach(function(t) { byType[t] = []; });
+
+    aircraft.forEach(function(ac) { aircraftDataMap[ac.icao24] = ac; });
+
+    aircraft.forEach(function(ac) {
+        var type = ac.aircraft_type || 'other';
+        if (byType[type]) byType[type].push(ac);
+        else byType['other'].push(ac);
+    });
+
+    var west = -180, east = 180, south = -90, north = 90;
+
+    if (currentMapMode === '2d' && leafletMap) {
+        var bounds = leafletMap.getBounds();
+        var buffer = 0.5;
+        west = bounds.getWest() - buffer;
+        east = bounds.getEast() + buffer;
+        south = bounds.getSouth() - buffer;
+        north = bounds.getNorth() + buffer;
+    } else if (typeof viewer !== 'undefined') {
+        var cameraRect = viewer.camera.computeViewRectangle();
+        if (cameraRect) {
+            var buffer = 0.5;
+            west = Cesium.Math.toDegrees(cameraRect.west) - buffer;
+            east = Cesium.Math.toDegrees(cameraRect.east) + buffer;
+            south = Cesium.Math.toDegrees(cameraRect.south) - buffer;
+            north = Cesium.Math.toDegrees(cameraRect.north) + buffer;
+        }
+    }
+
+    var MAX_AC_PER_TYPE = 400;
+
+    // Cesium 3D mode
+    if (currentMapMode !== '2d' && typeof viewer !== 'undefined') {
+        AIRCRAFT_TYPES.forEach(function(type) {
+            var billboards = aircraftBillboards[type];
+            var labels = aircraftLabels[type];
+            if (!billboards || !labels) return;
+
+            var typeAircraft = byType[type];
+            var seenIcao24s = new Set();
+            var typeRenderedCount = 0;
+
+            typeAircraft.forEach(function(ac) {
+                if (typeRenderedCount >= MAX_AC_PER_TYPE) return;
+                if (ac.lng < west || ac.lng > east || ac.lat < south || ac.lat > north) return;
+
+                typeRenderedCount++;
+                seenIcao24s.add(String(ac.icao24));
+
+                var alt = ac.altitude != null ? ac.altitude : 0;
+                var position = Cesium.Cartesian3.fromDegrees(ac.lng, ac.lat, alt);
+
+                var existingBb = aircraftBillboardMap[String(ac.icao24)];
+                if (existingBb) {
+                    existingBb.position = position;
+                    var existingLabel = aircraftLabelMap[String(ac.icao24)];
+                    if (existingLabel) {
+                        existingLabel.position = position;
+                        if (ac.callsign && existingLabel.text !== ac.callsign) {
+                            existingLabel.text = ac.callsign;
+                        }
+                    }
+                } else {
+                    var bb = billboards.add({
+                        position: position,
+                        image: getAircraftIcon(AIRCRAFT_COLORS[type] || '#60a5fa', type),
+                        width: 16,
+                        height: 18,
+                        scaleByDistance: new Cesium.NearFarScalar(5e5, 1.4, 1.5e7, 0.5),
+                        disableDepthTestDistance: 5e6
+                    });
+                    bb._icao24 = ac.icao24;
+                    bb._isAircraft = true;
+                    bb._acType = type;
+                    aircraftBillboardMap[String(ac.icao24)] = bb;
+
+                    var lbl = labels.add({
+                        position: position,
+                        text: ac.callsign || '',
+                        font: '10px Inter, sans-serif',
+                        fillColor: Cesium.Color.fromCssColorString(AIRCRAFT_COLORS[type] || '#60a5fa'),
+                        outlineColor: Cesium.Color.BLACK,
+                        outlineWidth: 3,
+                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                        pixelOffset: new Cesium.Cartesian2(0, -18),
+                        scaleByDistance: new Cesium.NearFarScalar(5e5, 1.0, 5e6, 0.4),
+                        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2e6),
+                        disableDepthTestDistance: 5e6
+                    });
+                    lbl._icao24 = ac.icao24;
+                    aircraftLabelMap[String(ac.icao24)] = lbl;
+                }
+            });
+
+            // Remove stale aircraft
+            var toRemoveIcao24s = [];
+            for (var icao24 in aircraftBillboardMap) {
+                var bb = aircraftBillboardMap[icao24];
+                if (bb._acType === type && !seenIcao24s.has(icao24)) {
+                    toRemoveIcao24s.push(icao24);
+                }
+            }
+            toRemoveIcao24s.forEach(function(icao24) {
+                billboards.remove(aircraftBillboardMap[icao24]);
+                labels.remove(aircraftLabelMap[icao24]);
+                delete aircraftBillboardMap[icao24];
+                delete aircraftLabelMap[icao24];
+            });
+
+            var countEl = document.getElementById('count-ac-' + type);
+            if (countEl) animateCount(countEl, typeAircraft.length.toLocaleString());
+        });
+    }
+
+    // Leaflet 2D mode
+    if (currentMapMode === '2d' && leafletMap) {
+        var newAcMarkersByType = {};
+        aircraft.forEach(function(ac) {
+            var type = ac.aircraft_type || 'other';
+            var entry = leafletAircraftMarkers[ac.icao24];
+
+            if (entry) {
+                entry.marker.setLatLng([ac.lat, ac.lng]);
+            } else {
+                var color = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
+                var marker = L.circleMarker([ac.lat, ac.lng], {
+                    radius: 3,
+                    fillColor: color,
+                    fillOpacity: 0.9,
+                    color: color,
+                    weight: 1,
+                    opacity: 0.7
+                });
+
+                marker.bindTooltip(ac.callsign || ac.icao24 || 'Unknown', {
+                    className: 'ship-tooltip-2d',
+                    direction: 'top',
+                    offset: [0, -5]
+                });
+
+                marker.on('click', function() {
+                    showAircraftInfo(ac.icao24);
+                });
+
+                if (!leafletAircraftLayerGroups[type]) {
+                    leafletAircraftLayerGroups[type] = L.layerGroup();
+                    var cb = document.getElementById('filter-ac-' + type);
+                    if (!cb || cb.checked) {
+                        leafletAircraftLayerGroups[type].addTo(leafletMap);
+                    }
+                }
+                if (!newAcMarkersByType[type]) newAcMarkersByType[type] = [];
+                newAcMarkersByType[type].push(marker);
+                leafletAircraftMarkers[ac.icao24] = { marker: marker, type: type };
+            }
+        });
+
+        Object.keys(newAcMarkersByType).forEach(function(type) {
+            var group = leafletAircraftLayerGroups[type];
+            if (group) {
+                var wasOnMap = leafletMap.hasLayer(group);
+                if (wasOnMap) leafletMap.removeLayer(group);
+                var layers = newAcMarkersByType[type];
+                for (var i = 0; i < layers.length; i++) {
+                    group.addLayer(layers[i]);
+                }
+                if (wasOnMap) group.addTo(leafletMap);
+            }
+        });
+
+        var currentIcao24s = new Set(aircraft.map(function(ac) { return String(ac.icao24); }));
+        Object.keys(leafletAircraftMarkers).forEach(function(icao24) {
+            if (!currentIcao24s.has(String(icao24))) {
+                var entry = leafletAircraftMarkers[icao24];
+                if (entry && leafletAircraftLayerGroups[entry.type]) {
+                    leafletAircraftLayerGroups[entry.type].removeLayer(entry.marker);
+                }
+                delete leafletAircraftMarkers[icao24];
+            }
+        });
+
+        AIRCRAFT_TYPES.forEach(function(type) {
+            var countEl = document.getElementById('count-ac-' + type);
+            if (countEl) animateCount(countEl, (byType[type] || []).length.toLocaleString());
+        });
+    }
+}
+window.updateAircraftLayer = updateAircraftLayer;
+
 var ws;
 function initWebSocket() {
     var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -498,6 +783,16 @@ function initWebSocket() {
 
                 // Update header latency indicator
                 _lastWsReceived = Date.now();
+            }
+            else if (data.type === "aircraft_update") {
+                updateAircraftLayer(data.aircraft || []);
+                var totalAcEl = document.getElementById('total-aircraft');
+                if (totalAcEl) animateCount(totalAcEl, (data.aircraft || []).length.toLocaleString());
+                var chipAc = document.getElementById('chipAircraftCount');
+                if (chipAc) chipAc.textContent = (data.aircraft || []).length.toLocaleString();
+                if (typeof BottomBar !== 'undefined' && BottomBar.updateAircraftTypes) {
+                    BottomBar.updateAircraftTypes(data.aircraft || []);
+                }
             }
         } catch (error) {
             console.error("Error parsing WebSocket message:", error);
