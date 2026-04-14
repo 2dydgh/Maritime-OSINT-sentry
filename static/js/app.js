@@ -25,6 +25,21 @@ var SHIP_COLORS = {
     other: '#6b7280'
 };
 
+// Aircraft type system
+var AIRCRAFT_TYPES = ['civilian', 'military', 'helicopter', 'other'];
+var AIRCRAFT_COLORS = {
+    civilian:   '#8b5cf6',
+    military:   '#ef4444',
+    helicopter: '#f59e0b',
+    other:      '#9ca3af'
+};
+
+var aircraftDataMap = {};
+var aircraftBillboards = {};      // { type: BillboardCollection }
+var aircraftLabels = {};           // { type: LabelCollection }
+var aircraftBillboardMap = {};     // { icao24: Billboard }
+var aircraftLabelMap = {};         // { icao24: Label }
+
 var satDataSource = null; // set in map-cesium.js
 var _satRecCache = {};
 var SAT_COLORS = {
