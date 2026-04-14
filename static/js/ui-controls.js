@@ -40,6 +40,12 @@ function animateCount(el, newValue) {
         var c = document.getElementById('chipShipCount');
         if (c) c.textContent = newText;
     }
+    if (el.id === 'total-aircraft') {
+        var hAc = document.getElementById('hudAircraft');
+        if (hAc) hAc.textContent = newText;
+        var cAc = document.getElementById('chipAircraftCount');
+        if (cAc) cAc.textContent = newText;
+    }
 }
 window.animateCount = animateCount;
 

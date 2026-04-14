@@ -96,6 +96,40 @@ var BottomBar = (function() {
         container.innerHTML = html;
     }
 
+    function updateAircraftTypes(acList) {
+        var container = document.getElementById('aircraftTreemap');
+        if (!container) return;
+
+        var counts = {};
+        AIRCRAFT_TYPES.forEach(function(t) { counts[t] = 0; });
+        acList.forEach(function(ac) {
+            var type = ac.category || 'other';
+            if (counts[type] !== undefined) counts[type]++;
+            else counts['other']++;
+        });
+
+        var items = [];
+        var total = 0;
+        AIRCRAFT_TYPES.forEach(function(t) {
+            var v = counts[t] || 0;
+            total += v;
+            if (v > 0) items.push({ type: t, count: v, color: AIRCRAFT_COLORS[t] || '#9ca3af' });
+        });
+        if (total === 0) { container.innerHTML = ''; return; }
+
+        items.sort(function(a, b) { return b.count - a.count; });
+
+        var acLabels = { civilian: 'CIV', military: 'MIL', helicopter: 'HEL', other: 'OTH' };
+        var html = '';
+        items.forEach(function(item) {
+            var flex = Math.max(item.count / total * 10, 0.8).toFixed(2);
+            var abbr = acLabels[item.type] || 'OTH';
+            var label = item.count >= 3 ? abbr + ' ' + item.count : (item.count >= 1 ? '' + item.count : '');
+            html += '<div class="treemap-cell" style="flex:' + flex + ';background:' + item.color + ';" title="' + item.type + ': ' + item.count + '">' + label + '</div>';
+        });
+        container.innerHTML = html;
+    }
+
     function updateRiskLevels(danger, warning, caution) {
         riskCounts = { danger: danger, warning: warning, caution: caution };
         var total = danger + warning + caution;
@@ -546,6 +580,7 @@ var BottomBar = (function() {
     return {
         pushData: pushData,
         updateVesselTypes: updateVesselTypes,
+        updateAircraftTypes: updateAircraftTypes,
         updateRiskLevels: updateRiskLevels,
         updateValue: updateValue,
         updateFlagDistribution: updateFlagDistribution,
