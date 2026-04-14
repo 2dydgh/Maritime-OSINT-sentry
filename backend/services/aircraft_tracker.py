@@ -108,15 +108,22 @@ def get_aircraft() -> list[dict]:
     stale_cutoff = now - 60  # 60-second staleness window
 
     with _aircraft_lock:
+        total_before = len(_aircraft)
         # Prune stale entries in-place
         stale_keys = [k for k, v in _aircraft.items() if v.get("_updated", 0) < stale_cutoff]
         for k in stale_keys:
             del _aircraft[k]
 
+        ground_count = 0
+        no_pos_count = 0
         result = []
         for icao24, ac in _aircraft.items():
             # Skip ground traffic
             if ac.get("on_ground"):
+                ground_count += 1
+                continue
+            if ac.get("lat") is None or ac.get("lng") is None:
+                no_pos_count += 1
                 continue
 
             result.append({
@@ -133,6 +140,7 @@ def get_aircraft() -> list[dict]:
                 "origin_country": ac.get("origin_country", ""),
             })
 
+    logger.info(f"get_aircraft: total={total_before}, pruned={len(stale_keys)}, ground={ground_count}, no_pos={no_pos_count}, airborne={len(result)}")
     return result
 
 
@@ -178,7 +186,7 @@ def _poll_opensky() -> None:
 
     with _aircraft_lock:
         for sv in states:
-            if not sv or len(sv) < 18:
+            if not sv or len(sv) < 17:
                 continue
 
             icao24 = (sv[0] or "").strip()
@@ -201,7 +209,7 @@ def _poll_opensky() -> None:
             velocity = sv[9]
             heading = sv[10]
             vertical_rate = sv[11]
-            category = int(sv[17]) if sv[17] is not None else 0
+            category = int(sv[17]) if len(sv) > 17 and sv[17] is not None else 0
 
             _aircraft[icao24] = {
                 "icao24": icao24,
@@ -219,7 +227,9 @@ def _poll_opensky() -> None:
                 "_updated": now,
             }
 
-    logger.info(f"OpenSky poll complete: {len(states)} state vectors received")
+    with _aircraft_lock:
+        dict_size = len(_aircraft)
+    logger.info(f"OpenSky poll complete: {len(states)} state vectors received, dict size after update: {dict_size}")
 
 
 def _tracker_loop() -> None:
