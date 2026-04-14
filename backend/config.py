@@ -13,6 +13,10 @@ DB_NAME = os.getenv("DB_NAME", "osint_4d")
 # AIS
 AIS_API_KEY = os.getenv("AIS_API_KEY", "")
 
+# OpenSky Network (optional credentials for higher rate limits)
+OPENSKY_USERNAME = os.getenv("OPENSKY_USERNAME", "")
+OPENSKY_PASSWORD = os.getenv("OPENSKY_PASSWORD", "")
+
 # App
 PORT = int(os.getenv("PORT", 8001))
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
