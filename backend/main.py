@@ -8,8 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import database, config, websocket
-from .services import ais_stream, data_fetcher, history_writer
-from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision, weather, route
+from .services import ais_stream, data_fetcher, history_writer, aircraft_tracker
+from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision, weather, route, aircraft
 from .services import collision_analyzer, land_filter
 
 # Set up logging
@@ -56,6 +56,9 @@ async def lifespan(app: FastAPI):
     
     # Optional: Start period data fetcher if needed for REST fallbacks
     data_fetcher.start_data_fetcher()
+
+    # Start Aircraft Tracker (OpenSky Network)
+    aircraft_tracker.start_aircraft_tracker()
     
     # Background loop to broadcast ship updates
     async def broadcast_ships():
@@ -75,6 +78,24 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(1) # Broadcast every 1s
 
     broadcast_task = asyncio.create_task(broadcast_ships())
+
+    # Background loop to broadcast aircraft updates
+    async def broadcast_aircraft():
+        while True:
+            try:
+                ac_list = aircraft_tracker.get_aircraft()
+                if ac_list:
+                    await websocket.manager.broadcast({
+                        "type": "aircraft_update",
+                        "aircraft": ac_list,
+                        "total_tracked": len(ac_list),
+                        "server_time_ms": int(__import__('time').time() * 1000)
+                    })
+            except Exception as e:
+                logger.error(f"Error in aircraft broadcast loop: {e}")
+            await asyncio.sleep(10)  # Broadcast every 10s (matching OpenSky poll rate)
+
+    aircraft_broadcast_task = asyncio.create_task(broadcast_aircraft())
 
     # Background task: scan for signal loss every 5 minutes
     async def signal_loss_scanner():
@@ -104,6 +125,8 @@ async def lifespan(app: FastAPI):
     ais_stream.stop_ais_stream()
     broadcast_task.cancel()
     collision_task.cancel()
+    aircraft_tracker.stop_aircraft_tracker()
+    aircraft_broadcast_task.cancel()
     data_fetcher.stop_data_fetcher()
 
     # Stop history writer and flush remaining buffer
@@ -151,6 +174,7 @@ app.include_router(collision.router, prefix="/api/v1")
 app.include_router(health.router)
 app.include_router(weather.router, prefix="/api/v1")
 app.include_router(route.router, prefix="/api/v1")
+app.include_router(aircraft.router, prefix="/api/v1")
 
 # Static Files — resolve path for both normal and PyInstaller frozen mode
 import sys as _sys
