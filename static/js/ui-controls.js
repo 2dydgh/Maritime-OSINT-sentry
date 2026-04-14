@@ -1158,6 +1158,12 @@ handler.setInputAction(function(click) {
             return;
         }
 
+        // Check if clicked billboard is an aircraft
+        if (picked && picked.primitive && picked.primitive._isAircraft) {
+            showAircraftInfo(picked.primitive._icao24);
+            return;
+        }
+
         // Case 2: Primitive billboard (라이브 모드 선박)
         if (picked.primitive && picked.primitive._mmsi) {
             var mmsi = picked.primitive._mmsi;

@@ -551,6 +551,15 @@ SHIP_TYPES.forEach(function(type) {
 // COG 방향선 Collection
 shipCogLines = viewer.scene.primitives.add(new Cesium.PolylineCollection());
 
+// Aircraft Primitive Collections
+AIRCRAFT_TYPES.forEach(function(type) {
+    aircraftBillboards[type] = viewer.scene.primitives.add(new Cesium.BillboardCollection());
+    aircraftLabels[type] = viewer.scene.primitives.add(new Cesium.LabelCollection());
+    // Default hidden — user enables via filter checkboxes
+    aircraftBillboards[type].show = false;
+    aircraftLabels[type].show = false;
+});
+
 SHIP_TYPES.forEach(async function(type) {
     var ds = new Cesium.CustomDataSource('Ships - ' + type);
     shipDataSources[type] = ds;
