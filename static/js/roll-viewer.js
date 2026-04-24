@@ -12,6 +12,9 @@ var RollViewer = (function () {
 
     var shipGroup = null;
     var waterMesh = null;
+    var gltfModelCache = {};   // { type: THREE.Group }
+    var gltfLoader = null;
+    var useGltfModels = true;  // false if all loads fail
     var composer = null;
     var mainDirLight = null;
     var waterNormals = null;
@@ -503,7 +506,7 @@ var RollViewer = (function () {
         var isDusk = tod === 'dusk' || tod === 'dawn';
 
         // ── Layer 1: Horizon mist band ──
-        var mistTex = _makeCloudCanvas(512, 64, function(ctx, w, h) {
+        var mistTex = _makeCloudCanvas(512, 64, function (ctx, w, h) {
             var mc = isNight ? [15, 20, 35] : isDusk ? [180, 150, 120] : [220, 235, 250];
             var g = ctx.createLinearGradient(0, 0, 0, h);
             g.addColorStop(0, 'rgba(' + mc.join(',') + ',0)');
@@ -528,7 +531,7 @@ var RollViewer = (function () {
             var cumulusTextures = [];
             for (var ct = 0; ct < 4; ct++) {
                 var seed = ct;
-                cumulusTextures.push(_makeCloudCanvas(256, 256, function(ctx, w, h) {
+                cumulusTextures.push(_makeCloudCanvas(256, 256, function (ctx, w, h) {
                     ctx.clearRect(0, 0, w, h);
                     // Build up cloud from overlapping radial gradients
                     var cx = w / 2, cy = h / 2;
@@ -594,7 +597,7 @@ var RollViewer = (function () {
         if (!isNight) {
             var cirrusTextures = [];
             for (var wt = 0; wt < 3; wt++) {
-                cirrusTextures.push(_makeCloudCanvas(512, 64, function(ctx, w, h) {
+                cirrusTextures.push(_makeCloudCanvas(512, 64, function (ctx, w, h) {
                     ctx.clearRect(0, 0, w, h);
                     var strokes = 4 + Math.floor(Math.random() * 5);
                     for (var s = 0; s < strokes; s++) {
@@ -644,7 +647,7 @@ var RollViewer = (function () {
 
         // ── Night: subtle dark clouds for moonlit silhouettes ──
         if (isNight) {
-            var nightTex = _makeCloudCanvas(256, 128, function(ctx, w, h) {
+            var nightTex = _makeCloudCanvas(256, 128, function (ctx, w, h) {
                 ctx.clearRect(0, 0, w, h);
                 for (var p = 0; p < 6; p++) {
                     var px = w * 0.3 + Math.random() * w * 0.4;
@@ -1493,6 +1496,68 @@ var RollViewer = (function () {
     // ── Ship model helpers ──
     var shipEnvMap = null;
 
+    // ── GLTF model loader with fallback ──
+    function loadGltfModel(type, callback) {
+        var THREE = window.THREE;
+        if (!THREE.GLTFLoader) {
+            callback(null);
+            return;
+        }
+        if (gltfModelCache[type]) {
+            callback(gltfModelCache[type].clone());
+            return;
+        }
+
+        if (!gltfLoader) {
+            gltfLoader = new THREE.GLTFLoader();
+        }
+
+        var url = 'models/ships/' + type + '.glb';
+        gltfLoader.load(
+            url,
+            function (gltf) {
+                var model = gltf.scene;
+
+                // Normalize scale — target hull length ~20 units
+                var box = new THREE.Box3().setFromObject(model);
+                var size = new THREE.Vector3();
+                box.getSize(size);
+                var maxDim = Math.max(size.x, size.y, size.z);
+                var targetSize = 20;
+                var scale = targetSize / maxDim;
+                model.scale.setScalar(scale);
+
+                // Center model at origin
+                box.setFromObject(model);
+                var center = new THREE.Vector3();
+                box.getCenter(center);
+                model.position.sub(center);
+                model.position.y = 0;
+
+                // Enable shadows and apply envMap
+                model.traverse(function (child) {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        if (child.material && shipEnvMap) {
+                            child.material.envMap = shipEnvMap;
+                            child.material.envMapIntensity = 0.4;
+                            child.material.needsUpdate = true;
+                        }
+                    }
+                });
+
+                gltfModelCache[type] = model;
+                callback(model.clone());
+            },
+            undefined,
+            function (err) {
+                console.warn('GLTF load failed for ' + type + ':', err);
+                callback(null);
+            }
+        );
+    }
+
     function buildShipEnvMap() {
         var THREE = window.THREE;
         // Simple gradient cubemap for subtle reflections
@@ -1754,14 +1819,9 @@ var RollViewer = (function () {
     }
 
     // ── buildShip(type) — high-quality ship model per type ──
-    function buildShip(type) {
+    // ── buildCodeShip(type, color) — procedural geometry fallback ──
+    function buildCodeShip(type, color) {
         var THREE = window.THREE;
-        var color = (window.SHIP_COLORS && window.SHIP_COLORS[type]) || '#6b7280';
-
-        if (!shipEnvMap) buildShipEnvMap();
-
-        shipGroup = new THREE.Group();
-
         switch (type) {
             case 'tanker': buildTanker(THREE, color); break;
             case 'cargo': buildCargo(THREE, color); break;
@@ -1779,8 +1839,50 @@ var RollViewer = (function () {
         };
         var wl = wlMap[type] || wlMap['other'];
         addWaterline(THREE, wl[0], wl[1], wl[2]);
+    }
 
-        // Rim light — backlight for silhouette definition
+    // ── buildShip(type) — GLTF model with code-based fallback ──
+    function buildShip(type) {
+        var THREE = window.THREE;
+        var color = (window.SHIP_COLORS && window.SHIP_COLORS[type]) || '#6b7280';
+
+        if (!shipEnvMap) buildShipEnvMap();
+
+        shipGroup = new THREE.Group();
+
+        // Always build code model first (shown while GLTF loads)
+        buildCodeShip(type, color);
+
+        // Attempt GLTF load
+        if (useGltfModels) {
+            loadGltfModel(type, function (model) {
+                if (model && shipGroup) {
+                    // Remove code model children, keep lights
+                    var toRemove = [];
+                    shipGroup.children.forEach(function (child) {
+                        if (child.isMesh) toRemove.push(child);
+                    });
+                    toRemove.forEach(function (child) {
+                        shipGroup.remove(child);
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) child.material.dispose();
+                    });
+
+                    // Add GLTF model
+                    shipGroup.add(model);
+
+                    // Re-enable shadows
+                    shipGroup.traverse(function (child) {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+                }
+            });
+        }
+
+        // Rim light
         var rimLight = new THREE.DirectionalLight(0x88aacc, 0.6);
         rimLight.position.set(-15, 8, -10);
         shipGroup.add(rimLight);
@@ -1793,7 +1895,7 @@ var RollViewer = (function () {
             }
         });
 
-        shipGroup.position.y = -0.8;   // waterline — hull partially submerged
+        shipGroup.position.y = -0.8;
         scene.add(shipGroup);
     }
 
@@ -2695,6 +2797,8 @@ var RollViewer = (function () {
         radarSweep = null;
         sprayPoints = null;
         sprayVelocities = [];
+        gltfModelCache = {};
+        gltfLoader = null;
         clockStart = null;
         lastFrameTime = 0;
         cameraAnimating = false;
