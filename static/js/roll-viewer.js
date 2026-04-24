@@ -14,7 +14,7 @@ var RollViewer = (function () {
     var waterMesh = null;
     var gltfModelCache = {};   // { type: THREE.Group }
     var gltfLoader = null;
-    var useGltfModels = true;  // false if all loads fail
+    var useGltfModels = false;  // disabled — GLTF models need per-model tuning
     var composer = null;
     var mainDirLight = null;
     var waterNormals = null;
@@ -278,7 +278,7 @@ var RollViewer = (function () {
         buildWater();
         buildCompass();
         buildShip(shipType);
-        buildSeagulls();
+
         buildSeaMarkers();
         buildRadarIndicator();
         startAnimation();
@@ -531,27 +531,38 @@ var RollViewer = (function () {
         var tod = getTimeOfDay();
         var pal = SKY_PALETTES[tod];
 
-        scene.background = new THREE.Color(pal.bg);
         scene.fog = new THREE.FogExp2(pal.fog, 0.0004);
 
         skyGroup = new THREE.Group();
 
         if (tod !== 'night' && THREE.Sky) {
+            // Sky shader replaces scene.background
+            scene.background = null;
+
             skyMesh = new THREE.Sky();
             skyMesh.scale.setScalar(450);
 
             var skyUniforms = skyMesh.material.uniforms;
             var wxMod = getWeatherModifiers();
             skyUniforms['turbidity'].value = wxMod.turbidity;
-            skyUniforms['rayleigh'].value = 2;
-            skyUniforms['mieCoefficient'].value = 0.005;
-            skyUniforms['mieDirectionalG'].value = 0.8;
+            skyUniforms['rayleigh'].value = 1;
+            skyUniforms['mieCoefficient'].value = 0.003;
+            skyUniforms['mieDirectionalG'].value = 0.7;
 
             sunPosition = calcSunPosition(tod);
             skyUniforms['sunPosition'].value.copy(sunPosition);
 
+            // Render sky behind everything
+            skyMesh.renderOrder = -1;
+
             skyGroup.add(skyMesh);
+
+            // Reduce exposure for Sky shader — it's inherently bright
+            if (renderer) {
+                renderer.toneMappingExposure = tod === 'day' ? 0.5 : 0.6;
+            }
         } else {
+            scene.background = new THREE.Color(pal.bg);
             // Night — vertex-color sky dome
             var skyGeo = new THREE.SphereGeometry(400, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
             var skyVertCount = skyGeo.attributes.position.count;
@@ -648,24 +659,26 @@ var RollViewer = (function () {
         var isNight = tod === 'night';
         var isDusk = tod === 'dusk' || tod === 'dawn';
 
-        // ── Layer 1: Horizon mist band ──
-        var mistTex = _makeCloudCanvas(512, 64, function (ctx, w, h) {
-            var mc = isNight ? [15, 20, 35] : isDusk ? [180, 150, 120] : [220, 235, 250];
-            var g = ctx.createLinearGradient(0, 0, 0, h);
-            g.addColorStop(0, 'rgba(' + mc.join(',') + ',0)');
-            g.addColorStop(0.3, 'rgba(' + mc.join(',') + ',0.35)');
-            g.addColorStop(0.6, 'rgba(' + mc.join(',') + ',0.25)');
-            g.addColorStop(1, 'rgba(' + mc.join(',') + ',0)');
-            ctx.fillStyle = g;
-            ctx.fillRect(0, 0, w, h);
-        });
-        for (var m = 0; m < 14; m++) {
-            var ma = (m / 14) * Math.PI * 2;
-            var mMat = new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: isNight ? 0.25 : 0.45, depthWrite: false });
-            var mSp = new THREE.Sprite(mMat);
-            mSp.position.set(280 * Math.cos(ma), 12 + Math.random() * 8, 280 * Math.sin(ma));
-            mSp.scale.set(200, 28, 1);
-            cloudGroup.add(mSp);
+        // ── Layer 1: Horizon mist band (skip when Sky shader is active) ──
+        if (!skyMesh) {
+            var mistTex = _makeCloudCanvas(512, 64, function (ctx, w, h) {
+                var mc = isNight ? [15, 20, 35] : isDusk ? [180, 150, 120] : [220, 235, 250];
+                var g = ctx.createLinearGradient(0, 0, 0, h);
+                g.addColorStop(0, 'rgba(' + mc.join(',') + ',0)');
+                g.addColorStop(0.3, 'rgba(' + mc.join(',') + ',0.35)');
+                g.addColorStop(0.6, 'rgba(' + mc.join(',') + ',0.25)');
+                g.addColorStop(1, 'rgba(' + mc.join(',') + ',0)');
+                ctx.fillStyle = g;
+                ctx.fillRect(0, 0, w, h);
+            });
+            for (var m = 0; m < 14; m++) {
+                var ma = (m / 14) * Math.PI * 2;
+                var mMat = new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: isNight ? 0.25 : 0.45, depthWrite: false });
+                var mSp = new THREE.Sprite(mMat);
+                mSp.position.set(280 * Math.cos(ma), 12 + Math.random() * 8, 280 * Math.sin(ma));
+                mSp.scale.set(200, 28, 1);
+                cloudGroup.add(mSp);
+            }
         }
 
         // ── Layer 2: Cumulus puffs — volumetric-look billboards ──
@@ -714,7 +727,7 @@ var RollViewer = (function () {
                 var ca = (ci / cumulusCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
                 var cd = 120 + Math.random() * 160;
                 var cTex = cumulusTextures[ci % cumulusTextures.length];
-                var cMat = new THREE.SpriteMaterial({ map: cTex, transparent: true, opacity: 0.7 + Math.random() * 0.25, depthWrite: false });
+                var cMat = new THREE.SpriteMaterial({ map: cTex, transparent: true, opacity: 0.7 + Math.random() * 0.25, depthWrite: false, blending: THREE.AdditiveBlending });
                 var cSp = new THREE.Sprite(cMat);
                 var cHeight = 35 + Math.random() * 30;
                 var cScaleX = 50 + Math.random() * 40;
@@ -768,7 +781,7 @@ var RollViewer = (function () {
                 var wa = (wi / cirrusCount) * Math.PI * 2 + Math.random() * 0.4;
                 var wd = 130 + Math.random() * 120;
                 var wTex = cirrusTextures[wi % cirrusTextures.length];
-                var wMat = new THREE.SpriteMaterial({ map: wTex, transparent: true, opacity: 0.5 + Math.random() * 0.3, depthWrite: false });
+                var wMat = new THREE.SpriteMaterial({ map: wTex, transparent: true, opacity: 0.5 + Math.random() * 0.3, depthWrite: false, blending: THREE.AdditiveBlending });
                 var wSp = new THREE.Sprite(wMat);
                 var wH = 70 + Math.random() * 40;
                 wSp.position.set(wd * Math.cos(wa), wH, wd * Math.sin(wa));
@@ -952,74 +965,6 @@ var RollViewer = (function () {
         wakePoints.material.opacity = 0.15 + 0.1 * Math.sin(elapsed * 0.6);
     }
 
-    // ── buildSeagulls() — animated bird sprites circling the ship ──
-    var seagulls = [];
-    function buildSeagulls() {
-        var THREE = window.THREE;
-        var tod = getTimeOfDay();
-        if (tod === 'night') return; // no birds at night
-
-        var count = 4;
-
-        // Procedural bird texture
-        var canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
-        var ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, 64, 64);
-        ctx.strokeStyle = '#555555';
-        ctx.lineWidth = 3;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(8, 36);
-        ctx.quadraticCurveTo(20, 16, 32, 30);
-        ctx.quadraticCurveTo(44, 16, 56, 36);
-        ctx.stroke();
-        // Body dot
-        ctx.fillStyle = '#666666';
-        ctx.beginPath();
-        ctx.arc(32, 30, 2.5, 0, Math.PI * 2);
-        ctx.fill();
-
-        var tex = new THREE.CanvasTexture(canvas);
-
-        for (var i = 0; i < count; i++) {
-            var mat = new THREE.SpriteMaterial({
-                map: tex,
-                transparent: true,
-                opacity: 1.0,
-                depthWrite: false
-            });
-            var sprite = new THREE.Sprite(mat);
-            sprite.scale.set(4, 2, 1);
-
-            var birdData = {
-                sprite: sprite,
-                angle: (i / count) * Math.PI * 2,
-                radius: 12 + Math.random() * 10,
-                height: 15 + Math.random() * 12,
-                speed: 0.3 + Math.random() * 0.3,
-                vertSpeed: 1.5 + Math.random() * 1.0
-            };
-            seagulls.push(birdData);
-            scene.add(sprite);
-        }
-    }
-
-    function animateSeagulls(elapsed) {
-        for (var i = 0; i < seagulls.length; i++) {
-            var b = seagulls[i];
-            var a = b.angle + elapsed * b.speed;
-            b.sprite.position.set(
-                b.radius * Math.cos(a),
-                b.height + 2 * Math.sin(elapsed * b.vertSpeed + i),
-                b.radius * Math.sin(a)
-            );
-            // Wing flap — scale oscillation
-            var flap = 1 + 0.3 * Math.sin(elapsed * 8 + i * 2);
-            b.sprite.scale.set(3 * flap, 1.5, 1);
-        }
-    }
 
     // ── Wake trail — persistent foam path showing where ship has been ──
     var wakeTrail = null;
@@ -1661,24 +1606,36 @@ var RollViewer = (function () {
             function (gltf) {
                 var model = gltf.scene;
 
+                // Wrap in a container group for clean transform
+                var container = new THREE.Group();
+                container.add(model);
+
                 // Normalize scale — target hull length ~20 units
-                var box = new THREE.Box3().setFromObject(model);
+                var box = new THREE.Box3().setFromObject(container);
                 var size = new THREE.Vector3();
                 box.getSize(size);
                 var maxDim = Math.max(size.x, size.y, size.z);
-                var targetSize = 20;
-                var scale = targetSize / maxDim;
+                var scale = 20 / maxDim;
                 model.scale.setScalar(scale);
 
-                // Center model at origin
-                box.setFromObject(model);
+                // Recompute after scale
+                box.setFromObject(container);
+                box.getSize(size);
                 var center = new THREE.Vector3();
                 box.getCenter(center);
-                model.position.sub(center);
-                model.position.y = 0;
+
+                // Center horizontally, place bottom at waterline (y ~ 2)
+                model.position.x -= center.x;
+                model.position.z -= center.z;
+                model.position.y -= box.min.y - 2;
+
+                // Auto-rotate: if model is longer on Z axis, rotate to face +X
+                if (size.z > size.x * 1.3) {
+                    model.rotation.y = Math.PI / 2;
+                }
 
                 // Enable shadows and apply envMap
-                model.traverse(function (child) {
+                container.traverse(function (child) {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
@@ -1690,8 +1647,8 @@ var RollViewer = (function () {
                     }
                 });
 
-                gltfModelCache[type] = model;
-                callback(model.clone());
+                gltfModelCache[type] = container;
+                callback(container.clone());
             },
             undefined,
             function (err) {
@@ -2042,7 +1999,7 @@ var RollViewer = (function () {
         scene.add(shipGroup);
     }
 
-    // ── Tanker: 낮고 긴 선체, 파이프라인, 매니폴드 ──
+    // ── Tanker: 낮고 긴 선체, 파이프라인, 매니폴드, 탱크돔, 캣워크 ──
     function buildTanker(THREE, color) {
         var hullShape = new THREE.Shape();
         hullShape.moveTo(-8, -2.2);
@@ -2059,6 +2016,21 @@ var RollViewer = (function () {
         var deckGeo = new THREE.BoxGeometry(16, 0.2, 4.2);
         addToShip(new THREE.Mesh(deckGeo, shipMat('#3f3f46'))).position.set(0, 3.0, 0);
 
+        // Tank dome tops (spherical caps)
+        for (var td = -2; td <= 2; td++) {
+            var domeGeo = new THREE.SphereGeometry(1.4, 12, 6, 0, Math.PI * 2, 0, Math.PI / 3);
+            addToShip(new THREE.Mesh(domeGeo, shipMat('#52525b', { roughness: 0.7, metalness: 0.3 }))).position.set(td * 3, 3.1, 0);
+        }
+
+        // Catwalk (elevated walkway along centerline)
+        var catwalkGeo = new THREE.BoxGeometry(14, 0.06, 0.4);
+        addToShip(new THREE.Mesh(catwalkGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(0, 3.8, 0);
+        for (var cs = -3; cs <= 3; cs++) {
+            var csGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.7, 4);
+            addToShip(new THREE.Mesh(csGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(cs * 2, 3.45, 0);
+        }
+
+        // Pipelines (3 parallel)
         for (var p = -1; p <= 1; p++) {
             var pipeGeo = new THREE.CylinderGeometry(0.08, 0.08, 12, 8);
             pipeGeo.rotateZ(Math.PI / 2);
@@ -2073,28 +2045,70 @@ var RollViewer = (function () {
             addToShip(new THREE.Mesh(riserGeo, shipMat('#71717a', { metalness: 0.6 }))).position.set(0, 3.5, r * 1.2);
         }
 
-        var bridgeGeo = new THREE.BoxGeometry(3.5, 2.5, 3.5);
-        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#3f3f46'))).position.set(-5.5, 4.3, 0);
+        // Vent pipes (PV valves on each tank)
+        for (var vp = -2; vp <= 2; vp++) {
+            var ventGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.0, 6);
+            addToShip(new THREE.Mesh(ventGeo, shipMat('#a1a1aa', { metalness: 0.4 }))).position.set(vp * 3, 4.0, 1.5);
+            var capGeo = new THREE.CylinderGeometry(0.12, 0.08, 0.15, 6);
+            addToShip(new THREE.Mesh(capGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(vp * 3, 4.55, 1.5);
+        }
 
+        // Bridge (multi-layer)
+        var bridgeGeo = new THREE.BoxGeometry(3.5, 2.0, 3.5);
+        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#3f3f46'))).position.set(-5.5, 4.0, 0);
+        var bridgeUpperGeo = new THREE.BoxGeometry(3.0, 1.0, 3.2);
+        addToShip(new THREE.Mesh(bridgeUpperGeo, shipMat('#4a4a52'))).position.set(-5.5, 5.5, 0);
+
+        // Bridge wings
+        var wingGeo = new THREE.BoxGeometry(1.0, 0.8, 0.6);
+        addToShip(new THREE.Mesh(wingGeo, shipMat('#3f3f46'))).position.set(-5.5, 5.4, 2.2);
+        addToShip(new THREE.Mesh(wingGeo.clone(), shipMat('#3f3f46'))).position.set(-5.5, 5.4, -2.2);
+
+        // Windows (front + sides)
         var winGeo = new THREE.BoxGeometry(0.1, 0.5, 2.8);
-        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-3.7, 4.6, 0);
+        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-3.7, 5.5, 0);
+        var winSideGeo = new THREE.BoxGeometry(2.5, 0.4, 0.08);
+        addToShip(new THREE.Mesh(winSideGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.5 }))).position.set(-5.5, 5.5, 1.62);
+        addToShip(new THREE.Mesh(winSideGeo.clone(), shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.5 }))).position.set(-5.5, 5.5, -1.62);
 
+        // Funnel with cap
         var funnelGeo = new THREE.CylinderGeometry(0.4, 0.5, 2.2, 8);
         addToShip(new THREE.Mesh(funnelGeo, shipMat('#27272a'))).position.set(-6.5, 5.5, 0);
-
         var stripeGeo = new THREE.CylinderGeometry(0.52, 0.52, 0.3, 8);
         addToShip(new THREE.Mesh(stripeGeo, shipMat(color))).position.set(-6.5, 5.8, 0);
+        var fCapGeo = new THREE.CylinderGeometry(0.45, 0.38, 0.2, 8);
+        addToShip(new THREE.Mesh(fCapGeo, shipMat('#1e1e1e'))).position.set(-6.5, 6.65, 0);
+
+        // Mast with radar
+        var mastGeo = new THREE.CylinderGeometry(0.04, 0.06, 3, 6);
+        addToShip(new THREE.Mesh(mastGeo, shipMat('#9ca3af', { metalness: 0.5 }))).position.set(-5.5, 7.5, 0);
+        var radarGeo = new THREE.BoxGeometry(1.5, 0.06, 0.3);
+        addToShip(new THREE.Mesh(radarGeo, shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-5.5, 8.8, 0);
+
+        // Deck railing (port & starboard)
+        for (var dr = -3; dr <= 3; dr++) {
+            var railPostGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.8, 4);
+            addToShip(new THREE.Mesh(railPostGeo, shipMat('#a1a1aa'))).position.set(dr * 2.2, 3.5, 2.1);
+            addToShip(new THREE.Mesh(railPostGeo.clone(), shipMat('#a1a1aa'))).position.set(dr * 2.2, 3.5, -2.1);
+        }
+        var railBarGeo = new THREE.CylinderGeometry(0.015, 0.015, 14, 4);
+        railBarGeo.rotateZ(Math.PI / 2);
+        addToShip(new THREE.Mesh(railBarGeo, shipMat('#a1a1aa'))).position.set(0, 3.9, 2.1);
+        addToShip(new THREE.Mesh(railBarGeo.clone(), shipMat('#a1a1aa'))).position.set(0, 3.9, -2.1);
+
+        // Bow mooring bollards
+        var bowBollardGeo = new THREE.CylinderGeometry(0.1, 0.12, 0.3, 8);
+        addToShip(new THREE.Mesh(bowBollardGeo, shipMat('#4b5563', { metalness: 0.6 }))).position.set(7, 3.2, 0.6);
+        addToShip(new THREE.Mesh(bowBollardGeo.clone(), shipMat('#4b5563', { metalness: 0.6 }))).position.set(7, 3.2, -0.6);
     }
 
-    // ── Cargo: 컨테이너 적재, 크레인, 높은 브릿지 ──
+    // ── Cargo: 컨테이너 적재, 크레인, 높은 브릿지, 래싱브릿지, 레일링 ──
     function buildCargo(THREE, color) {
         var hullShape = new THREE.Shape();
         hullShape.moveTo(-7, -2);
         hullShape.lineTo(-7, 2);
-        hullShape.lineTo(5, 1.5);
-        hullShape.lineTo(9, 0);
-        hullShape.lineTo(5, -1.5);
-        hullShape.closePath();
+        hullShape.quadraticCurveTo(3, 2, 9, 0);
+        hullShape.quadraticCurveTo(3, -2, -7, -2);
 
         var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.8, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.2, bevelSegments: 3 });
         hullGeo.rotateX(-Math.PI / 2);
@@ -2105,6 +2119,13 @@ var RollViewer = (function () {
         var deckGeo = new THREE.BoxGeometry(15, 0.2, 3.8);
         addToShip(new THREE.Mesh(deckGeo, shipMat('#3f3f46'))).position.set(0.5, 3.0, 0);
 
+        // Hold covers (flat panels between container bays)
+        var holdCoverGeo = new THREE.BoxGeometry(1.4, 0.08, 3.4);
+        for (var hc = 0; hc < 4; hc++) {
+            addToShip(new THREE.Mesh(holdCoverGeo, shipMat('#52525b', { roughness: 0.7 }))).position.set(3.5 - hc * 2, 3.15, 0);
+        }
+
+        // Containers with lashing rods (visible gaps between)
         var containerColors = ['#dc2626', '#2563eb', '#16a34a', '#ca8a04', '#9333ea', '#0891b2'];
         var rows = [
             { x: 3.5, layers: 3 },
@@ -2123,27 +2144,74 @@ var RollViewer = (function () {
                     addToShip(container);
                 }
             }
+            // Lashing bridge between container stacks
+            var lashGeo = new THREE.BoxGeometry(0.15, 0.6, 3.6);
+            addToShip(new THREE.Mesh(lashGeo, shipMat('#fbbf24', { metalness: 0.4 }))).position.set(row.x + 0.9, 3.5, 0);
         });
 
-        var craneBaseGeo = new THREE.BoxGeometry(0.4, 3, 0.4);
+        // Crane pair (A-frame style)
+        var craneBaseGeo = new THREE.BoxGeometry(0.3, 3, 0.3);
         addToShip(new THREE.Mesh(craneBaseGeo, shipMat('#fbbf24', { metalness: 0.5 }))).position.set(-4, 4.5, 1.2);
         addToShip(new THREE.Mesh(craneBaseGeo.clone(), shipMat('#fbbf24', { metalness: 0.5 }))).position.set(-4, 4.5, -1.2);
+        // Cross beam
+        var crossGeo = new THREE.BoxGeometry(0.15, 0.15, 2.4);
+        addToShip(new THREE.Mesh(crossGeo, shipMat('#fbbf24', { metalness: 0.5 }))).position.set(-4, 5.8, 0);
 
-        var craneBoomGeo = new THREE.CylinderGeometry(0.1, 0.1, 4, 6);
+        var craneBoomGeo = new THREE.CylinderGeometry(0.08, 0.1, 4, 6);
         craneBoomGeo.rotateZ(Math.PI / 4);
         addToShip(new THREE.Mesh(craneBoomGeo, shipMat('#fbbf24', { metalness: 0.5 }))).position.set(-3, 6.5, 0);
+        // Crane cable
+        var cableGeo = new THREE.CylinderGeometry(0.015, 0.015, 3, 4);
+        addToShip(new THREE.Mesh(cableGeo, shipMat('#71717a'))).position.set(-1.8, 5.8, 0);
 
-        var bridgeGeo = new THREE.BoxGeometry(3, 3.5, 3.5);
-        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#3f3f46'))).position.set(-5.5, 4.8, 0);
+        // Bridge (multi-deck)
+        var bridgeLowerGeo = new THREE.BoxGeometry(3, 2.5, 3.5);
+        addToShip(new THREE.Mesh(bridgeLowerGeo, shipMat('#3f3f46'))).position.set(-5.5, 4.3, 0);
+        var bridgeUpperGeo = new THREE.BoxGeometry(2.5, 1.2, 3.2);
+        addToShip(new THREE.Mesh(bridgeUpperGeo, shipMat('#4a4a52'))).position.set(-5.5, 6.2, 0);
 
+        // Bridge wings
+        var bWingGeo = new THREE.BoxGeometry(0.8, 0.6, 0.5);
+        addToShip(new THREE.Mesh(bWingGeo, shipMat('#3f3f46'))).position.set(-5.5, 6.1, 2.1);
+        addToShip(new THREE.Mesh(bWingGeo.clone(), shipMat('#3f3f46'))).position.set(-5.5, 6.1, -2.1);
+
+        // Windows (front + sides)
         var winGeo = new THREE.BoxGeometry(0.1, 0.6, 2.8);
-        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-3.95, 5.2, 0);
+        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-3.95, 6.2, 0);
+        var winSideGeo = new THREE.BoxGeometry(2.0, 0.4, 0.08);
+        addToShip(new THREE.Mesh(winSideGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.5 }))).position.set(-5.5, 6.2, 1.62);
+        addToShip(new THREE.Mesh(winSideGeo.clone(), shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.5 }))).position.set(-5.5, 6.2, -1.62);
 
+        // Funnel with cap
         var funnelGeo = new THREE.CylinderGeometry(0.35, 0.45, 2, 8);
         addToShip(new THREE.Mesh(funnelGeo, shipMat('#27272a'))).position.set(-6.5, 6.5, 0);
+        var fCapGeo = new THREE.CylinderGeometry(0.4, 0.33, 0.2, 8);
+        addToShip(new THREE.Mesh(fCapGeo, shipMat('#1e1e1e'))).position.set(-6.5, 7.55, 0);
+
+        // Mast with radar
+        var mastGeo = new THREE.CylinderGeometry(0.04, 0.06, 2.5, 6);
+        addToShip(new THREE.Mesh(mastGeo, shipMat('#9ca3af', { metalness: 0.5 }))).position.set(-5.5, 8.0, 0);
+        var radarGeo = new THREE.BoxGeometry(1.2, 0.06, 0.25);
+        addToShip(new THREE.Mesh(radarGeo, shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-5.5, 9.1, 0);
+
+        // Deck railing
+        for (var dr = -3; dr <= 3; dr++) {
+            var railPostGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.7, 4);
+            addToShip(new THREE.Mesh(railPostGeo, shipMat('#a1a1aa'))).position.set(dr * 2, 3.45, 1.9);
+            addToShip(new THREE.Mesh(railPostGeo.clone(), shipMat('#a1a1aa'))).position.set(dr * 2, 3.45, -1.9);
+        }
+        var railBarGeo = new THREE.CylinderGeometry(0.015, 0.015, 13, 4);
+        railBarGeo.rotateZ(Math.PI / 2);
+        addToShip(new THREE.Mesh(railBarGeo, shipMat('#a1a1aa'))).position.set(0, 3.8, 1.9);
+        addToShip(new THREE.Mesh(railBarGeo.clone(), shipMat('#a1a1aa'))).position.set(0, 3.8, -1.9);
+
+        // Bow bollards
+        var bowBollardGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.25, 8);
+        addToShip(new THREE.Mesh(bowBollardGeo, shipMat('#4b5563', { metalness: 0.6 }))).position.set(6, 3.2, 0.5);
+        addToShip(new THREE.Mesh(bowBollardGeo.clone(), shipMat('#4b5563', { metalness: 0.6 }))).position.set(6, 3.2, -0.5);
     }
 
-    // ── Passenger: 다층 데크, 넓은 상부구조, 큰 펀넬 ──
+    // ── Passenger: 다층 데크, 넓은 상부구조, 큰 펀넬, 구명정, 레이더돔 ──
     function buildPassenger(THREE, color) {
         var hullShape = new THREE.Shape();
         hullShape.moveTo(-7, -2.5);
@@ -2157,6 +2225,7 @@ var RollViewer = (function () {
         hull.position.set(0, 1.0, -1.75);
         addToShip(hull);
 
+        // Multi-deck superstructure with window strips
         var deckWidths = [13, 12, 10, 8];
         var deckDepths = [4.5, 4.0, 3.5, 2.8];
         for (var d = 0; d < 4; d++) {
@@ -2169,32 +2238,78 @@ var RollViewer = (function () {
             var winStrip = new THREE.Mesh(winStripGeo, shipMat('#fbbf24', { emissive: '#fbbf24', emissiveIntensity: 0.5, roughness: 0.3 }));
             winStrip.position.set(-0.5 + d * 0.3, 3.7 + d * 1.05, 0);
             addToShip(winStrip);
+
+            // Deck railing per level (port & starboard)
+            for (var rr = -2; rr <= 2; rr++) {
+                var rPostGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.5, 4);
+                addToShip(new THREE.Mesh(rPostGeo, shipMat('#d4d4d8'))).position.set(-0.5 + d * 0.3 + rr * 2, 4.2 + d * 1.05, deckDepths[d] / 2 + 0.02);
+                addToShip(new THREE.Mesh(rPostGeo.clone(), shipMat('#d4d4d8'))).position.set(-0.5 + d * 0.3 + rr * 2, 4.2 + d * 1.05, -deckDepths[d] / 2 - 0.02);
+            }
         }
 
+        // Lifeboat davits (port & starboard, 3 per side on deck 2)
+        var lifeboatGeo = new THREE.CylinderGeometry(0.15, 0.2, 1.2, 8);
+        lifeboatGeo.rotateZ(Math.PI / 2);
+        for (var lb = 0; lb < 3; lb++) {
+            var lbPort = new THREE.Mesh(lifeboatGeo, shipMat('#f97316', { roughness: 0.7 }));
+            lbPort.position.set(-2 + lb * 2.5, 5.0, 2.3);
+            addToShip(lbPort);
+            var lbStbd = new THREE.Mesh(lifeboatGeo.clone(), shipMat('#f97316', { roughness: 0.7 }));
+            lbStbd.position.set(-2 + lb * 2.5, 5.0, -2.3);
+            addToShip(lbStbd);
+            // Davit arms
+            var davitGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.0, 4);
+            addToShip(new THREE.Mesh(davitGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(-2 + lb * 2.5, 5.6, 2.1);
+            addToShip(new THREE.Mesh(davitGeo.clone(), shipMat('#71717a', { metalness: 0.5 }))).position.set(-2 + lb * 2.5, 5.6, -2.1);
+        }
+
+        // Bridge
         var bridgeGeo = new THREE.BoxGeometry(3, 1.5, 2.5);
         addToShip(new THREE.Mesh(bridgeGeo, shipMat('#cbd5e1'))).position.set(-1, 8.2, 0);
+        // Bridge wings
+        var bwGeo = new THREE.BoxGeometry(0.8, 0.6, 0.5);
+        addToShip(new THREE.Mesh(bwGeo, shipMat('#cbd5e1'))).position.set(-1, 8.2, 1.7);
+        addToShip(new THREE.Mesh(bwGeo.clone(), shipMat('#cbd5e1'))).position.set(-1, 8.2, -1.7);
 
         var winGeo = new THREE.BoxGeometry(3.02, 0.4, 2.52);
         addToShip(new THREE.Mesh(winGeo, shipMat('#0ea5e9', { emissive: '#0ea5e9', emissiveIntensity: 0.8 }))).position.set(-1, 8.5, 0);
 
+        // Funnel (large, iconic)
         var funnelGeo = new THREE.CylinderGeometry(0.6, 0.8, 3, 12);
         addToShip(new THREE.Mesh(funnelGeo, shipMat(color))).position.set(-3, 8.5, 0);
-
         var topGeo = new THREE.CylinderGeometry(0.7, 0.6, 0.5, 12);
         addToShip(new THREE.Mesh(topGeo, shipMat('#1e293b'))).position.set(-3, 10.1, 0);
+
+        // Radar dome on top of bridge
+        var radarDomeGeo = new THREE.SphereGeometry(0.4, 12, 8);
+        addToShip(new THREE.Mesh(radarDomeGeo, shipMat('#e2e8f0', { roughness: 0.3 }))).position.set(-1, 9.3, 0);
+
+        // Mast with antennae
+        var mastGeo = new THREE.CylinderGeometry(0.04, 0.06, 2, 6);
+        addToShip(new THREE.Mesh(mastGeo, shipMat('#9ca3af', { metalness: 0.5 }))).position.set(-1, 10.0, 0);
+        var antGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 4);
+        antGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(antGeo, shipMat('#a1a1aa'))).position.set(-1, 10.8, 0);
+
+        // Pool area on top deck (cyan rectangle)
+        var poolGeo = new THREE.BoxGeometry(1.5, 0.05, 1.2);
+        addToShip(new THREE.Mesh(poolGeo, shipMat('#22d3ee', { emissive: '#22d3ee', emissiveIntensity: 0.3, roughness: 0.2 }))).position.set(2, 7.6, 0);
+
+        // Bow mooring
+        var bowBollGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.25, 8);
+        addToShip(new THREE.Mesh(bowBollGeo, shipMat('#4b5563', { metalness: 0.6 }))).position.set(7.5, 3.1, 0.5);
+        addToShip(new THREE.Mesh(bowBollGeo.clone(), shipMat('#4b5563', { metalness: 0.6 }))).position.set(7.5, 3.1, -0.5);
     }
 
-    // ── Fishing: 작은 선체, 아웃리거/붐, 마스트 ──
+    // ── Fishing: 작은 선체, 아웃리거/붐, 마스트, A프레임, 그물드럼, 항해등 ──
     function buildFishing(THREE, color) {
         var hullShape = new THREE.Shape();
         hullShape.moveTo(-4, -1.5);
-        hullShape.lineTo(-4, 1.5);
-        hullShape.lineTo(2, 1);
-        hullShape.lineTo(5, 0);
-        hullShape.lineTo(2, -1);
-        hullShape.closePath();
+        hullShape.quadraticCurveTo(-4.3, 0, -4, 1.5);
+        hullShape.quadraticCurveTo(1, 1.3, 5, 0);
+        hullShape.quadraticCurveTo(1, -1.3, -4, -1.5);
 
-        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 2.5, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.15, bevelSegments: 2 });
+        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 2.5, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.15, bevelSegments: 3 });
         hullGeo.rotateX(-Math.PI / 2);
         var hull = new THREE.Mesh(hullGeo, shipMat(color));
         hull.position.set(0, 1.0, -1.25);
@@ -2203,15 +2318,38 @@ var RollViewer = (function () {
         var deckGeo = new THREE.BoxGeometry(8, 0.15, 2.8);
         addToShip(new THREE.Mesh(deckGeo, shipMat('#4b5563'))).position.set(0.5, 2.5, 0);
 
+        // Bulwark (raised hull edges)
+        var bulwarkGeo = new THREE.BoxGeometry(7, 0.4, 0.08);
+        addToShip(new THREE.Mesh(bulwarkGeo, shipMat(color, { roughness: 0.7 }))).position.set(0.5, 2.8, 1.4);
+        addToShip(new THREE.Mesh(bulwarkGeo.clone(), shipMat(color, { roughness: 0.7 }))).position.set(0.5, 2.8, -1.4);
+
+        // Bridge (with roof)
         var bridgeGeo = new THREE.BoxGeometry(2, 1.8, 2);
         addToShip(new THREE.Mesh(bridgeGeo, shipMat('#374151'))).position.set(-2, 3.5, 0);
+        var roofGeo = new THREE.BoxGeometry(2.2, 0.1, 2.2);
+        addToShip(new THREE.Mesh(roofGeo, shipMat('#52525b'))).position.set(-2, 4.45, 0);
 
+        // Windows (front + sides)
         var winGeo = new THREE.BoxGeometry(0.1, 0.35, 1.5);
         addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-0.95, 3.7, 0);
+        var winSideGeo = new THREE.BoxGeometry(1.2, 0.3, 0.08);
+        addToShip(new THREE.Mesh(winSideGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.5 }))).position.set(-2, 3.7, 1.02);
+        addToShip(new THREE.Mesh(winSideGeo.clone(), shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.5 }))).position.set(-2, 3.7, -1.02);
 
+        // Mast
         var mastGeo = new THREE.CylinderGeometry(0.04, 0.06, 5, 6);
         addToShip(new THREE.Mesh(mastGeo, shipMat('#9ca3af', { metalness: 0.5 }))).position.set(0, 5.0, 0);
 
+        // Navigation light on mast top
+        var navLightGeo = new THREE.SphereGeometry(0.08, 6, 6);
+        addToShip(new THREE.Mesh(navLightGeo, shipMat('#22c55e', { emissive: '#22c55e', emissiveIntensity: 1.0 }))).position.set(0, 7.5, 0);
+
+        // Cross-tree on mast
+        var crossTreeGeo = new THREE.CylinderGeometry(0.02, 0.02, 1.5, 4);
+        crossTreeGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(crossTreeGeo, shipMat('#9ca3af', { metalness: 0.5 }))).position.set(0, 6.5, 0);
+
+        // Outrigger booms
         var boomGeo = new THREE.CylinderGeometry(0.03, 0.05, 5, 6);
         var boom1 = new THREE.Mesh(boomGeo, shipMat('#9ca3af', { metalness: 0.5 }));
         boom1.position.set(0, 5.5, 1.5);
@@ -2225,22 +2363,50 @@ var RollViewer = (function () {
         boom2.rotation.z = 0.3;
         addToShip(boom2);
 
-        var reelGeo = new THREE.CylinderGeometry(0.3, 0.3, 1.5, 8);
+        // A-frame at stern
+        var aFrameGeo = new THREE.CylinderGeometry(0.04, 0.06, 2.5, 6);
+        var aFrame1 = new THREE.Mesh(aFrameGeo, shipMat('#fbbf24', { metalness: 0.5 }));
+        aFrame1.position.set(-3.8, 3.5, 0.6);
+        aFrame1.rotation.z = -0.2;
+        addToShip(aFrame1);
+        var aFrame2 = new THREE.Mesh(aFrameGeo.clone(), shipMat('#fbbf24', { metalness: 0.5 }));
+        aFrame2.position.set(-3.8, 3.5, -0.6);
+        aFrame2.rotation.z = -0.2;
+        addToShip(aFrame2);
+        // A-frame cross bar
+        var aCrossGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.3, 4);
+        aCrossGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(aCrossGeo, shipMat('#fbbf24', { metalness: 0.5 }))).position.set(-4.1, 4.6, 0);
+
+        // Net reel (larger, more detailed)
+        var reelGeo = new THREE.CylinderGeometry(0.3, 0.3, 1.5, 10);
         reelGeo.rotateX(Math.PI / 2);
         addToShip(new THREE.Mesh(reelGeo, shipMat('#6b7280', { metalness: 0.4 }))).position.set(-3.5, 2.8, 0);
+        // Reel flanges
+        var flangeGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.05, 10);
+        flangeGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(flangeGeo, shipMat('#52525b', { metalness: 0.5 }))).position.set(-3.5, 2.8, 0.75);
+        addToShip(new THREE.Mesh(flangeGeo.clone(), shipMat('#52525b', { metalness: 0.5 }))).position.set(-3.5, 2.8, -0.75);
+
+        // Exhaust stack (small)
+        var exhaustGeo = new THREE.CylinderGeometry(0.12, 0.15, 0.8, 6);
+        addToShip(new THREE.Mesh(exhaustGeo, shipMat('#27272a'))).position.set(-2.5, 4.8, 0);
+
+        // Deck bollards
+        var bollGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.2, 6);
+        addToShip(new THREE.Mesh(bollGeo, shipMat('#374151', { metalness: 0.6 }))).position.set(3.5, 2.7, 0.8);
+        addToShip(new THREE.Mesh(bollGeo.clone(), shipMat('#374151', { metalness: 0.6 }))).position.set(3.5, 2.7, -0.8);
     }
 
-    // ── Military: 날렵한 선체, 스텔스 상부구조, 무장 ──
+    // ── Military: 날렵한 선체, 스텔스 상부구조, 무장, CIWS, 헬기패드, 레이더 ──
     function buildMilitary(THREE, color) {
         var hullShape = new THREE.Shape();
         hullShape.moveTo(-7, -1.8);
         hullShape.lineTo(-7, 1.8);
-        hullShape.lineTo(4, 1.0);
-        hullShape.lineTo(10, 0);
-        hullShape.lineTo(4, -1.0);
-        hullShape.closePath();
+        hullShape.quadraticCurveTo(3, 1.5, 10, 0);
+        hullShape.quadraticCurveTo(3, -1.5, -7, -1.8);
 
-        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 2.8, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 2 });
+        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 2.8, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 3 });
         hullGeo.rotateX(-Math.PI / 2);
         var hull = new THREE.Mesh(hullGeo, shipMat('#6b7280', { roughness: 0.6 }));
         hull.position.set(0, 1.2, -1.4);
@@ -2249,6 +2415,7 @@ var RollViewer = (function () {
         var deckGeo = new THREE.BoxGeometry(15, 0.15, 3.2);
         addToShip(new THREE.Mesh(deckGeo, shipMat('#4b5563'))).position.set(0.5, 2.9, 0);
 
+        // Stealth superstructure (angled facets)
         var superShape = new THREE.Shape();
         superShape.moveTo(-3, -1.3);
         superShape.lineTo(-3, 1.3);
@@ -2266,35 +2433,97 @@ var RollViewer = (function () {
         superstructure.position.set(-2, 3.0, -1.25);
         addToShip(superstructure);
 
-        var winGeo = new THREE.BoxGeometry(5, 0.25, 2.8);
-        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.6 }))).position.set(-2, 4.8, 0);
+        // Bridge upper tier
+        var bridgeUpperGeo = new THREE.BoxGeometry(3.5, 0.8, 2.5);
+        addToShip(new THREE.Mesh(bridgeUpperGeo, shipMat('#4a4a52'))).position.set(-2, 5.7, 0);
 
+        // Windows
+        var winGeo = new THREE.BoxGeometry(3.5, 0.2, 2.3);
+        addToShip(new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.6 }))).position.set(-2, 5.9, 0);
+
+        // Forward gun turret (detailed)
         var turretBase = new THREE.CylinderGeometry(0.6, 0.7, 0.5, 12);
         addToShip(new THREE.Mesh(turretBase, shipMat('#4b5563', { metalness: 0.5 }))).position.set(4, 3.3, 0);
-
+        // Gun shield
+        var shieldGeo = new THREE.SphereGeometry(0.5, 8, 6, 0, Math.PI, 0, Math.PI / 2);
+        shieldGeo.rotateZ(Math.PI / 2);
+        addToShip(new THREE.Mesh(shieldGeo, shipMat('#4b5563', { metalness: 0.5 }))).position.set(4.3, 3.5, 0);
         var barrelGeo = new THREE.CylinderGeometry(0.06, 0.08, 2.5, 6);
         barrelGeo.rotateZ(-Math.PI / 2);
         addToShip(new THREE.Mesh(barrelGeo, shipMat('#374151', { metalness: 0.6 }))).position.set(5.5, 3.5, 0);
 
+        // CIWS (close-in weapon system) on stern superstructure
+        var ciwsBase = new THREE.CylinderGeometry(0.25, 0.3, 0.4, 8);
+        addToShip(new THREE.Mesh(ciwsBase, shipMat('#52525b', { metalness: 0.5 }))).position.set(-4.5, 5.5, 0);
+        var ciwsBarrelGeo = new THREE.CylinderGeometry(0.03, 0.04, 1.0, 6);
+        ciwsBarrelGeo.rotateZ(-Math.PI / 4);
+        addToShip(new THREE.Mesh(ciwsBarrelGeo, shipMat('#374151', { metalness: 0.7 }))).position.set(-4.1, 6.0, 0);
+        // CIWS radome
+        var ciwsDomeGeo = new THREE.SphereGeometry(0.2, 8, 6);
+        addToShip(new THREE.Mesh(ciwsDomeGeo, shipMat('#e2e8f0', { roughness: 0.3 }))).position.set(-4.5, 5.9, 0);
+
+        // Missile launchers (VLS cells — two banks of hatches)
+        var vlsGeo = new THREE.BoxGeometry(1.5, 0.15, 1.5);
+        addToShip(new THREE.Mesh(vlsGeo, shipMat('#4b5563', { roughness: 0.7 }))).position.set(2, 3.1, 0);
+        // VLS cell grid lines
+        for (var vi = 0; vi < 3; vi++) {
+            var vLineGeo = new THREE.BoxGeometry(1.5, 0.17, 0.02);
+            addToShip(new THREE.Mesh(vLineGeo, shipMat('#374151'))).position.set(2, 3.1, -0.5 + vi * 0.5);
+        }
+
+        // Mast (taller, lattice-style)
         var mastGeo = new THREE.CylinderGeometry(0.05, 0.08, 4, 6);
         addToShip(new THREE.Mesh(mastGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(-2, 7.3, 0);
+        // Secondary mast strut
+        var strutGeo = new THREE.CylinderGeometry(0.03, 0.03, 2.5, 4);
+        strutGeo.rotateZ(0.15);
+        addToShip(new THREE.Mesh(strutGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(-1.6, 6.5, 0.3);
+        addToShip(new THREE.Mesh(strutGeo.clone(), shipMat('#71717a', { metalness: 0.5 }))).position.set(-1.6, 6.5, -0.3);
 
-        var radarGeo = new THREE.BoxGeometry(2, 0.08, 0.5);
-        addToShip(new THREE.Mesh(radarGeo, shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-2, 9, 0);
+        // Radar arrays (phased array panels)
+        var radarGeo = new THREE.BoxGeometry(0.08, 1.0, 0.8);
+        addToShip(new THREE.Mesh(radarGeo, shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-1.4, 7.5, 0);
+        addToShip(new THREE.Mesh(radarGeo.clone(), shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-2.6, 7.5, 0);
+        // Rotating radar on top
+        var rotRadarGeo = new THREE.BoxGeometry(2, 0.08, 0.5);
+        addToShip(new THREE.Mesh(rotRadarGeo, shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-2, 9.2, 0);
 
+        // Funnel (angled, stealth-shaped)
         var funnelGeo = new THREE.BoxGeometry(1.2, 1.5, 1.8);
         addToShip(new THREE.Mesh(funnelGeo, shipMat('#3f3f46'))).position.set(-5, 4.5, 0);
+        // Funnel top grill
+        var grillGeo = new THREE.BoxGeometry(1.0, 0.06, 1.6);
+        addToShip(new THREE.Mesh(grillGeo, shipMat('#27272a'))).position.set(-5, 5.28, 0);
+
+        // Helicopter landing pad (stern)
+        var heliPadGeo = new THREE.BoxGeometry(3, 0.05, 3);
+        addToShip(new THREE.Mesh(heliPadGeo, shipMat('#4b5563', { roughness: 0.8 }))).position.set(-6, 3.0, 0);
+        // "H" marking on helipad
+        var hMarkGeo = new THREE.BoxGeometry(0.8, 0.06, 0.1);
+        addToShip(new THREE.Mesh(hMarkGeo, shipMat('#fbbf24'))).position.set(-6, 3.05, 0.3);
+        addToShip(new THREE.Mesh(hMarkGeo.clone(), shipMat('#fbbf24'))).position.set(-6, 3.05, -0.3);
+        var hCrossGeo = new THREE.BoxGeometry(0.1, 0.06, 0.7);
+        addToShip(new THREE.Mesh(hCrossGeo, shipMat('#fbbf24'))).position.set(-6, 3.05, 0);
+        // Helipad safety net
+        var netGeo = new THREE.RingGeometry(1.0, 1.05, 16);
+        netGeo.rotateX(-Math.PI / 2);
+        addToShip(new THREE.Mesh(netGeo, shipMat('#fbbf24', { roughness: 0.9 }))).position.set(-6, 3.06, 0);
+
+        // Deck railing
+        for (var dr = -3; dr <= 4; dr++) {
+            var railPostGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 4);
+            addToShip(new THREE.Mesh(railPostGeo, shipMat('#71717a'))).position.set(dr * 2, 3.3, 1.6);
+            addToShip(new THREE.Mesh(railPostGeo.clone(), shipMat('#71717a'))).position.set(dr * 2, 3.3, -1.6);
+        }
     }
 
-    // ── Tug: 짧고 넓은 선체, 큰 브릿지, 예인 장비 ──
+    // ── Tug: 짧고 넓은 선체, 큰 브릿지, 예인 장비, 푸시니, 서치라이트 ──
     function buildTug(THREE, color) {
         var hullShape = new THREE.Shape();
         hullShape.moveTo(-3, -1.8);
-        hullShape.lineTo(-3, 1.8);
-        hullShape.lineTo(2, 1.5);
-        hullShape.lineTo(4, 0);
-        hullShape.lineTo(2, -1.5);
-        hullShape.closePath();
+        hullShape.quadraticCurveTo(-3.3, 0, -3, 1.8);
+        hullShape.quadraticCurveTo(1, 1.8, 4, 0);
+        hullShape.quadraticCurveTo(1, -1.8, -3, -1.8);
 
         var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.5, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.2, bevelSegments: 3 });
         hullGeo.rotateX(-Math.PI / 2);
@@ -2305,27 +2534,67 @@ var RollViewer = (function () {
         var deckGeo = new THREE.BoxGeometry(6, 0.2, 3.2);
         addToShip(new THREE.Mesh(deckGeo, shipMat('#4b5563'))).position.set(0.5, 3.0, 0);
 
+        // Push knees (reinforced bow plates)
+        var kneeGeo = new THREE.BoxGeometry(0.3, 1.5, 3.0);
+        addToShip(new THREE.Mesh(kneeGeo, shipMat('#374151', { roughness: 0.8, metalness: 0.3 }))).position.set(3.5, 2.5, 0);
+
+        // Bridge (tall, good visibility)
         var bridgeGeo = new THREE.BoxGeometry(2.5, 2.8, 2.8);
         addToShip(new THREE.Mesh(bridgeGeo, shipMat('#374151'))).position.set(0, 4.5, 0);
+        // Bridge roof
+        var roofGeo = new THREE.BoxGeometry(2.8, 0.12, 3.0);
+        addToShip(new THREE.Mesh(roofGeo, shipMat('#52525b'))).position.set(0, 5.96, 0);
 
+        // Windows (wrap-around for 360° visibility)
         var winFront = new THREE.BoxGeometry(0.1, 0.5, 2.2);
         addToShip(new THREE.Mesh(winFront, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(1.3, 4.8, 0);
-
+        var winBack = new THREE.BoxGeometry(0.1, 0.4, 1.8);
+        addToShip(new THREE.Mesh(winBack, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.5 }))).position.set(-1.3, 4.8, 0);
         var winSide1 = new THREE.BoxGeometry(2, 0.5, 0.1);
         addToShip(new THREE.Mesh(winSide1, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.6 }))).position.set(0, 4.8, 1.45);
         addToShip(new THREE.Mesh(winSide1.clone(), shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.6 }))).position.set(0, 4.8, -1.45);
 
+        // Searchlight on roof
+        var slBaseGeo = new THREE.CylinderGeometry(0.12, 0.15, 0.2, 8);
+        addToShip(new THREE.Mesh(slBaseGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(0.8, 6.15, 0);
+        var slLampGeo = new THREE.CylinderGeometry(0.08, 0.12, 0.2, 8);
+        slLampGeo.rotateZ(-Math.PI / 2);
+        addToShip(new THREE.Mesh(slLampGeo, shipMat('#fbbf24', { emissive: '#fbbf24', emissiveIntensity: 0.4 }))).position.set(1.0, 6.25, 0);
+
+        // Funnel (with rain cap)
         var funnelGeo = new THREE.CylinderGeometry(0.35, 0.4, 1.5, 8);
         addToShip(new THREE.Mesh(funnelGeo, shipMat('#1e293b'))).position.set(-1.5, 5.5, 0);
+        var fCapGeo = new THREE.CylinderGeometry(0.4, 0.33, 0.15, 8);
+        addToShip(new THREE.Mesh(fCapGeo, shipMat('#0f0f0f'))).position.set(-1.5, 6.3, 0);
 
+        // Mast with antenna
+        var mastGeo = new THREE.CylinderGeometry(0.03, 0.04, 1.5, 4);
+        addToShip(new THREE.Mesh(mastGeo, shipMat('#9ca3af', { metalness: 0.5 }))).position.set(0, 6.8, 0);
+        var antGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.5, 4);
+        antGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(antGeo, shipMat('#a1a1aa'))).position.set(0, 7.4, 0);
+
+        // Towing winch (larger, detailed)
         var winchGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.2, 10);
         winchGeo.rotateX(Math.PI / 2);
         addToShip(new THREE.Mesh(winchGeo, shipMat('#fbbf24', { metalness: 0.5 }))).position.set(-2.5, 3.3, 0);
+        // Winch flanges
+        var wFlangeGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.05, 10);
+        wFlangeGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(wFlangeGeo, shipMat('#d97706', { metalness: 0.5 }))).position.set(-2.5, 3.3, 0.6);
+        addToShip(new THREE.Mesh(wFlangeGeo.clone(), shipMat('#d97706', { metalness: 0.5 }))).position.set(-2.5, 3.3, -0.6);
 
+        // Towing bitts
         var bittGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.6, 6);
         addToShip(new THREE.Mesh(bittGeo, shipMat('#374151', { metalness: 0.6 }))).position.set(-3, 3.3, 0.5);
         addToShip(new THREE.Mesh(bittGeo.clone(), shipMat('#374151', { metalness: 0.6 }))).position.set(-3, 3.3, -0.5);
 
+        // Stern tow hook
+        var hookGeo = new THREE.TorusGeometry(0.15, 0.04, 6, 8, Math.PI);
+        hookGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(hookGeo, shipMat('#374151', { metalness: 0.7 }))).position.set(-3.2, 3.4, 0);
+
+        // Tire fenders (rubber bumpers, port & starboard)
         var fenderGeo = new THREE.TorusGeometry(0.25, 0.1, 8, 12);
         for (var f = -1; f <= 2; f++) {
             var fender1 = new THREE.Mesh(fenderGeo, shipMat('#1e293b', { roughness: 0.9 }));
@@ -2338,12 +2607,16 @@ var RollViewer = (function () {
             fender2.rotation.y = Math.PI / 2;
             addToShip(fender2);
         }
+
+        // Bow bollards
+        var bowBollGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.25, 8);
+        addToShip(new THREE.Mesh(bowBollGeo, shipMat('#4b5563', { metalness: 0.6 }))).position.set(2.5, 3.2, 0.8);
+        addToShip(new THREE.Mesh(bowBollGeo.clone(), shipMat('#4b5563', { metalness: 0.6 }))).position.set(2.5, 3.2, -0.8);
     }
 
-    // ── Generic/Other: 기본 선박 모델 ──
-    // ── Generic/Unknown: 소형 다목적 선박 — 둥근 선체, 중앙 캐빈, 작업 데크 ──
+    // ── Generic/Unknown: 소형 다목적 선박 — 둥근 선체, 중앙 캐빈, 작업 데크, 레일링 ──
     function buildGenericShip(THREE, color) {
-        // Short rounded hull
+        // Rounded hull
         var hullShape = new THREE.Shape();
         hullShape.moveTo(-5, -1.6);
         hullShape.quadraticCurveTo(-5.5, 0, -5, 1.6);
@@ -2357,6 +2630,11 @@ var RollViewer = (function () {
         // Flat work deck
         var deckGeo = new THREE.BoxGeometry(10, 0.15, 3.2);
         addToShip(new THREE.Mesh(deckGeo, shipMat('#52525b'))).position.set(0, 2.8, 0);
+
+        // Bulwark (raised edges around deck)
+        var bulwarkGeo = new THREE.BoxGeometry(9, 0.35, 0.06);
+        addToShip(new THREE.Mesh(bulwarkGeo, shipMat(color, { roughness: 0.7 }))).position.set(0, 3.05, 1.6);
+        addToShip(new THREE.Mesh(bulwarkGeo.clone(), shipMat(color, { roughness: 0.7 }))).position.set(0, 3.05, -1.6);
 
         // Center cabin (box + slanted roof)
         var cabinGeo = new THREE.BoxGeometry(3, 1.8, 2.4);
@@ -2373,9 +2651,16 @@ var RollViewer = (function () {
         addToShip(new THREE.Mesh(winSide1, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.6 }))).position.set(0, 4.0, 1.2);
         addToShip(new THREE.Mesh(winSide1.clone(), shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.6 }))).position.set(0, 4.0, -1.2);
 
-        // Short antenna on roof
-        var antGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.8, 4);
-        addToShip(new THREE.Mesh(antGeo, shipMat('#a1a1aa'))).position.set(-0.5, 5.4, 0);
+        // Antenna on roof
+        var antGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.2, 4);
+        addToShip(new THREE.Mesh(antGeo, shipMat('#a1a1aa'))).position.set(-0.5, 5.6, 0);
+        // Navigation light on antenna
+        var navLightGeo = new THREE.SphereGeometry(0.06, 6, 6);
+        addToShip(new THREE.Mesh(navLightGeo, shipMat('#22c55e', { emissive: '#22c55e', emissiveIntensity: 1.0 }))).position.set(-0.5, 6.2, 0);
+
+        // Exhaust pipe
+        var exhaustGeo = new THREE.CylinderGeometry(0.1, 0.12, 0.6, 6);
+        addToShip(new THREE.Mesh(exhaustGeo, shipMat('#27272a'))).position.set(-1.2, 5.2, 0);
 
         // Forward bollards
         for (var fb = 0; fb < 2; fb++) {
@@ -2383,15 +2668,31 @@ var RollViewer = (function () {
             addToShip(new THREE.Mesh(bollGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(4 - fb * 1.5, 3.1, 0);
         }
 
-        // Stern railing posts
-        for (var rp = -1; rp <= 1; rp++) {
-            var railGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.2, 4);
-            addToShip(new THREE.Mesh(railGeo, shipMat('#a1a1aa'))).position.set(-4.5, 3.5, rp * 1.0);
+        // Railing around deck (port, starboard, stern)
+        for (var rp = -2; rp <= 2; rp++) {
+            var railPostGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.8, 4);
+            addToShip(new THREE.Mesh(railPostGeo, shipMat('#a1a1aa'))).position.set(rp * 2, 3.3, 1.6);
+            addToShip(new THREE.Mesh(railPostGeo.clone(), shipMat('#a1a1aa'))).position.set(rp * 2, 3.3, -1.6);
         }
-        // Railing bar
-        var barGeo = new THREE.CylinderGeometry(0.025, 0.025, 2.2, 4);
-        barGeo.rotateX(Math.PI / 2);
-        addToShip(new THREE.Mesh(barGeo, shipMat('#a1a1aa'))).position.set(-4.5, 4.1, 0);
+        // Railing bars (port & starboard)
+        var railBarGeo = new THREE.CylinderGeometry(0.018, 0.018, 8, 4);
+        railBarGeo.rotateZ(Math.PI / 2);
+        addToShip(new THREE.Mesh(railBarGeo, shipMat('#a1a1aa'))).position.set(0, 3.7, 1.6);
+        addToShip(new THREE.Mesh(railBarGeo.clone(), shipMat('#a1a1aa'))).position.set(0, 3.7, -1.6);
+
+        // Stern railing
+        for (var sp = -1; sp <= 1; sp++) {
+            var sRailGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.8, 4);
+            addToShip(new THREE.Mesh(sRailGeo, shipMat('#a1a1aa'))).position.set(-4.5, 3.3, sp * 1.0);
+        }
+        var sBarGeo = new THREE.CylinderGeometry(0.018, 0.018, 2.2, 4);
+        sBarGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(sBarGeo, shipMat('#a1a1aa'))).position.set(-4.5, 3.7, 0);
+
+        // Deck equipment (small crane/davit)
+        var davitGeo = new THREE.CylinderGeometry(0.04, 0.05, 1.5, 6);
+        davitGeo.rotateZ(0.3);
+        addToShip(new THREE.Mesh(davitGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(2.5, 3.6, 0.8);
     }
 
     // ── startAnimation() ──
@@ -2540,18 +2841,6 @@ var RollViewer = (function () {
             // ── Radar heading & turn indicator ──
             animateRadarIndicator(headingRad);
 
-            // ── Seagulls follow ship ──
-            for (var si = 0; si < seagulls.length; si++) {
-                var b = seagulls[si];
-                var a = b.angle + elapsed * b.speed;
-                b.sprite.position.set(
-                    shipWorldPos.x + b.radius * Math.cos(a),
-                    b.height + 2 * Math.sin(elapsed * b.vertSpeed + si),
-                    shipWorldPos.z + b.radius * Math.sin(a)
-                );
-                var flap = 1 + 0.3 * Math.sin(elapsed * 8 + si * 2);
-                b.sprite.scale.set(3 * flap, 1.5, 1);
-            }
 
             // ── Camera follows ship: position + orbit behind heading ──
             if (!cameraAnimating && controls) {
@@ -2961,7 +3250,7 @@ var RollViewer = (function () {
         compassGroup = null;
         cloudGroup = null;
         _cloudSprites = [];
-        seagulls = [];
+
         seaMarkers = [];
         radarSweep = null;
         sprayPoints = null;
