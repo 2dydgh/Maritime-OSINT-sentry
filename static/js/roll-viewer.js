@@ -350,6 +350,9 @@ var RollViewer = (function () {
         dirLight.shadow.bias = -0.002;
         scene.add(dirLight);
 
+        var wxMod = getWeatherModifiers();
+        dirLight.intensity *= wxMod.sunIntensity;
+
         var fillLight = new THREE.DirectionalLight(0xaaccff, tod === 'night' ? 0.2 : 0.5);
         fillLight.position.set(-20, 10, -10);
         scene.add(fillLight);
@@ -372,7 +375,8 @@ var RollViewer = (function () {
 
         // ── Post-processing ──
         var renderPass = new THREE.RenderPass(scene, camera);
-        var bloomStrength = todPal.bloom !== undefined ? todPal.bloom : 0.5;
+        var wxMod2 = getWeatherModifiers();
+        var bloomStrength = wxMod2.bloomStrength;
         var bloomPass = new THREE.UnrealBloomPass(
             new THREE.Vector2(w, h),
             bloomStrength,   // strength
@@ -383,6 +387,17 @@ var RollViewer = (function () {
         composer = new THREE.EffectComposer(renderer);
         composer.addPass(renderPass);
         composer.addPass(bloomPass);
+
+        var satShader = {
+            uniforms: {
+                tDiffuse: { value: null },
+                saturation: { value: wxMod2.saturation }
+            },
+            vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+            fragmentShader: 'uniform sampler2D tDiffuse; uniform float saturation; varying vec2 vUv; void main() { vec4 color = texture2D(tDiffuse, vUv); float lum = dot(color.rgb, vec3(0.299, 0.587, 0.114)); gl_FragColor = vec4(mix(vec3(lum), color.rgb, saturation), color.a); }'
+        };
+        saturationPass = new THREE.ShaderPass(satShader);
+        composer.addPass(saturationPass);
     }
 
     // ── Time-of-day sky palettes ──
@@ -417,62 +432,123 @@ var RollViewer = (function () {
         }
     };
 
+    // ── Weather-based visual modifiers ──
+    function getWeatherModifiers() {
+        if (!weather) {
+            return { fogDensity: 0.0004, cloudOpacity: 0.5, sunIntensity: 1.0, saturation: 1.0, turbidity: 4, bloomStrength: 0.4 };
+        }
+        var ws = weather.windSpeed || 0;
+        var wh = weather.waveHeight || 0;
+        var severity = Math.min(1, Math.max(ws / 30, wh / 4));
+        return {
+            fogDensity: 0.0003 + severity * 0.0007,
+            cloudOpacity: 0.3 + severity * 0.5,
+            sunIntensity: 1.0 - severity * 0.5,
+            saturation: 1.0 - severity * 0.3,
+            turbidity: 3 + severity * 10,
+            bloomStrength: Math.max(0, 0.4 - severity * 0.4)
+        };
+    }
+
+    // ── Sun position by time of day ──
+    function calcSunPosition(tod) {
+        var THREE = window.THREE;
+        var phi, theta;
+        switch (tod) {
+            case 'dawn':
+                phi = THREE.MathUtils.degToRad(90 - 10);
+                theta = THREE.MathUtils.degToRad(90);
+                break;
+            case 'day':
+                phi = THREE.MathUtils.degToRad(90 - 55);
+                theta = THREE.MathUtils.degToRad(180);
+                break;
+            case 'dusk':
+                phi = THREE.MathUtils.degToRad(90 - 8);
+                theta = THREE.MathUtils.degToRad(270);
+                break;
+            default:
+                phi = THREE.MathUtils.degToRad(90 + 20);
+                theta = THREE.MathUtils.degToRad(0);
+                break;
+        }
+        var pos = new THREE.Vector3();
+        pos.setFromSphericalCoords(1, phi, theta);
+        return pos;
+    }
+
     // ── Sky group — moves with ship so horizon never breaks ──
     var skyGroup = null;
+    var skyMesh = null;
+    var sunPosition = null;
+    var saturationPass = null;
 
-    // ── buildSky() — time-of-day gradient sky dome + clouds ──
+    // ── buildSky() — THREE.Sky for dawn/day/dusk, vertex-color dome for night ──
     function buildSky() {
         var THREE = window.THREE;
         var tod = getTimeOfDay();
         var pal = SKY_PALETTES[tod];
 
-        // Update scene background & fog to match time
         scene.background = new THREE.Color(pal.bg);
         scene.fog = new THREE.FogExp2(pal.fog, 0.0004);
 
         skyGroup = new THREE.Group();
 
-        // Sky dome
-        var skyGeo = new THREE.SphereGeometry(400, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-        var skyVertCount = skyGeo.attributes.position.count;
-        var colors = new Float32Array(skyVertCount * 3);
-        var topColor = new THREE.Color(pal.top);
-        var midColor = new THREE.Color(pal.mid);
-        var horizonColor = new THREE.Color(pal.horizon);
-        var horizonWarm = new THREE.Color(pal.warm);
-        var tmp = new THREE.Color();
+        if (tod !== 'night' && THREE.Sky) {
+            skyMesh = new THREE.Sky();
+            skyMesh.scale.setScalar(450);
 
-        for (var i = 0; i < skyVertCount; i++) {
-            var y = skyGeo.attributes.position.getY(i);
-            var t = Math.max(0, y / 400);
-            if (t < 0.05) {
-                tmp.copy(horizonWarm).lerp(horizonColor, t / 0.05);
-            } else if (t < 0.3) {
-                tmp.copy(horizonColor).lerp(midColor, (t - 0.05) / 0.25);
-            } else {
-                tmp.copy(midColor).lerp(topColor, (t - 0.3) / 0.7);
+            var skyUniforms = skyMesh.material.uniforms;
+            var wxMod = getWeatherModifiers();
+            skyUniforms['turbidity'].value = wxMod.turbidity;
+            skyUniforms['rayleigh'].value = 2;
+            skyUniforms['mieCoefficient'].value = 0.005;
+            skyUniforms['mieDirectionalG'].value = 0.8;
+
+            sunPosition = calcSunPosition(tod);
+            skyUniforms['sunPosition'].value.copy(sunPosition);
+
+            skyGroup.add(skyMesh);
+        } else {
+            // Night — vertex-color sky dome
+            var skyGeo = new THREE.SphereGeometry(400, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+            var skyVertCount = skyGeo.attributes.position.count;
+            var colors = new Float32Array(skyVertCount * 3);
+            var topColor = new THREE.Color(pal.top);
+            var midColor = new THREE.Color(pal.mid);
+            var horizonColor = new THREE.Color(pal.horizon);
+            var horizonWarm = new THREE.Color(pal.warm);
+            var tmp = new THREE.Color();
+
+            for (var i = 0; i < skyVertCount; i++) {
+                var y = skyGeo.attributes.position.getY(i);
+                var t = Math.max(0, y / 400);
+                if (t < 0.05) {
+                    tmp.copy(horizonWarm).lerp(horizonColor, t / 0.05);
+                } else if (t < 0.3) {
+                    tmp.copy(horizonColor).lerp(midColor, (t - 0.05) / 0.25);
+                } else {
+                    tmp.copy(midColor).lerp(topColor, (t - 0.3) / 0.7);
+                }
+                colors[i * 3] = tmp.r;
+                colors[i * 3 + 1] = tmp.g;
+                colors[i * 3 + 2] = tmp.b;
             }
-            colors[i * 3] = tmp.r;
-            colors[i * 3 + 1] = tmp.g;
-            colors[i * 3 + 2] = tmp.b;
-        }
-        skyGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            skyGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            var skyMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide });
+            skyGroup.add(new THREE.Mesh(skyGeo, skyMat));
 
-        var skyMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide });
-        skyGroup.add(new THREE.Mesh(skyGeo, skyMat));
-
-        // Stars for night/dawn/dusk
-        if (tod === 'night' || tod === 'dawn' || tod === 'dusk') {
+            // Stars
             var starCount = tod === 'night' ? 300 : 100;
             var starGeo = new THREE.BufferGeometry();
             var starPos = new Float32Array(starCount * 3);
             for (var s = 0; s < starCount; s++) {
-                var theta = Math.random() * Math.PI * 2;
-                var phi = Math.random() * Math.PI * 0.45; // upper hemisphere
+                var sTheta = Math.random() * Math.PI * 2;
+                var sPhi = Math.random() * Math.PI * 0.45;
                 var r = 380;
-                starPos[s * 3] = r * Math.sin(phi) * Math.cos(theta);
-                starPos[s * 3 + 1] = r * Math.cos(phi);
-                starPos[s * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+                starPos[s * 3] = r * Math.sin(sPhi) * Math.cos(sTheta);
+                starPos[s * 3 + 1] = r * Math.cos(sPhi);
+                starPos[s * 3 + 2] = r * Math.sin(sPhi) * Math.sin(sTheta);
             }
             starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
             var starMat = new THREE.PointsMaterial({
@@ -482,11 +558,36 @@ var RollViewer = (function () {
                 opacity: tod === 'night' ? 0.8 : 0.4
             });
             skyGroup.add(new THREE.Points(starGeo, starMat));
+
+            // Moon for night
+            if (tod === 'night') {
+                var moonCanvas = document.createElement('canvas');
+                moonCanvas.width = 128;
+                moonCanvas.height = 128;
+                var ctx = moonCanvas.getContext('2d');
+                var glow = ctx.createRadialGradient(64, 64, 20, 64, 64, 64);
+                glow.addColorStop(0, 'rgba(220,230,255,0.9)');
+                glow.addColorStop(0.3, 'rgba(200,215,240,0.4)');
+                glow.addColorStop(0.6, 'rgba(150,170,200,0.1)');
+                glow.addColorStop(1, 'rgba(100,120,150,0)');
+                ctx.fillStyle = glow;
+                ctx.fillRect(0, 0, 128, 128);
+                ctx.beginPath();
+                ctx.arc(64, 64, 18, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(230,235,245,0.95)';
+                ctx.fill();
+                var moonTex = new THREE.CanvasTexture(moonCanvas);
+                var moonMat = new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthWrite: false });
+                var moonSprite = new THREE.Sprite(moonMat);
+                moonSprite.position.set(150, 200, -100);
+                moonSprite.scale.set(60, 60, 1);
+                skyGroup.add(moonSprite);
+            }
+
+            sunPosition = calcSunPosition(tod);
         }
 
         scene.add(skyGroup);
-
-        // Clouds — scattered billboard sprites near horizon
         buildClouds(THREE, tod);
     }
 
@@ -1799,7 +1900,7 @@ var RollViewer = (function () {
             textureWidth: 512,
             textureHeight: 512,
             waterNormals: waterNormals,
-            sunDirection: new THREE.Vector3(0.7, 0.5, 0.3).normalize(),
+            sunDirection: (sunPosition ? sunPosition.clone().normalize() : new THREE.Vector3(0.7, 0.5, 0.3).normalize()),
             sunColor: pal.sunColor,
             waterColor: pal.waterColor,
             distortionScale: Math.max(weather.waveHeight * 1.5, 1.0),
@@ -2324,6 +2425,16 @@ var RollViewer = (function () {
             // (old static wake removed — wakeTrail handles this now)
             // (wakeTrail removed — water reflections provide sufficient visual cue)
 
+            // Weather-dynamic fog & clouds
+            var wxDyn = getWeatherModifiers();
+            if (scene.fog) scene.fog.density = wxDyn.fogDensity;
+            if (_cloudSprites) {
+                for (var ci = 0; ci < _cloudSprites.length; ci++) {
+                    var cs = _cloudSprites[ci];
+                    cs.mat.opacity = Math.min(1, cs.baseOpacity * (wxDyn.cloudOpacity / 0.5));
+                }
+            }
+
             // Update HUD speed display
             var speedEl = document.getElementById('rv-turn-speed');
             if (speedEl) speedEl.textContent = smoothSpeed.toFixed(1) + ' kt';
@@ -2789,6 +2900,9 @@ var RollViewer = (function () {
         wakeTrailTimer = 0;
         sunMesh = null;
         skyGroup = null;
+        skyMesh = null;
+        sunPosition = null;
+        saturationPass = null;
         compassGroup = null;
         cloudGroup = null;
         _cloudSprites = [];
