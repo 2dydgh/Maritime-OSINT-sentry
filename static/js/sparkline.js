@@ -17,12 +17,19 @@ var BottomBar = (function() {
     var riskHistory = [];
     var RISK_HISTORY_MAX = 60;
 
+    var _sparklineTimers = {};
     function pushData(key, value) {
         var buf = buffers[key];
         if (!buf) return;
         buf.data.push(value);
         if (buf.data.length > buf.max) buf.data.shift();
-        renderSparkline(key);
+        // Debounce sparkline render — batch rapid updates
+        if (!_sparklineTimers[key]) {
+            _sparklineTimers[key] = requestAnimationFrame(function() {
+                _sparklineTimers[key] = null;
+                renderSparkline(key);
+            });
+        }
     }
 
     function renderSparkline(key) {

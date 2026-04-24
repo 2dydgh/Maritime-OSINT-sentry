@@ -330,16 +330,24 @@ function updateShipsLayer(ships) {
             var heading = Cesium.Math.toRadians(-(ship.heading || 0));
             var surfaceNormal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(position);
 
-            var existingBb = shipBillboardMap[String(ship.mmsi)];
+            var mmsiKey = String(ship.mmsi);
+            var existingBb = shipBillboardMap[mmsiKey];
             if (existingBb) {
-                // 기존 billboard 업데이트 — 직접 세팅, Property 평가 없음
-                existingBb.position = position;
-                existingBb.rotation = heading;
-                existingBb.alignedAxis = surfaceNormal;
-                // 라벨도 업데이트
-                var existingLabel = shipLabelMap[String(ship.mmsi)];
+                // Skip update if position hasn't changed
+                var prev = existingBb._prevPos;
+                if (prev && prev[0] === ship.lng && prev[1] === ship.lat && prev[2] === (ship.heading || 0)) {
+                    // No change — skip expensive Cartesian3/surfaceNormal recalc
+                } else {
+                    existingBb._prevPos = [ship.lng, ship.lat, ship.heading || 0];
+                    existingBb.position = position;
+                    existingBb.rotation = heading;
+                    existingBb.alignedAxis = surfaceNormal;
+                }
+                var existingLabel = shipLabelMap[mmsiKey];
                 if (existingLabel) {
-                    existingLabel.position = position;
+                    if (!prev || prev[0] !== ship.lng || prev[1] !== ship.lat) {
+                        existingLabel.position = position;
+                    }
                     if (ship.name && existingLabel.text !== ship.name) {
                         existingLabel.text = ship.name;
                     }
@@ -407,7 +415,12 @@ function updateShipsLayer(ships) {
             var entry = leafletShipMarkers[ship.mmsi];
 
             if (entry) {
-                entry.marker.setLatLng([ship.lat, ship.lng]);
+                // Skip setLatLng if position unchanged
+                if (entry._prevLat !== ship.lat || entry._prevLng !== ship.lng) {
+                    entry._prevLat = ship.lat;
+                    entry._prevLng = ship.lng;
+                    entry.marker.setLatLng([ship.lat, ship.lng]);
+                }
             } else {
                 var color = SHIP_COLORS[type] || '#6b7280';
                 var marker = L.circleMarker([ship.lat, ship.lng], {
@@ -563,14 +576,23 @@ function updateAircraftLayer(aircraft) {
                     Cesium.Cartesian3.fromDegrees(ac.lng, ac.lat)
                 );
 
-                var existingBb = aircraftBillboardMap[String(ac.icao24)];
+                var acKey = String(ac.icao24);
+                var existingBb = aircraftBillboardMap[acKey];
                 if (existingBb) {
-                    existingBb.position = position;
-                    existingBb.rotation = acHeading;
-                    existingBb.alignedAxis = acSurfaceNormal;
-                    var existingLabel = aircraftLabelMap[String(ac.icao24)];
+                    var prevAc = existingBb._prevPos;
+                    if (prevAc && prevAc[0] === ac.lng && prevAc[1] === ac.lat && prevAc[2] === alt && prevAc[3] === (ac.heading || 0)) {
+                        // No change — skip
+                    } else {
+                        existingBb._prevPos = [ac.lng, ac.lat, alt, ac.heading || 0];
+                        existingBb.position = position;
+                        existingBb.rotation = acHeading;
+                        existingBb.alignedAxis = acSurfaceNormal;
+                    }
+                    var existingLabel = aircraftLabelMap[acKey];
                     if (existingLabel) {
-                        existingLabel.position = position;
+                        if (!prevAc || prevAc[0] !== ac.lng || prevAc[1] !== ac.lat || prevAc[2] !== alt) {
+                            existingLabel.position = position;
+                        }
                         if (ac.callsign && existingLabel.text !== ac.callsign) {
                             existingLabel.text = ac.callsign;
                         }
@@ -637,18 +659,26 @@ function updateAircraftLayer(aircraft) {
             var entry = leafletAircraftMarkers[ac.icao24];
 
             if (entry) {
-                entry.marker.setLatLng([ac.lat, ac.lng]);
-                // Update icon with new heading
+                // Skip setLatLng if position unchanged
+                if (entry._prevLat !== ac.lat || entry._prevLng !== ac.lng) {
+                    entry._prevLat = ac.lat;
+                    entry._prevLng = ac.lng;
+                    entry.marker.setLatLng([ac.lat, ac.lng]);
+                }
+                // Only update icon if heading actually changed
                 var newH = ac.heading || 0;
-                var uColor = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
-                entry.marker.setIcon(L.divIcon({
-                    className: 'aircraft-icon-2d',
-                    html: '<svg viewBox="0 0 32 32" width="14" height="14" style="transform:rotate(' + newH + 'deg);filter:drop-shadow(0 0 2px rgba(0,0,0,0.6));">' +
-                          '<path d="M16,2 L18,8 L30,17 L30,19 L18,15 L18,26 L22,30 L22,31 L16,29 L10,31 L10,30 L14,26 L14,15 L2,19 L2,17 L14,8 Z" ' +
-                          'fill="' + uColor + '" stroke="#000" stroke-width="0.5"/></svg>',
-                    iconSize: [14, 14],
-                    iconAnchor: [7, 7]
-                }));
+                if (entry._lastHeading !== newH) {
+                    entry._lastHeading = newH;
+                    var uColor = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
+                    entry.marker.setIcon(L.divIcon({
+                        className: 'aircraft-icon-2d',
+                        html: '<svg viewBox="0 0 32 32" width="14" height="14" style="transform:rotate(' + newH + 'deg);filter:drop-shadow(0 0 2px rgba(0,0,0,0.6));">' +
+                              '<path d="M16,2 L18,8 L30,17 L30,19 L18,15 L18,26 L22,30 L22,31 L16,29 L10,31 L10,30 L14,26 L14,15 L2,19 L2,17 L14,8 Z" ' +
+                              'fill="' + uColor + '" stroke="#000" stroke-width="0.5"/></svg>',
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7]
+                    }));
+                }
             } else {
                 var color = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
                 var _acHeading = ac.heading || 0;

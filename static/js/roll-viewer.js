@@ -339,8 +339,8 @@ var RollViewer = (function () {
         var dirLight = mainDirLight;
         dirLight.position.set(30, 40, 20);
         dirLight.castShadow = true;
-        dirLight.shadow.mapSize.width = 1024;
-        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.mapSize.width = 512;
+        dirLight.shadow.mapSize.height = 512;
         dirLight.shadow.camera.near = 1;
         dirLight.shadow.camera.far = 100;
         dirLight.shadow.camera.left = -25;
@@ -398,7 +398,7 @@ var RollViewer = (function () {
                     decay: { value: 0.95 },
                     density: { value: 0.8 },
                     weight: { value: 0.4 },
-                    samples: { value: 30 }
+                    samples: { value: 15 }
                 },
                 vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
                 fragmentShader: [
@@ -410,11 +410,11 @@ var RollViewer = (function () {
                     'uniform float weight;',
                     'varying vec2 vUv;',
                     'void main() {',
-                    '    vec2 deltaUV = (vUv - lightPos) * density / 30.0;',
+                    '    vec2 deltaUV = (vUv - lightPos) * density / 15.0;',
                     '    vec2 uv = vUv;',
                     '    vec4 color = texture2D(tDiffuse, vUv);',
                     '    float illumination = 1.0;',
-                    '    for (int i = 0; i < 30; i++) {',
+                    '    for (int i = 0; i < 15; i++) {',
                     '        uv -= deltaUV;',
                     '        vec4 s = texture2D(tDiffuse, uv);',
                     '        s *= illumination * weight;',
@@ -1680,22 +1680,34 @@ var RollViewer = (function () {
         shipEnvMap = cubeTexture;
     }
 
+    var _shipMatCache = {};
     function shipMat(color, opts) {
+        // Cache key from all material params
+        var r = (opts && opts.roughness !== undefined) ? opts.roughness : 0.55;
+        var m = (opts && opts.metalness !== undefined) ? opts.metalness : 0.35;
+        var e = (opts && opts.emissive) ? opts.emissive : '';
+        var ei = (opts && opts.emissiveIntensity) ? opts.emissiveIntensity : 0;
+        var emi = (opts && opts.envMapIntensity !== undefined) ? opts.envMapIntensity : 0.4;
+        var key = color + '|' + r + '|' + m + '|' + e + '|' + ei + '|' + emi;
+        if (_shipMatCache[key]) return _shipMatCache[key];
+
         var THREE = window.THREE;
         var params = {
             color: new THREE.Color(color),
-            roughness: (opts && opts.roughness !== undefined) ? opts.roughness : 0.55,
-            metalness: (opts && opts.metalness !== undefined) ? opts.metalness : 0.35
+            roughness: r,
+            metalness: m
         };
         if (shipEnvMap) {
             params.envMap = shipEnvMap;
-            params.envMapIntensity = (opts && opts.envMapIntensity !== undefined) ? opts.envMapIntensity : 0.4;
+            params.envMapIntensity = emi;
         }
-        if (opts && opts.emissive) {
-            params.emissive = new THREE.Color(opts.emissive);
-            params.emissiveIntensity = opts.emissiveIntensity || 0.8;
+        if (e) {
+            params.emissive = new THREE.Color(e);
+            params.emissiveIntensity = ei || 0.8;
         }
-        return new THREE.MeshStandardMaterial(params);
+        var mat = new THREE.MeshStandardMaterial(params);
+        _shipMatCache[key] = mat;
+        return mat;
     }
 
     function addToShip(mesh) {
@@ -1896,8 +1908,8 @@ var RollViewer = (function () {
         var tod = getTimeOfDay();
         var pal = SKY_PALETTES[tod];
         waterMesh = new THREE.Water(waterGeometry, {
-            textureWidth: 512,
-            textureHeight: 512,
+            textureWidth: 256,
+            textureHeight: 256,
             waterNormals: waterNormals,
             sunDirection: (sunPosition ? sunPosition.clone().normalize() : new THREE.Vector3(0.7, 0.5, 0.3).normalize()),
             sunColor: pal.sunColor,
@@ -1995,8 +2007,89 @@ var RollViewer = (function () {
             }
         });
 
+        buildNavLights(type);
+
         shipGroup.position.y = -0.8;
         scene.add(shipGroup);
+    }
+
+    // ── buildNavLights() — COLREG navigation lights (port/starboard/stern/masthead) ──
+    var navLights = [];
+    function buildNavLights(type) {
+        var THREE = window.THREE;
+        var tod = getTimeOfDay();
+        if (tod === 'day') return;
+
+        // Ship dimensions by type for light placement
+        var dims = {
+            tanker:    { bow: 10,  stern: -8,  beam: 2.2, mast: 8,   deck: 3.0 },
+            cargo:     { bow: 9,   stern: -7,  beam: 1.9, mast: 7.5, deck: 3.0 },
+            passenger: { bow: 10,  stern: -8,  beam: 2.3, mast: 9,   deck: 5.0 },
+            fishing:   { bow: 5,   stern: -4,  beam: 1.4, mast: 5,   deck: 2.5 },
+            military:  { bow: 9,   stern: -7,  beam: 1.6, mast: 7,   deck: 3.5 },
+            tug:       { bow: 4,   stern: -3,  beam: 1.6, mast: 5,   deck: 3.0 },
+            other:     { bow: 6,   stern: -5,  beam: 1.5, mast: 6,   deck: 3.0 }
+        };
+        var d = dims[type] || dims['other'];
+
+        var intensity = (tod === 'night') ? 2.0 : 1.0;
+        var distance = (tod === 'night') ? 25 : 15;
+
+        // Glow sprite texture (shared)
+        var canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        var ctx = canvas.getContext('2d');
+        var grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+        grad.addColorStop(0, 'rgba(255,255,255,1)');
+        grad.addColorStop(0.3, 'rgba(255,255,255,0.6)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 32, 32);
+        var glowTex = new THREE.CanvasTexture(canvas);
+
+        var lights = [
+            // Port (left) — red
+            { color: 0xff0022, x: d.bow * 0.6, y: d.deck + 0.5, z: d.beam, glow: 0xff2222 },
+            // Starboard (right) — green
+            { color: 0x00ff44, x: d.bow * 0.6, y: d.deck + 0.5, z: -d.beam, glow: 0x22ff44 },
+            // Stern — white
+            { color: 0xfff8e0, x: d.stern + 0.5, y: d.deck + 0.5, z: 0, glow: 0xfff8e0 },
+            // Masthead — white
+            { color: 0xfff8e0, x: d.bow * 0.3, y: d.mast + 1.5, z: 0, glow: 0xfff8e0 }
+        ];
+
+        for (var i = 0; i < lights.length; i++) {
+            var cfg = lights[i];
+
+            // Point light
+            var pl = new THREE.PointLight(cfg.color, intensity, distance);
+            pl.position.set(cfg.x, cfg.y, cfg.z);
+            shipGroup.add(pl);
+
+            // Small physical bulb mesh
+            var bulbGeo = new THREE.SphereGeometry(0.12, 8, 8);
+            var bulbMat = new THREE.MeshBasicMaterial({ color: cfg.color });
+            var bulb = new THREE.Mesh(bulbGeo, bulbMat);
+            bulb.position.set(cfg.x, cfg.y, cfg.z);
+            shipGroup.add(bulb);
+
+            // Glow sprite
+            var spriteMat = new THREE.SpriteMaterial({
+                map: glowTex,
+                color: cfg.glow,
+                transparent: true,
+                opacity: (tod === 'night') ? 0.7 : 0.4,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+            var sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(1.5, 1.5, 1);
+            sprite.position.set(cfg.x, cfg.y, cfg.z);
+            shipGroup.add(sprite);
+
+            navLights.push({ light: pl, bulb: bulb, sprite: sprite, mat: spriteMat });
+        }
     }
 
     // ── Tanker: 낮고 긴 선체, 파이프라인, 매니폴드, 탱크돔, 캣워크 ──
@@ -3251,7 +3344,11 @@ var RollViewer = (function () {
         cloudGroup = null;
         _cloudSprites = [];
 
+        // Clear material cache
+        _shipMatCache = {};
+
         seaMarkers = [];
+        navLights = [];
         radarSweep = null;
         sprayPoints = null;
         sprayVelocities = [];

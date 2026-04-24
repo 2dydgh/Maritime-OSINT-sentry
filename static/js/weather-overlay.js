@@ -114,10 +114,15 @@ function waveHeightColorRGBA(h) {
     return [Math.round(r), Math.round(g), Math.round(b), Math.round(a)];
 }
 
+// Reuse canvas across renders to avoid GC
+var _waveHeatmapCanvas = null;
 function _buildWaveHeatmapCanvas(points) {
-    // IDW 보간으로 360x180 캔버스에 히트맵 렌더링
-    var W = 720, H = 360;
-    var canvas = document.createElement('canvas');
+    // IDW 보간 — 절반 해상도로 계산 후 업스케일 (4배 빠름, 시각적 차이 미미)
+    var W = 360, H = 180;
+    if (!_waveHeatmapCanvas) {
+        _waveHeatmapCanvas = document.createElement('canvas');
+    }
+    var canvas = _waveHeatmapCanvas;
     canvas.width = W; canvas.height = H;
     var ctx = canvas.getContext('2d');
     var imgData = ctx.createImageData(W, H);

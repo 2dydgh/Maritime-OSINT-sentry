@@ -204,18 +204,20 @@ fallbackLayer.alpha = 0;
 fallbackLayer.brightness = 0.5;
 fallbackLayer.saturation = 0.3;
 
+// Throttled camera change handler (max once per 200ms)
+var _cameraChangeTimer = null;
 viewer.camera.changed.addEventListener(function() {
-    var height = viewer.camera.positionCartographic.height;
-    if (height < 10000) {
-        var t = Math.max(0, Math.min(1, (10000 - height) / 8000));
-        fallbackLayer.alpha = t;
-    } else {
-        fallbackLayer.alpha = 0;
-    }
-});
-
-viewer.camera.changed.addEventListener(function() {
-    var height = viewer.camera.positionCartographic.height;
+    if (_cameraChangeTimer) return;
+    _cameraChangeTimer = setTimeout(function() {
+        _cameraChangeTimer = null;
+        var height = viewer.camera.positionCartographic.height;
+        if (height < 10000) {
+            var t = Math.max(0, Math.min(1, (10000 - height) / 8000));
+            fallbackLayer.alpha = t;
+        } else {
+            fallbackLayer.alpha = 0;
+        }
+    }, 200);
 });
 
 // ── Map Navigation: Zoom/Pan buttons + Keyboard shortcuts ──
