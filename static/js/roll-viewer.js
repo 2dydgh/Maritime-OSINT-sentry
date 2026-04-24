@@ -388,6 +388,47 @@ var RollViewer = (function () {
         composer.addPass(renderPass);
         composer.addPass(bloomPass);
 
+        // God Rays — dawn/dusk only
+        if (tod === 'dawn' || tod === 'dusk') {
+            var godRaysShader = {
+                uniforms: {
+                    tDiffuse: { value: null },
+                    lightPos: { value: new THREE.Vector2(0.5, 0.5) },
+                    exposure: { value: 0.18 },
+                    decay: { value: 0.95 },
+                    density: { value: 0.8 },
+                    weight: { value: 0.4 },
+                    samples: { value: 30 }
+                },
+                vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+                fragmentShader: [
+                    'uniform sampler2D tDiffuse;',
+                    'uniform vec2 lightPos;',
+                    'uniform float exposure;',
+                    'uniform float decay;',
+                    'uniform float density;',
+                    'uniform float weight;',
+                    'varying vec2 vUv;',
+                    'void main() {',
+                    '    vec2 deltaUV = (vUv - lightPos) * density / 30.0;',
+                    '    vec2 uv = vUv;',
+                    '    vec4 color = texture2D(tDiffuse, vUv);',
+                    '    float illumination = 1.0;',
+                    '    for (int i = 0; i < 30; i++) {',
+                    '        uv -= deltaUV;',
+                    '        vec4 s = texture2D(tDiffuse, uv);',
+                    '        s *= illumination * weight;',
+                    '        color += s;',
+                    '        illumination *= decay;',
+                    '    }',
+                    '    gl_FragColor = color * exposure;',
+                    '}'
+                ].join('\n')
+            };
+            godRaysShaderPass = new THREE.ShaderPass(godRaysShader);
+            composer.addPass(godRaysShaderPass);
+        }
+
         var satShader = {
             uniforms: {
                 tDiffuse: { value: null },
@@ -482,6 +523,7 @@ var RollViewer = (function () {
     var skyMesh = null;
     var sunPosition = null;
     var saturationPass = null;
+    var godRaysShaderPass = null;
 
     // ── buildSky() — THREE.Sky for dawn/day/dusk, vertex-color dome for night ──
     function buildSky() {
@@ -2554,6 +2596,18 @@ var RollViewer = (function () {
             if (pitchHistory.length > 60) pitchHistory.shift();
 
             if (controls) controls.update();
+
+            // Update God Rays sun screen position
+            if (godRaysShaderPass && sunPosition) {
+                var sunWorld = sunPosition.clone().multiplyScalar(100);
+                sunWorld.add(new THREE.Vector3(shipWorldPos.x, 0, shipWorldPos.z));
+                var sunScreen = sunWorld.clone().project(camera);
+                godRaysShaderPass.uniforms['lightPos'].value.set(
+                    (sunScreen.x + 1) / 2,
+                    (sunScreen.y + 1) / 2
+                );
+            }
+
             if (composer) {
                 composer.render();
             } else if (renderer && scene && camera) {
@@ -2903,6 +2957,7 @@ var RollViewer = (function () {
         skyMesh = null;
         sunPosition = null;
         saturationPass = null;
+        godRaysShaderPass = null;
         compassGroup = null;
         cloudGroup = null;
         _cloudSprites = [];
