@@ -868,7 +868,7 @@ document.body.insertAdjacentHTML('beforeend', '\
         backdrop-filter:blur(12px); box-shadow:0 8px 32px rgba(0,0,0,0.6);\
         font-family:\'JetBrains Mono\',monospace;">\
         <div id="sentinelMenuBtn" style="\
-            padding:10px 16px; cursor:pointer; color:#406FD8; font-size:0.78rem;\
+            padding:10px 16px; cursor:pointer; color:#fafafa; font-size:0.78rem;\
             display:flex; align-items:center; gap:8px;"\
             onmouseover="this.style.background=\'rgba(0,40,120,0.15)\'"\
             onmouseout="this.style.background=\'transparent\'">\
@@ -1203,3 +1203,340 @@ handler.setInputAction(function(click) {
         _activeFootprintSatId = null;
     }
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+// ── Map Place Search (Nominatim Geocoding + Local Cache) ──
+var _searchMarkerBillboards = null;
+var _searchMarkerLabels = null;
+var _searchLeafletMarker = null;
+
+(function() {
+    var input = document.getElementById('mapSearchInput');
+    var results = document.getElementById('mapSearchResults');
+    var searchIcon = document.getElementById('mapSearchIcon');
+    if (!input || !results) return;
+
+    var debounceTimer = null;
+    var abortCtrl = null;
+
+    // ── Local harbour/place cache for instant results ──
+    var LOCAL_PLACES = [
+        { name: '인천항', nameEn: 'Incheon Port', lat: 37.4500, lon: 126.6322, type: 'harbour', region: '인천광역시, 대한민국' },
+        { name: '부산항', nameEn: 'Busan Port', lat: 35.0950, lon: 129.0450, type: 'harbour', region: '부산광역시, 대한민국' },
+        { name: '평택당진항', nameEn: 'Pyeongtaek-Dangjin Port', lat: 36.9600, lon: 126.8200, type: 'harbour', region: '경기도, 대한민국' },
+        { name: '울산항', nameEn: 'Ulsan Port', lat: 35.4900, lon: 129.3800, type: 'harbour', region: '울산광역시, 대한민국' },
+        { name: '광양항', nameEn: 'Gwangyang Port', lat: 34.9100, lon: 127.6800, type: 'harbour', region: '전라남도, 대한민국' },
+        { name: '목포항', nameEn: 'Mokpo Port', lat: 34.7800, lon: 126.3800, type: 'harbour', region: '전라남도, 대한민국' },
+        { name: '여수항', nameEn: 'Yeosu Port', lat: 34.7400, lon: 127.7400, type: 'harbour', region: '전라남도, 대한민국' },
+        { name: '포항항', nameEn: 'Pohang Port', lat: 36.0300, lon: 129.3800, type: 'harbour', region: '경상북도, 대한민국' },
+        { name: '군산항', nameEn: 'Gunsan Port', lat: 35.9800, lon: 126.6100, type: 'harbour', region: '전라북도, 대한민국' },
+        { name: '대산항', nameEn: 'Daesan Port', lat: 37.0100, lon: 126.3500, type: 'harbour', region: '충청남도, 대한민국' },
+        { name: '제주항', nameEn: 'Jeju Port', lat: 33.5200, lon: 126.5300, type: 'harbour', region: '제주도, 대한민국' },
+        { name: '동해항', nameEn: 'Donghae Port', lat: 37.4900, lon: 129.1200, type: 'harbour', region: '강원도, 대한민국' },
+        { name: '속초항', nameEn: 'Sokcho Port', lat: 38.2100, lon: 128.5900, type: 'harbour', region: '강원도, 대한민국' },
+        { name: '싱가포르항', nameEn: 'Port of Singapore', lat: 1.2646, lon: 103.8200, type: 'harbour', region: 'Singapore' },
+        { name: '상하이항', nameEn: 'Port of Shanghai', lat: 31.3600, lon: 121.6200, type: 'harbour', region: 'Shanghai, China' },
+        { name: '로테르담항', nameEn: 'Port of Rotterdam', lat: 51.9036, lon: 4.4620, type: 'harbour', region: 'Netherlands' },
+        { name: '함부르크항', nameEn: 'Port of Hamburg', lat: 53.5400, lon: 9.9700, type: 'harbour', region: 'Germany' },
+        { name: '요코하마항', nameEn: 'Port of Yokohama', lat: 35.4500, lon: 139.6500, type: 'harbour', region: 'Japan' },
+        { name: '수에즈 운하', nameEn: 'Suez Canal', lat: 30.4550, lon: 32.3500, type: 'strait', region: 'Egypt' },
+        { name: '말라카 해협', nameEn: 'Strait of Malacca', lat: 2.5000, lon: 101.5000, type: 'strait', region: 'Southeast Asia' },
+        { name: '호르무즈 해협', nameEn: 'Strait of Hormuz', lat: 26.5900, lon: 56.2500, type: 'strait', region: 'Middle East' },
+        { name: '파나마 운하', nameEn: 'Panama Canal', lat: 9.0800, lon: -79.6800, type: 'strait', region: 'Panama' },
+        { name: '아덴만', nameEn: 'Gulf of Aden', lat: 12.0000, lon: 48.0000, type: 'sea', region: 'East Africa' },
+        { name: '기니만', nameEn: 'Gulf of Guinea', lat: 3.0000, lon: 3.0000, type: 'sea', region: 'West Africa' },
+        { name: '대한해협', nameEn: 'Korea Strait', lat: 34.0000, lon: 129.0000, type: 'strait', region: '대한민국 / 일본' },
+        { name: '남중국해', nameEn: 'South China Sea', lat: 12.0000, lon: 113.0000, type: 'sea', region: 'Southeast Asia' },
+        { name: '북극항로', nameEn: 'Northern Sea Route', lat: 75.0000, lon: 100.0000, type: 'sea', region: 'Arctic' },
+        { name: '동중국해', nameEn: 'East China Sea', lat: 28.0000, lon: 125.0000, type: 'sea', region: 'East Asia' },
+    ];
+
+    function searchLocalCache(query) {
+        var q = query.toLowerCase();
+        return LOCAL_PLACES.filter(function(p) {
+            return p.name.toLowerCase().indexOf(q) !== -1 ||
+                   p.nameEn.toLowerCase().indexOf(q) !== -1;
+        }).slice(0, 4);
+    }
+
+    function typeIcon(type) {
+        if (type === 'harbour' || type === 'port') return 'fa-anchor';
+        if (type === 'city' || type === 'town' || type === 'village') return 'fa-city';
+        if (type === 'island' || type === 'archipelago') return 'fa-mountain-sun';
+        if (type === 'strait' || type === 'bay' || type === 'sea' || type === 'ocean' || type === 'water') return 'fa-water';
+        if (type === 'country' || type === 'state') return 'fa-flag';
+        return 'fa-location-dot';
+    }
+
+    function closeResults() {
+        results.classList.remove('open');
+        results.innerHTML = '';
+    }
+
+    function setSearching(on) {
+        if (searchIcon) {
+            searchIcon.classList.toggle('fa-magnifying-glass', !on);
+            searchIcon.classList.toggle('fa-circle-notch', on);
+            searchIcon.classList.toggle('searching', on);
+        }
+    }
+
+    function renderResultItem(name, detail, lat, lon, bb, type, isLocal) {
+        var icon = isLocal ? 'fa-anchor' : typeIcon(type || '');
+        var prefix = isLocal ? '<span class="sri-local">⚓</span>' : '';
+        return '<div class="search-result-item" data-lat="' + lat + '" data-lon="' + lon + '" data-bb="' + (bb || '') + '" data-name="' + name.replace(/"/g, '&quot;') + '" data-type="' + (type || '') + '" data-detail="' + (detail || '').replace(/"/g, '&quot;') + '">'
+            + prefix
+            + '<i class="fa-solid ' + icon + ' sri-icon"></i>'
+            + '<span class="sri-name">' + name + '</span>'
+            + '<span class="sri-detail">' + detail + '</span>'
+            + '</div>';
+    }
+
+    function showResults(localItems, nominatimItems) {
+        var html = '';
+        localItems.forEach(function(p) {
+            html += renderResultItem(p.name, p.nameEn + ', ' + p.region, p.lat, p.lon, '', p.type, true);
+        });
+        nominatimItems.forEach(function(item) {
+            var parts = (item.display_name || '').split(',');
+            var name = parts[0].trim();
+            var detail = parts.slice(1, 3).join(',').trim();
+            html += renderResultItem(name, detail, item.lat, item.lon, (item.boundingbox || []).join(','), item.type, false);
+        });
+        if (!html) {
+            html = '<div class="search-no-result">검색 결과 없음</div>';
+        }
+        results.innerHTML = html;
+        results.classList.add('open');
+    }
+
+    function doSearch(query) {
+        if (abortCtrl) abortCtrl.abort();
+        abortCtrl = new AbortController();
+
+        // Show local results immediately
+        var localItems = searchLocalCache(query);
+        if (localItems.length > 0) {
+            showResults(localItems, []);
+        }
+
+        setSearching(true);
+        var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=ko,en&q=' + encodeURIComponent(query);
+
+        fetch(url, { signal: abortCtrl.signal })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                setSearching(false);
+                var localNames = localItems.map(function(p) { return p.name; });
+                var filtered = (data || []).filter(function(item) {
+                    var n = (item.display_name || '').split(',')[0].trim();
+                    return localNames.indexOf(n) === -1;
+                });
+                showResults(localItems, filtered);
+            })
+            .catch(function(e) {
+                setSearching(false);
+                if (e.name !== 'AbortError') console.warn('Search failed:', e);
+            });
+    }
+
+    // ── Search marker management ──
+    function clearSearchMarker() {
+        if (_searchMarkerBillboards) {
+            _searchMarkerBillboards.removeAll();
+        }
+        if (_searchMarkerLabels) {
+            _searchMarkerLabels.removeAll();
+        }
+        if (_searchLeafletMarker) {
+            _searchLeafletMarker.remove();
+            _searchLeafletMarker = null;
+        }
+    }
+
+    function addSearchMarker(lat, lon, name) {
+        clearSearchMarker();
+
+        if (currentMapMode === '2d' && leafletMap) {
+            _searchLeafletMarker = L.marker([lat, lon], {
+                icon: L.divIcon({
+                    className: 'search-marker-icon',
+                    html: '<div class="search-marker-dot"></div><div class="search-marker-label">' + name + '</div>',
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                })
+            }).addTo(leafletMap);
+            return;
+        }
+
+        // Cesium 3D
+        if (!_searchMarkerBillboards) {
+            _searchMarkerBillboards = viewer.scene.primitives.add(new Cesium.BillboardCollection());
+            _searchMarkerLabels = viewer.scene.primitives.add(new Cesium.LabelCollection());
+        }
+        var pos = Cesium.Cartesian3.fromDegrees(lon, lat, 0);
+        _searchMarkerBillboards.add({
+            position: pos,
+            image: 'data:image/svg+xml,' + encodeURIComponent(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">'
+                + '<circle cx="12" cy="12" r="8" fill="#4a8af5" stroke="white" stroke-width="2.5"/>'
+                + '<circle cx="12" cy="12" r="12" fill="none" stroke="rgba(74,138,245,0.35)" stroke-width="1.5"/>'
+                + '</svg>'
+            ),
+            verticalOrigin: Cesium.VerticalOrigin.CENTER,
+            scale: 1.0,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+        });
+        _searchMarkerLabels.add({
+            position: pos,
+            text: name,
+            font: '12px Pretendard Variable, Inter, sans-serif',
+            fillColor: Cesium.Color.fromCssColorString('#c0ccdd'),
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, 18),
+            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+        });
+    }
+
+    // ── Place info modal ──
+    var modal = document.getElementById('placeInfoModal');
+    var closeBtn = document.getElementById('placeInfoClose');
+
+    function openPlaceInfo(name, lat, lon, type, detail) {
+        if (!modal) return;
+
+        document.getElementById('placeInfoName').textContent = name;
+        document.getElementById('placeInfoSub').textContent = (detail ? detail + ' · ' : '') + (type || '');
+        document.getElementById('placeInfoCoords').textContent = Math.abs(lat).toFixed(4) + '°' + (lat >= 0 ? 'N' : 'S') + ', ' + Math.abs(lon).toFixed(4) + '°' + (lon >= 0 ? 'E' : 'W');
+        document.getElementById('placeInfoType').textContent = type || '-';
+
+        var localMatch = LOCAL_PLACES.find(function(p) { return p.name === name; });
+        document.getElementById('placeInfoRegion').textContent = localMatch ? localMatch.region : (detail || '-');
+
+        var photoEl = document.getElementById('placeInfoPhoto');
+        photoEl.innerHTML = '<i class="fa-solid fa-image place-info-photo-fallback"></i>';
+        document.getElementById('placeInfoDesc').textContent = '';
+        var wikiLink = document.getElementById('placeInfoWikiLink');
+        wikiLink.classList.add('hidden');
+        wikiLink.href = '#';
+
+        modal.classList.remove('closing');
+        modal.classList.add('open');
+        void modal.offsetWidth;
+
+        var wikiQuery = localMatch ? (localMatch.nameEn || name) : name;
+        fetchWikipedia(wikiQuery, photoEl, wikiLink);
+    }
+
+    function fetchWikipedia(query, photoEl, wikiLink) {
+        var koUrl = 'https://ko.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(query);
+        var enUrl = 'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(query);
+
+        fetch(koUrl)
+            .then(function(r) { return r.ok ? r.json() : Promise.reject('ko-fail'); })
+            .catch(function() { return fetch(enUrl).then(function(r) { return r.ok ? r.json() : Promise.reject('en-fail'); }); })
+            .then(function(data) {
+                if (data.thumbnail && data.thumbnail.source) {
+                    photoEl.innerHTML = '<img src="' + data.thumbnail.source + '" alt="">'
+                        + '<i class="fa-solid fa-image place-info-photo-fallback"></i>';
+                }
+                if (data.extract) {
+                    document.getElementById('placeInfoDesc').textContent = data.extract;
+                }
+                if (data.content_urls && data.content_urls.desktop) {
+                    wikiLink.href = data.content_urls.desktop.page;
+                    wikiLink.classList.remove('hidden');
+                }
+            })
+            .catch(function() {
+                document.getElementById('placeInfoDesc').textContent = '정보를 불러올 수 없습니다.';
+            });
+    }
+
+    function closePlaceInfo() {
+        if (!modal) return;
+        modal.classList.add('closing');
+        setTimeout(function() {
+            modal.classList.remove('open', 'closing');
+        }, 150);
+        clearSearchMarker();
+    }
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closePlaceInfo);
+    }
+
+    // ── flyToPlace (updated with marker + modal) ──
+    function flyToPlace(lat, lon, name, boundingbox, type, detail) {
+        closeResults();
+        input.value = name;
+
+        addSearchMarker(lat, lon, name);
+        openPlaceInfo(name, lat, lon, type, detail);
+
+        if (currentMapMode === '2d' && leafletMap) {
+            if (boundingbox) {
+                leafletMap.flyToBounds([
+                    [parseFloat(boundingbox[0]), parseFloat(boundingbox[2])],
+                    [parseFloat(boundingbox[1]), parseFloat(boundingbox[3])]
+                ], { duration: 0.8, maxZoom: 14 });
+            } else {
+                leafletMap.flyTo([lat, lon], 12, { duration: 0.8 });
+            }
+            return;
+        }
+
+        // 3D Cesium
+        var alt = 80000;
+        if (boundingbox) {
+            var dLat = Math.abs(parseFloat(boundingbox[1]) - parseFloat(boundingbox[0]));
+            var dLon = Math.abs(parseFloat(boundingbox[3]) - parseFloat(boundingbox[2]));
+            var span = Math.max(dLat, dLon);
+            if (span < 0.05) alt = 8000;
+            else if (span < 0.2) alt = 30000;
+            else if (span < 1) alt = 80000;
+            else if (span < 5) alt = 300000;
+            else alt = 1000000;
+        }
+        smoothFlyTo({
+            destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
+            orientation: {
+                heading: 0,
+                pitch: Cesium.Math.toRadians(-45),
+                roll: 0
+            }
+        });
+    }
+
+    // ── Event listeners ──
+    input.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        var q = input.value.trim();
+        if (q.length < 2) { closeResults(); return; }
+        debounceTimer = setTimeout(function() { doSearch(q); }, 200);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { closeResults(); closePlaceInfo(); input.blur(); }
+        if (e.key === 'Enter') {
+            var first = results.querySelector('.search-result-item');
+            if (first) first.click();
+        }
+    });
+
+    results.addEventListener('click', function(e) {
+        var item = e.target.closest('.search-result-item');
+        if (!item) return;
+        var lat = parseFloat(item.dataset.lat);
+        var lon = parseFloat(item.dataset.lon);
+        var bb = item.dataset.bb ? item.dataset.bb.split(',') : null;
+        flyToPlace(lat, lon, item.dataset.name, bb, item.dataset.type, item.dataset.detail);
+    });
+
+    // 외부 클릭 시 결과 닫기
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#mapSearchWrap') && !e.target.closest('.place-info-modal')) closeResults();
+    });
+})();
