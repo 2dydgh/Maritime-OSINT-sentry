@@ -21,23 +21,43 @@ viewer = new Cesium.Viewer('cesiumContainer', {
 });
 
 // ── 렌더링 최적화 ──
-// 비행 중 타일 로딩 부하 감소: SSE를 높여 저해상도 타일로 표시
+// 변경 없을 때 렌더링 중단 — CPU/GPU 유휴 시 부하 ��폭 감소
+viewer.scene.requestRenderMode = true;
+viewer.scene.maximumRenderTimeChange = Infinity; // 변화 없으면 즉시 렌더 중단 (수동 requestRender로 제어)
+// FXAA 비활성�� — 글로브에서 체감 미미, GPU 부하만 증가
+viewer.scene.postProcessStages.fxaa.enabled = false;
+// 타일 캐시 확대 + 비행 목적지 프리로드
 viewer.scene.globe.preloadFlightDestinations = true;
-viewer.scene.globe.tileCacheSize = 200;
+viewer.scene.globe.tileCacheSize = 300;
 
-// 비행 시작/종료 시 타일 품질 동적 조절
+// 줌/스크롤 관성 — 부드러운 조작감
+var sscc = viewer.scene.screenSpaceCameraController;
+sscc.inertiaZoom = 0.7;
+sscc.inertiaSpin = 0.85;
+sscc.inertiaTranslate = 0.85;
+sscc.zoomEventTypes = [Cesium.CameraEventType.WHEEL, Cesium.CameraEventType.PINCH];
+sscc.maximumZoomDistance = 50000000;
+
+// 카메라 이동 중 타일 품질 동적 조절
 var _defaultSSE = viewer.scene.globe.maximumScreenSpaceError; // 기본값 2
-var _flying = false;
-function _onFlyStart() {
-    if (_flying) return;
-    _flying = true;
-    viewer.scene.globe.maximumScreenSpaceError = 8; // 비행 중 저해상도
-}
-function _onFlyEnd() {
-    if (!_flying) return;
-    _flying = false;
-    viewer.scene.globe.maximumScreenSpaceError = _defaultSSE; // 도착 후 고해상도 복원
-}
+var _moving = false;
+var _moveEndTimer = null;
+
+viewer.camera.moveStart.addEventListener(function() {
+    if (_moving) return;
+    _moving = true;
+    viewer.scene.globe.maximumScreenSpaceError = 6;
+    if (google3DTileset) google3DTileset.maximumScreenSpaceError = 24;
+});
+
+viewer.camera.moveEnd.addEventListener(function() {
+    clearTimeout(_moveEndTimer);
+    _moveEndTimer = setTimeout(function() {
+        _moving = false;
+        viewer.scene.globe.maximumScreenSpaceError = _defaultSSE;
+        if (google3DTileset) google3DTileset.maximumScreenSpaceError = 12;
+    }, 200);
+});
 
 // ResizeObserver for map area
 var mapResizeObserver = new ResizeObserver(function() {
@@ -55,6 +75,15 @@ var google3DTileset = null;
     try {
         google3DTileset = await Cesium.Cesium3DTileset.fromIonAssetId(2275207);
         google3DTileset.show = false;
+        google3DTileset.maximumScreenSpaceError = 12;       // 타일 깨짐 방지 — 품질 우선
+        google3DTileset.maximumMemoryUsage = 512;            // 타일 캐시 확대 (MB)
+        google3DTileset.preloadWhenHidden = false;           // 숨겨진 상태에서 불필요한 로딩 방지
+        google3DTileset.cullWithChildrenBounds = true;       // 자식 타일 경계로 컬링 최적화
+        google3DTileset.skipLevelOfDetail = true;            // 중간 LOD 건너뛰어 빠른 로딩
+        google3DTileset.loadSiblings = false;                // 불필요한 형제 타일 로딩 방지
+        google3DTileset.foveatedScreenSpaceError = true;     // 화면 중심부 우선 로딩
+        google3DTileset.foveatedConeSize = 0.1;
+        google3DTileset.foveatedMinimumScreenSpaceErrorRelaxation = 0;
         viewer.scene.primitives.add(google3DTileset);
 
         viewer.camera.changed.addEventListener(function() {
@@ -415,22 +444,17 @@ function smoothFlyTo(options) {
     }
 
     var userComplete = options.complete;
-    _onFlyStart();
     viewer.camera.flyTo({
         ...options,
         duration: duration,
         maximumHeight: maxH,
         easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT,
         complete: function() {
-            _onFlyEnd();
             // 카메라 이동 완료 후 선박 즉시 리렌더 (뷰포트 컬링 갱신)
             if (_lastShipsData && timeMode === 'live') {
                 updateShipsLayer(_lastShipsData);
             }
             if (userComplete) userComplete();
-        },
-        cancel: function() {
-            _onFlyEnd();
         }
     });
 }
@@ -438,6 +462,7 @@ window.smoothFlyTo = smoothFlyTo;
 
 // ── Region dropdown ──
 var REGIONS = {
+    world: { label: '전체', lon: 30.0, lat: 20.0, alt: 20000000, pitch: -90 },
     korea: { label: '한국 해역', lon: 128.0, lat: 35.5, alt: 800000, pitch: -45 },
     arctic: { label: '북극항로', lon: 100.0, lat: 75.0, alt: 5000000, pitch: -60 },
     somalia: { label: '소말리아 / 아덴만', lon: 48.0, lat: 12.0, alt: 2000000, pitch: -45 },
