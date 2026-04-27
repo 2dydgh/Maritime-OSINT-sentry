@@ -1282,9 +1282,7 @@ var _searchLeafletMarker = null;
 
     function renderResultItem(name, detail, lat, lon, bb, type, isLocal) {
         var icon = isLocal ? 'fa-anchor' : typeIcon(type || '');
-        var prefix = isLocal ? '<span class="sri-local">⚓</span>' : '';
         return '<div class="search-result-item" data-lat="' + lat + '" data-lon="' + lon + '" data-bb="' + (bb || '') + '" data-name="' + name.replace(/"/g, '&quot;') + '" data-type="' + (type || '') + '" data-detail="' + (detail || '').replace(/"/g, '&quot;') + '">'
-            + prefix
             + '<i class="fa-solid ' + icon + ' sri-icon"></i>'
             + '<span class="sri-name">' + name + '</span>'
             + '<span class="sri-detail">' + detail + '</span>'
