@@ -989,6 +989,30 @@ var RouteViewer = (function() {
             setupSpeedSlider();
             setupPanelToggle();
         }
+
+        // Restore previous route if exists
+        if (routeCoords.length > 0 && !routeDataSource) {
+            renderRoute();
+            showPlaybar();
+            updateInfoText();
+        } else if (routeDataSource) {
+            showPlaybar();
+        }
+
+        // Restore input values
+        if (fromPort) {
+            var fi = document.getElementById('routeFromInput');
+            var fc = document.getElementById('routeFromCoord');
+            if (fi) fi.value = fromPort.name;
+            if (fc) fc.textContent = fromPort.lat.toFixed(4) + ', ' + fromPort.lng.toFixed(4);
+        }
+        if (toPort) {
+            var ti = document.getElementById('routeToInput');
+            var tc = document.getElementById('routeToCoord');
+            if (ti) ti.value = toPort.name;
+            if (tc) tc.textContent = toPort.lat.toFixed(4) + ', ' + toPort.lng.toFixed(4);
+        }
+        updateSearchBtn();
     }
 
     function deactivate() {
@@ -996,9 +1020,17 @@ var RouteViewer = (function() {
         active = false;
 
         hideRouteOverlay();
-        clearRoute();
+        stopAnimation();
         hidePlaybar();
         destroyGlobeClickHandler();
+
+        // Remove route visuals from viewer (will re-render on activate)
+        if (routeDataSource && typeof viewer !== 'undefined') {
+            viewer.dataSources.remove(routeDataSource, true);
+        }
+        routeDataSource = null;
+        shipEntity = null;
+
         moveGlobeBack();
         restoreExistingLayers();
 
