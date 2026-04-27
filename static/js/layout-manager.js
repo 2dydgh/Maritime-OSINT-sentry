@@ -49,16 +49,23 @@ var LayoutManager = (function() {
         }
     }
 
+    var _transitioning = false;
+
     function handleIconClick(panel, action) {
+        if (_transitioning) return;
+
         // Same panel clicked again
         if (panel === activePanel) {
             // For dedicated-screen models, check if MMSI changed → re-activate
             if (action === 'dedicated-screen') {
                 var m = window.ModelRegistry && ModelRegistry.get(panel);
                 if (m && m._selectedMmsi !== undefined) {
-                    // Re-activate with new MMSI (deactivate first to reset state)
+                    _transitioning = true;
                     deactivate(panel, action);
-                    activate(panel, action);
+                    setTimeout(function() {
+                        activate(panel, action);
+                        _transitioning = false;
+                    }, 50);
                     return;
                 }
             }
@@ -66,6 +73,22 @@ var LayoutManager = (function() {
             deactivate(panel, action);
             activePanel = null;
             activeAction = null;
+            return;
+        }
+
+        // Dedicated-screen → dedicated-screen: deactivate first, then activate after cleanup
+        var prevAction = activeAction;
+        if (activePanel && prevAction === 'dedicated-screen' && action === 'dedicated-screen') {
+            _transitioning = true;
+            deactivate(activePanel, prevAction);
+            activePanel = null;
+            activeAction = null;
+            setTimeout(function() {
+                activate(panel, action);
+                activePanel = panel;
+                activeAction = action;
+                _transitioning = false;
+            }, 100);
             return;
         }
 
