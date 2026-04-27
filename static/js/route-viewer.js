@@ -280,8 +280,53 @@ var RouteViewer = (function() {
         }
     }
 
-    // ── Port Search ──
-    var searchDebounce = null;
+    // ── Port Search (client-side cached) ──
+    var _portCache = null;
+    var _portCacheLoading = false;
+    var _portKoMap = {
+        '부산': 'busan', '인천': 'incheon', '울산': 'ulsan', '여수': 'yeosu',
+        '광양': 'gwangyang', '목포': 'mokpo', '평택': 'pyeongtaek', '마산': 'masan',
+        '포항': 'pohang', '동해': 'donghae', '속초': 'sokcho', '제주': 'jeju',
+        '군산': 'gunsan', '대산': 'daesan', '통영': 'tongyeong', '거제': 'geoje',
+        '진해': 'jinhae', '완도': 'wando', '서귀포': 'seogwipo',
+        '싱가포르': 'singapore', '상하이': 'shanghai', '도쿄': 'tokyo',
+        '요코하마': 'yokohama', '오사카': 'osaka', '홍콩': 'hong kong',
+        '로테르담': 'rotterdam', '함부르크': 'hamburg', '두바이': 'dubai',
+    };
+
+    function _loadPortCache(callback) {
+        if (_portCache) { callback(); return; }
+        if (_portCacheLoading) return;
+        _portCacheLoading = true;
+        fetch('/api/v1/ports/all')
+            .then(function(r) { return r.json(); })
+            .then(function(ports) {
+                _portCache = ports;
+                _portCacheLoading = false;
+                callback();
+            })
+            .catch(function() { _portCacheLoading = false; });
+    }
+
+    function _searchPortsLocal(query) {
+        if (!_portCache) return [];
+        var q = query.toLowerCase();
+        // Korean → English mapping
+        var mapped = _portKoMap[query] || _portKoMap[q];
+        var searchTerm = mapped || q;
+
+        var results = [];
+        for (var i = 0; i < _portCache.length; i++) {
+            var p = _portCache[i];
+            var nameLower = p.name.toLowerCase();
+            if (nameLower.indexOf(searchTerm) !== -1) {
+                var score = nameLower.startsWith(searchTerm) ? 0 : 1;
+                results.push({ score: score, port: p });
+            }
+        }
+        results.sort(function(a, b) { return a.score - b.score || a.port.name.localeCompare(b.port.name); });
+        return results.slice(0, 10).map(function(r) { return r.port; });
+    }
 
     function setupSearch(inputId, dropdownId, coordId, which) {
         var input = document.getElementById(inputId);
@@ -303,12 +348,10 @@ var RouteViewer = (function() {
             coordDisplay.textContent = port.lat.toFixed(4) + ', ' + port.lng.toFixed(4);
             if (which === 'from') {
                 fromPort = port;
-                // Auto-focus to destination input
                 var toInput = document.getElementById('routeToInput');
                 if (toInput && !toPort) toInput.focus();
             } else {
                 toPort = port;
-                // Auto-focus to speed slider
                 var slider = document.getElementById('routeSpeedSlider');
                 if (slider) slider.focus();
             }
@@ -323,31 +366,32 @@ var RouteViewer = (function() {
             });
         }
 
+        function renderResults(q) {
+            var ports = _searchPortsLocal(q);
+            if (!ports.length) {
+                dropdown.innerHTML = '<div class="route-dropdown-item disabled">일치하는 항구가 없습니다</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            dropdown.innerHTML = ports.map(function(p) {
+                return '<div class="route-dropdown-item" data-name="' + p.name + '" data-lat="' + p.lat + '" data-lng="' + p.lng + '" data-country="' + p.country + '">' +
+                    '<strong>' + p.name + '</strong> <span class="route-port-country">' + p.country + '</span>' +
+                '</div>';
+            }).join('');
+            dropdown.style.display = 'block';
+            highlightIdx = 0;
+            updateHighlight();
+        }
+
         input.addEventListener('input', function() {
             var q = input.value.trim();
-            clearTimeout(searchDebounce);
             highlightIdx = -1;
             if (q.length < 1) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; return; }
-            searchDebounce = setTimeout(function() {
-                fetch('/api/v1/ports/search?q=' + encodeURIComponent(q))
-                    .then(function(r) { return r.json(); })
-                    .then(function(ports) {
-                        if (!ports.length) {
-                            dropdown.innerHTML = '<div class="route-dropdown-item disabled">일치하는 항구가 없습니다</div>';
-                            dropdown.style.display = 'block';
-                            return;
-                        }
-                        dropdown.innerHTML = ports.map(function(p) {
-                            return '<div class="route-dropdown-item" data-name="' + p.name + '" data-lat="' + p.lat + '" data-lng="' + p.lng + '" data-country="' + p.country + '">' +
-                                '<strong>' + p.name + '</strong> <span class="route-port-country">' + p.country + '</span>' +
-                            '</div>';
-                        }).join('');
-                        dropdown.style.display = 'block';
-                        highlightIdx = 0;
-                        updateHighlight();
-                    })
-                    .catch(function() { dropdown.style.display = 'none'; });
-            }, 150);
+            if (_portCache) {
+                renderResults(q);
+            } else {
+                _loadPortCache(function() { renderResults(q); });
+            }
         });
 
         input.addEventListener('keydown', function(e) {
@@ -381,7 +425,6 @@ var RouteViewer = (function() {
             selectPort(e.target.closest('.route-dropdown-item'));
         });
 
-        // Close dropdown on outside click
         document.addEventListener('click', function(e) {
             if (!input.contains(e.target) && !dropdown.contains(e.target)) {
                 dropdown.style.display = 'none';

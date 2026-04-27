@@ -95,7 +95,24 @@ def search_ports(query: str, max_results: int = 10) -> list[dict]:
     _load_ports()
 
     if not query or not query.strip():
-        return []
+        # Return all ports (for client-side cache)
+        seen = set()
+        results = []
+        for port in _ports:
+            key = (port["name"].lower(), port["country"].lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append({
+                "name": port["name"],
+                "country": port["country"],
+                "port_code": port["port_code"],
+                "lng": port["lng"],
+                "lat": port["lat"],
+            })
+            if len(results) >= max_results:
+                break
+        return results
 
     q = query.strip()
 

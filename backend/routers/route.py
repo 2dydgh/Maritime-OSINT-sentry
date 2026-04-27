@@ -104,3 +104,9 @@ def get_route(
 def search_ports_api(q: str = Query(..., min_length=1)):
     """Search ports by name (Korean or English)."""
     return search_ports(q)
+
+
+@router.get("/ports/all")
+def get_all_ports():
+    """Return all ports for client-side search cache."""
+    return search_ports("", max_results=9999)
