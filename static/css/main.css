@@ -3841,6 +3841,7 @@ header::after {
     padding: 6px 20px;
     background: rgba(9, 9, 11, 0.75);
     border: 1px solid rgba(64, 111, 216, 0.3);
+    pointer-events: auto;
     border-radius: 20px;
     color: var(--primary);
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
@@ -3865,6 +3866,7 @@ header::after {
     background: rgba(10, 15, 30, 0.92);
     border: 1px solid rgba(64, 111, 216, 0.25);
     border-radius: 8px;
+    pointer-events: auto;
     color: #e0e6f0;
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
     font-size: 13px;

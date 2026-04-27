@@ -85,13 +85,7 @@ var RouteViewer = (function() {
 
         var wrap = document.createElement('div');
         wrap.className = 'route-viewer-wrap';
-        wrap.style.cssText = 'position:relative;width:100%;height:100%;';
-
-        // Globe container (cesium will be moved here)
-        var globeSlot = document.createElement('div');
-        globeSlot.id = 'route-globe-slot';
-        globeSlot.style.cssText = 'width:100%;height:100%;';
-        wrap.appendChild(globeSlot);
+        wrap.style.cssText = 'position:relative;width:100%;height:100%;pointer-events:none;';
 
         // Search panel overlay (top-left)
         var searchPanel = document.createElement('div');
@@ -252,31 +246,15 @@ var RouteViewer = (function() {
     }
 
     // ── Globe Reparenting ──
-    function moveGlobeToRoute() {
-        var cesiumEl = document.getElementById('cesiumContainer');
-        var slot = document.getElementById('route-globe-slot');
-        if (cesiumEl && slot) {
-            slot.appendChild(cesiumEl);
-            cesiumEl.style.width = '100%';
-            cesiumEl.style.height = '100%';
-            if (typeof viewer !== 'undefined') {
-                viewer.resize();
-                viewer.scene.requestRender();
-            }
-        }
-    }
-
-    function moveGlobeBack() {
-        var cesiumEl = document.getElementById('cesiumContainer');
-        var mapArea = document.getElementById('mapArea');
-        if (cesiumEl && mapArea) {
-            mapArea.insertBefore(cesiumEl, mapArea.firstChild);
-            cesiumEl.style.width = '';
-            cesiumEl.style.height = '';
-            if (typeof viewer !== 'undefined') {
-                viewer.resize();
-                viewer.scene.requestRender();
-            }
+    function setDedicatedTransparent(on) {
+        var ds = document.getElementById('dedicatedScreen');
+        if (!ds) return;
+        if (on) {
+            ds.style.background = 'transparent';
+            ds.style.pointerEvents = 'none';
+        } else {
+            ds.style.background = '';
+            ds.style.pointerEvents = '';
         }
     }
 
@@ -975,7 +953,7 @@ var RouteViewer = (function() {
         buildUI();
         warmUpServer();
         hideExistingLayers();
-        moveGlobeToRoute();
+        setDedicatedTransparent(true);
         setupGlobeClickHandler();
         showRouteOverlay();
 
@@ -1031,7 +1009,7 @@ var RouteViewer = (function() {
         routeDataSource = null;
         shipEntity = null;
 
-        moveGlobeBack();
+        setDedicatedTransparent(false);
         restoreExistingLayers();
 
         clickMode = null;
