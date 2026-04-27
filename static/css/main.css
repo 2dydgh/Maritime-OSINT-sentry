@@ -3154,8 +3154,9 @@ header::after {
 .place-info-modal {
     display: none;
     position: absolute;
-    top: 44px;
+    top: 50%;
     right: 12px;
+    transform: translateX(20px) translateY(-50%);
     width: 260px;
     background: var(--panel-bg-solid);
     border: 1px solid var(--panel-border);
@@ -3165,17 +3166,16 @@ header::after {
     backdrop-filter: blur(12px);
     z-index: 310;
     opacity: 0;
-    transform: translateX(20px);
     transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .place-info-modal.open {
     display: block;
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) translateY(-50%);
 }
 .place-info-modal.closing {
     opacity: 0;
-    transform: translateX(20px);
+    transform: translateX(20px) translateY(-50%);
 }
 .place-info-close {
     position: absolute;

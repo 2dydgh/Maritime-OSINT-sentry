@@ -1220,34 +1220,34 @@ var _searchLeafletMarker = null;
 
     // ── Local harbour/place cache for instant results ──
     var LOCAL_PLACES = [
-        { name: '인천항', nameEn: 'Incheon Port', lat: 37.4500, lon: 126.6322, type: 'harbour', region: '인천광역시, 대한민국' },
-        { name: '부산항', nameEn: 'Busan Port', lat: 35.0950, lon: 129.0450, type: 'harbour', region: '부산광역시, 대한민국' },
-        { name: '평택당진항', nameEn: 'Pyeongtaek-Dangjin Port', lat: 36.9600, lon: 126.8200, type: 'harbour', region: '경기도, 대한민국' },
-        { name: '울산항', nameEn: 'Ulsan Port', lat: 35.4900, lon: 129.3800, type: 'harbour', region: '울산광역시, 대한민국' },
-        { name: '광양항', nameEn: 'Gwangyang Port', lat: 34.9100, lon: 127.6800, type: 'harbour', region: '전라남도, 대한민국' },
-        { name: '목포항', nameEn: 'Mokpo Port', lat: 34.7800, lon: 126.3800, type: 'harbour', region: '전라남도, 대한민국' },
-        { name: '여수항', nameEn: 'Yeosu Port', lat: 34.7400, lon: 127.7400, type: 'harbour', region: '전라남도, 대한민국' },
-        { name: '포항항', nameEn: 'Pohang Port', lat: 36.0300, lon: 129.3800, type: 'harbour', region: '경상북도, 대한민국' },
-        { name: '군산항', nameEn: 'Gunsan Port', lat: 35.9800, lon: 126.6100, type: 'harbour', region: '전라북도, 대한민국' },
-        { name: '대산항', nameEn: 'Daesan Port', lat: 37.0100, lon: 126.3500, type: 'harbour', region: '충청남도, 대한민국' },
-        { name: '제주항', nameEn: 'Jeju Port', lat: 33.5200, lon: 126.5300, type: 'harbour', region: '제주도, 대한민국' },
-        { name: '동해항', nameEn: 'Donghae Port', lat: 37.4900, lon: 129.1200, type: 'harbour', region: '강원도, 대한민국' },
-        { name: '속초항', nameEn: 'Sokcho Port', lat: 38.2100, lon: 128.5900, type: 'harbour', region: '강원도, 대한민국' },
-        { name: '싱가포르항', nameEn: 'Port of Singapore', lat: 1.2646, lon: 103.8200, type: 'harbour', region: 'Singapore' },
-        { name: '상하이항', nameEn: 'Port of Shanghai', lat: 31.3600, lon: 121.6200, type: 'harbour', region: 'Shanghai, China' },
-        { name: '로테르담항', nameEn: 'Port of Rotterdam', lat: 51.9036, lon: 4.4620, type: 'harbour', region: 'Netherlands' },
-        { name: '함부르크항', nameEn: 'Port of Hamburg', lat: 53.5400, lon: 9.9700, type: 'harbour', region: 'Germany' },
-        { name: '요코하마항', nameEn: 'Port of Yokohama', lat: 35.4500, lon: 139.6500, type: 'harbour', region: 'Japan' },
-        { name: '수에즈 운하', nameEn: 'Suez Canal', lat: 30.4550, lon: 32.3500, type: 'strait', region: 'Egypt' },
-        { name: '말라카 해협', nameEn: 'Strait of Malacca', lat: 2.5000, lon: 101.5000, type: 'strait', region: 'Southeast Asia' },
-        { name: '호르무즈 해협', nameEn: 'Strait of Hormuz', lat: 26.5900, lon: 56.2500, type: 'strait', region: 'Middle East' },
-        { name: '파나마 운하', nameEn: 'Panama Canal', lat: 9.0800, lon: -79.6800, type: 'strait', region: 'Panama' },
-        { name: '아덴만', nameEn: 'Gulf of Aden', lat: 12.0000, lon: 48.0000, type: 'sea', region: 'East Africa' },
-        { name: '기니만', nameEn: 'Gulf of Guinea', lat: 3.0000, lon: 3.0000, type: 'sea', region: 'West Africa' },
-        { name: '대한해협', nameEn: 'Korea Strait', lat: 34.0000, lon: 129.0000, type: 'strait', region: '대한민국 / 일본' },
-        { name: '남중국해', nameEn: 'South China Sea', lat: 12.0000, lon: 113.0000, type: 'sea', region: 'Southeast Asia' },
-        { name: '북극항로', nameEn: 'Northern Sea Route', lat: 75.0000, lon: 100.0000, type: 'sea', region: 'Arctic' },
-        { name: '동중국해', nameEn: 'East China Sea', lat: 28.0000, lon: 125.0000, type: 'sea', region: 'East Asia' },
+        { name: '인천항', nameEn: 'Incheon Port', wiki: '인천항', lat: 37.4500, lon: 126.6322, type: 'harbour', region: '인천광역시, 대한민국' },
+        { name: '부산항', nameEn: 'Busan Port', wiki: '부산항', lat: 35.0950, lon: 129.0450, type: 'harbour', region: '부산광역시, 대한민국' },
+        { name: '평택당진항', nameEn: 'Pyeongtaek-Dangjin Port', wiki: '평택·당진항', lat: 36.9600, lon: 126.8200, type: 'harbour', region: '경기도, 대한민국' },
+        { name: '울산항', nameEn: 'Ulsan Port', wiki: '울산항', lat: 35.4900, lon: 129.3800, type: 'harbour', region: '울산광역시, 대한민국' },
+        { name: '광양항', nameEn: 'Gwangyang Port', wiki: '광양항', lat: 34.9100, lon: 127.6800, type: 'harbour', region: '전라남도, 대한민국' },
+        { name: '목포항', nameEn: 'Mokpo Port', wiki: '목포항', lat: 34.7800, lon: 126.3800, type: 'harbour', region: '전라남도, 대한민국' },
+        { name: '여수항', nameEn: 'Yeosu Port', wiki: '여수항', lat: 34.7400, lon: 127.7400, type: 'harbour', region: '전라남도, 대한민국' },
+        { name: '포항항', nameEn: 'Pohang Port', wiki: '포항항', lat: 36.0300, lon: 129.3800, type: 'harbour', region: '경상북도, 대한민국' },
+        { name: '군산항', nameEn: 'Gunsan Port', wiki: '군산항', lat: 35.9800, lon: 126.6100, type: 'harbour', region: '전라북도, 대한민국' },
+        { name: '대산항', nameEn: 'Daesan Port', wiki: '대산항', lat: 37.0100, lon: 126.3500, type: 'harbour', region: '충청남도, 대한민국' },
+        { name: '제주항', nameEn: 'Jeju Port', wiki: '제주항', lat: 33.5200, lon: 126.5300, type: 'harbour', region: '제주도, 대한민국' },
+        { name: '동해항', nameEn: 'Donghae Port', wiki: '동해항', lat: 37.4900, lon: 129.1200, type: 'harbour', region: '강원도, 대한민국' },
+        { name: '속초항', nameEn: 'Sokcho Port', wiki: '속초항', lat: 38.2100, lon: 128.5900, type: 'harbour', region: '강원도, 대한민국' },
+        { name: '싱가포르항', nameEn: 'Port of Singapore', wiki: 'Port of Singapore', lat: 1.2646, lon: 103.8200, type: 'harbour', region: 'Singapore' },
+        { name: '상하이항', nameEn: 'Port of Shanghai', wiki: 'Port of Shanghai', lat: 31.3600, lon: 121.6200, type: 'harbour', region: 'Shanghai, China' },
+        { name: '로테르담항', nameEn: 'Port of Rotterdam', wiki: 'Port of Rotterdam', lat: 51.9036, lon: 4.4620, type: 'harbour', region: 'Netherlands' },
+        { name: '함부르크항', nameEn: 'Port of Hamburg', wiki: 'Port of Hamburg', lat: 53.5400, lon: 9.9700, type: 'harbour', region: 'Germany' },
+        { name: '요코하마항', nameEn: 'Port of Yokohama', wiki: 'Port of Yokohama', lat: 35.4500, lon: 139.6500, type: 'harbour', region: 'Japan' },
+        { name: '수에즈 운하', nameEn: 'Suez Canal', wiki: 'Suez Canal', lat: 30.4550, lon: 32.3500, type: 'strait', region: 'Egypt' },
+        { name: '말라카 해협', nameEn: 'Strait of Malacca', wiki: 'Strait of Malacca', lat: 2.5000, lon: 101.5000, type: 'strait', region: 'Southeast Asia' },
+        { name: '호르무즈 해협', nameEn: 'Strait of Hormuz', wiki: 'Strait of Hormuz', lat: 26.5900, lon: 56.2500, type: 'strait', region: 'Middle East' },
+        { name: '파나마 운하', nameEn: 'Panama Canal', wiki: 'Panama Canal', lat: 9.0800, lon: -79.6800, type: 'strait', region: 'Panama' },
+        { name: '아덴만', nameEn: 'Gulf of Aden', wiki: 'Gulf of Aden', lat: 12.0000, lon: 48.0000, type: 'sea', region: 'East Africa' },
+        { name: '기니만', nameEn: 'Gulf of Guinea', wiki: 'Gulf of Guinea', lat: 3.0000, lon: 3.0000, type: 'sea', region: 'West Africa' },
+        { name: '대한해협', nameEn: 'Korea Strait', wiki: '대한해협', lat: 34.0000, lon: 129.0000, type: 'strait', region: '대한민국 / 일본' },
+        { name: '남중국해', nameEn: 'South China Sea', wiki: 'South China Sea', lat: 12.0000, lon: 113.0000, type: 'sea', region: 'Southeast Asia' },
+        { name: '북극항로', nameEn: 'Northern Sea Route', wiki: 'Northern Sea Route', lat: 75.0000, lon: 100.0000, type: 'sea', region: 'Arctic' },
+        { name: '동중국해', nameEn: 'East China Sea', wiki: 'East China Sea', lat: 28.0000, lon: 125.0000, type: 'sea', region: 'East Asia' },
     ];
 
     function searchLocalCache(query) {
@@ -1426,29 +1426,55 @@ var _searchLeafletMarker = null;
         modal.classList.add('open');
         void modal.offsetWidth;
 
-        var wikiQuery = localMatch ? (localMatch.nameEn || name) : name;
-        fetchWikipedia(wikiQuery, photoEl, wikiLink);
+        var wikiQuery = localMatch ? (localMatch.wiki || localMatch.nameEn || name) : name;
+        fetchWikipedia(wikiQuery, name, photoEl, wikiLink);
     }
 
-    function fetchWikipedia(query, photoEl, wikiLink) {
-        var koUrl = 'https://ko.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(query);
-        var enUrl = 'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(query);
+    function fetchWikiSummary(lang, title) {
+        var url = 'https://' + lang + '.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title);
+        return fetch(url).then(function(r) { return r.ok ? r.json() : Promise.reject('not-found'); });
+    }
 
-        fetch(koUrl)
-            .then(function(r) { return r.ok ? r.json() : Promise.reject('ko-fail'); })
-            .catch(function() { return fetch(enUrl).then(function(r) { return r.ok ? r.json() : Promise.reject('en-fail'); }); })
-            .then(function(data) {
-                if (data.thumbnail && data.thumbnail.source) {
-                    photoEl.innerHTML = '<img src="' + data.thumbnail.source + '" alt="">'
-                        + '<i class="fa-solid fa-image place-info-photo-fallback"></i>';
-                }
-                if (data.extract) {
-                    document.getElementById('placeInfoDesc').textContent = data.extract;
-                }
-                if (data.content_urls && data.content_urls.desktop) {
-                    wikiLink.href = data.content_urls.desktop.page;
-                    wikiLink.classList.remove('hidden');
-                }
+    function searchWikiTitle(lang, query) {
+        var url = 'https://' + lang + '.wikipedia.org/w/api.php?action=query&list=search&srsearch='
+            + encodeURIComponent(query) + '&srlimit=1&format=json&origin=*';
+        return fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.query && data.query.search && data.query.search.length > 0) {
+                return data.query.search[0].title;
+            }
+            return Promise.reject('no-results');
+        });
+    }
+
+    function fetchWikipedia(query, fallbackName, photoEl, wikiLink) {
+        function applyData(data) {
+            if (data.thumbnail && data.thumbnail.source) {
+                photoEl.innerHTML = '<img src="' + data.thumbnail.source + '" alt="">'
+                    + '<i class="fa-solid fa-image place-info-photo-fallback"></i>';
+            }
+            if (data.extract) {
+                document.getElementById('placeInfoDesc').textContent = data.extract;
+            }
+            if (data.content_urls && data.content_urls.desktop) {
+                wikiLink.href = data.content_urls.desktop.page;
+                wikiLink.classList.remove('hidden');
+            }
+        }
+
+        // Try direct title lookup (ko → en), then search API as fallback
+        fetchWikiSummary('ko', query)
+            .catch(function() { return fetchWikiSummary('en', query); })
+            .then(applyData)
+            .catch(function() {
+                // Direct lookup failed — try Wikipedia search API
+                var searchQuery = fallbackName || query;
+                return searchWikiTitle('ko', searchQuery)
+                    .then(function(title) { return fetchWikiSummary('ko', title); })
+                    .catch(function() {
+                        return searchWikiTitle('en', searchQuery)
+                            .then(function(title) { return fetchWikiSummary('en', title); });
+                    })
+                    .then(applyData);
             })
             .catch(function() {
                 document.getElementById('placeInfoDesc').textContent = '정보를 불러올 수 없습니다.';
