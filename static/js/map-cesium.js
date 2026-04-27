@@ -215,39 +215,11 @@ document.querySelectorAll('.vmode-btn').forEach(function(btn) {
     btn.addEventListener('click', function() { applyVisionMode(btn.dataset.mode); });
 });
 
-// ── Hybrid Map ──
+// ── Base Layer Settings ──
 var baseLayer = viewer.imageryLayers.get(0);
 baseLayer.brightness = 1.0;
 baseLayer.saturation = 1.0;
 baseLayer.contrast = 1.0;
-
-var fallbackLayer = viewer.imageryLayers.addImageryProvider(
-    new Cesium.UrlTemplateImageryProvider({
-        url: 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
-        credit: '© CartoDB © OpenStreetMap contributors',
-        minimumLevel: 0,
-        maximumLevel: 20
-    })
-);
-fallbackLayer.alpha = 0;
-fallbackLayer.brightness = 0.5;
-fallbackLayer.saturation = 0.3;
-
-// Throttled camera change handler (max once per 200ms)
-var _cameraChangeTimer = null;
-viewer.camera.changed.addEventListener(function() {
-    if (_cameraChangeTimer) return;
-    _cameraChangeTimer = setTimeout(function() {
-        _cameraChangeTimer = null;
-        var height = viewer.camera.positionCartographic.height;
-        if (height < 10000) {
-            var t = Math.max(0, Math.min(1, (10000 - height) / 8000));
-            fallbackLayer.alpha = t;
-        } else {
-            fallbackLayer.alpha = 0;
-        }
-    }, 200);
-});
 
 // ── Map Navigation: Zoom/Pan buttons + Keyboard shortcuts ──
 var NAV_PAN_PIXELS = 200;
