@@ -3157,6 +3157,7 @@ header::after {
     top: 50%;
     right: 12px;
     transform: translateX(20px) translateY(-50%);
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
     width: 260px;
     background: var(--panel-bg-solid);
     border: 1px solid var(--panel-border);
