@@ -1073,7 +1073,6 @@
     color: #c8cdd3;
     padding: 6px 14px;
     border-radius: 8px;
-    backdrop-filter: blur(8px);
     font-size: 0.75rem;
     cursor: pointer;
     transition: all 0.2s;
@@ -1101,7 +1100,6 @@
     color: #c8cdd3;
     padding: 6px 14px;
     border-radius: 8px;
-    backdrop-filter: blur(8px);
     font-size: 0.75rem;
     cursor: pointer;
     transition: all 0.2s;
@@ -1122,40 +1120,12 @@
     box-shadow: 0 0 12px rgba(64, 111, 216, 0.3);
 }
 
-.rv-turn-hud {
-    position: absolute;
-    bottom: 12px;
-    left: 12px;
-    z-index: 5;
-    background: rgba(55, 55, 60, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    backdrop-filter: blur(8px);
-    padding: 8px 12px;
-    font-size: 0.7rem;
-    font-family: 'Pretendard Variable', 'Inter', sans-serif;
-    min-width: 140px;
+/* Turn scenario value color overrides */
+.rv-canvas-hud-val.rv-turn-active {
+    color: #fbbf24 !important;
 }
-.rv-turn-hud-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 2px 0;
-}
-.rv-turn-hud-label {
-    color: var(--text-dim);
-    font-size: 0.65rem;
-    font-family: 'Pretendard Variable', 'Inter', sans-serif;
-}
-.rv-turn-hud-value {
-    color: var(--text-main);
-    font-weight: 600;
-}
-.rv-turn-hud-value.rv-turn-active {
-    color: #fbbf24;
-}
-.rv-turn-hud-value.rv-turn-danger {
-    color: #ef4444;
+.rv-canvas-hud-val.rv-turn-danger {
+    color: #ef4444 !important;
     animation: rv-blink 0.6s ease-in-out infinite alternate;
 }
 @keyframes rv-blink {
@@ -1172,9 +1142,148 @@
 }
 .rv-turn-progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #406fd8, #38bdf8);
+    background: linear-gradient(90deg, var(--primary), rgba(64, 111, 216, 0.5));
     border-radius: 2px;
     transition: width 0.1s linear;
+}
+
+/* ── Canvas HUD Overlay (unified) ── */
+.rv-canvas-hud {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    background: rgba(15, 15, 20, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+    padding: 8px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    pointer-events: none;
+}
+.rv-canvas-hud-row {
+    display: flex;
+    gap: 14px;
+}
+.rv-canvas-hud-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 6px 0;
+}
+.rv-canvas-hud-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 56px;
+}
+.rv-canvas-hud-label {
+    font-size: 0.55rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.4);
+    letter-spacing: 1px;
+    font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+}
+.rv-canvas-hud-val {
+    font-family: 'Pretendard Variable', 'Pretendard', 'JetBrains Mono', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    line-height: 1;
+    transition: color 0.3s ease;
+}
+.rv-canvas-hud-val[data-level="safe"] { color: #e2e8f0; }
+.rv-canvas-hud-val[data-level="caution"] { color: #fbbf24; }
+.rv-canvas-hud-val[data-level="warning"] { color: #f59e0b; }
+.rv-canvas-hud-val[data-level="danger"] { color: #ef4444; }
+
+/* ── Danger Badge ── */
+.rv-danger-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 5;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 5px 14px;
+    border-radius: 6px;
+    backdrop-filter: blur(4px);
+    transition: all 0.3s ease;
+    pointer-events: none;
+}
+.rv-danger-badge[data-level="safe"] {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #4ade80;
+}
+.rv-danger-badge[data-level="caution"] {
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: #fbbf24;
+}
+.rv-danger-badge[data-level="warning"] {
+    background: rgba(245, 158, 11, 0.2);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: #f59e0b;
+    animation: rv-badge-pulse 1.5s ease-in-out infinite;
+}
+.rv-danger-badge[data-level="danger"] {
+    background: rgba(239, 68, 68, 0.25);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    color: #ef4444;
+    animation: rv-badge-pulse 0.8s ease-in-out infinite;
+}
+@keyframes rv-badge-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* ── Camera Preset Buttons ── */
+.rv-cam-presets {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.rv-cam-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(55, 55, 60, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #c8cdd3;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.68rem;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.rv-cam-btn i {
+    width: 14px;
+    text-align: center;
+    font-size: 0.65rem;
+}
+.rv-cam-btn span {
+    font-size: 0.62rem;
+}
+.rv-cam-btn:hover {
+    background: rgba(70, 70, 75, 0.95);
+    color: var(--text-main);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+.rv-cam-btn:active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
 }
 
 .cesium-viewer-timelineContainer {
@@ -1218,8 +1327,8 @@ body {
 /* Glassmorphism UI Base */
 .glass-panel {
     background: var(--panel-bg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
     border: 1px solid var(--panel-border);
     border-radius: 10px;
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
@@ -1238,7 +1347,6 @@ header {
     border-bottom: none;
     flex-shrink: 0;
     background: linear-gradient(180deg, rgba(24, 24, 27, 0.95), rgba(24, 24, 27, 0.88));
-    backdrop-filter: blur(20px);
     z-index: 100;
     box-shadow: 0 1px 20px rgba(0, 0, 0, 0.3), 0 1px 0 rgba(64, 111, 216, 0.05);
     position: relative;
@@ -1398,7 +1506,6 @@ header::after {
     top: calc(100% + 6px);
     right: 0;
     background: rgba(24, 24, 27, 0.95);
-    backdrop-filter: blur(20px);
     border: 1px solid rgba(64, 111, 216, 0.12);
     border-radius: 10px;
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), 0 0 20px var(--glow-blue);
@@ -2454,7 +2561,7 @@ header::after {
     transition: opacity 0.2s;
     opacity: 0.85;
     background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(4px);
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     min-width: 80px;
@@ -2544,7 +2651,7 @@ header::after {
     justify-content: center;
     transition: all 0.2s ease;
     user-select: none;
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(4px);
 }
 
 .map-nav-btn:hover {
@@ -2572,7 +2679,7 @@ header::after {
     display: flex;
     position: fixed;
     background: var(--panel-gradient);
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(6px);
     border: 1px solid rgba(64, 111, 216, 0.12);
     border-radius: 12px;
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 0 24px var(--glow-blue);
@@ -2614,7 +2721,7 @@ header::after {
 }
 
 .drag-panel-header .title {
-    color: var(--secondary);
+    color: var(--text-main);
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
     font-size: 0.82rem;
     font-weight: 600;
@@ -2842,7 +2949,7 @@ header::after {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
     padding: 3px;
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(4px);
 }
 
 .layer-chip {
@@ -2850,7 +2957,7 @@ header::after {
     align-items: center;
     gap: 7px;
     background: rgba(0, 0, 0, 0.65);
-    backdrop-filter: blur(14px);
+    backdrop-filter: blur(4px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
     padding: 8px 14px;
@@ -2919,7 +3026,7 @@ header::after {
     z-index: 200;
     /* right & top are dynamically set by JS based on parent chip position */
     background: rgba(15, 20, 30, 0.92);
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(4px);
     border: 1px solid rgba(64, 111, 216, 0.15);
     border-radius: 10px;
     padding: 10px 12px;
@@ -2941,6 +3048,108 @@ header::after {
     color: var(--text-main);
 }
 
+/* ── Map Search ── */
+#mapSearchWrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: var(--panel-bg-solid);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 0 10px;
+    height: 32px;
+    min-width: 180px;
+    max-width: 280px;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    backdrop-filter: blur(8px);
+}
+#mapSearchWrap:focus-within {
+    border-color: rgba(64, 111, 216, 0.5);
+    box-shadow: 0 0 8px rgba(64, 111, 216, 0.15);
+}
+#mapSearchIcon {
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    margin-right: 7px;
+    flex-shrink: 0;
+}
+#mapSearchInput {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-main);
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
+    font-size: 0.75rem;
+    width: 100%;
+    padding: 0;
+}
+#mapSearchInput::placeholder {
+    color: var(--text-dim);
+    opacity: 0.6;
+}
+#mapSearchResults {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--panel-bg-solid);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 300;
+    box-shadow: var(--shadow-panel);
+}
+#mapSearchResults.open { display: block; }
+.search-result-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: var(--text-main);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.search-result-item:last-child { border-bottom: none; }
+.search-result-item:hover { background: rgba(64, 111, 216, 0.15); }
+.search-result-item .sri-icon {
+    color: var(--primary);
+    font-size: 0.7rem;
+    flex-shrink: 0;
+}
+.search-result-item .sri-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.search-result-item .sri-detail {
+    color: var(--text-dim);
+    font-size: 0.65rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: auto;
+    flex-shrink: 0;
+    max-width: 50%;
+}
+.search-no-result {
+    padding: 12px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.72rem;
+}
+#mapSearchIcon.searching {
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 #mapModeToggle {
     display: flex;
     gap: 3px;
@@ -2948,12 +3157,12 @@ header::after {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
     padding: 3px;
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(4px);
 }
 
 .map-mode-btn {
     background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(4px);
     border: 1px solid rgba(255, 255, 255, 0.06);
     color: var(--text-dim);
     padding: 6px 14px;
@@ -3013,12 +3222,12 @@ header::after {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
     padding: 3px;
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(4px);
 }
 
 .region-tab {
     background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(4px);
     border: 1px solid rgba(255, 255, 255, 0.06);
     color: var(--text-dim);
     padding: 5px 10px;
@@ -3452,7 +3661,7 @@ header::after {
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 1px;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(4px);
     opacity: 0;
     transition: opacity 0.4s ease, transform 0.4s ease;
 }
@@ -3470,7 +3679,6 @@ header::after {
     background: rgba(10, 15, 30, 0.92);
     border: 1px solid rgba(64, 111, 216, 0.25);
     border-radius: 8px;
-    backdrop-filter: blur(12px);
     color: #e0e6f0;
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
     font-size: 13px;
