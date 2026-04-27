@@ -906,7 +906,7 @@ function _addSentinelMarker(lat, lng) {
                 ctx.arc(16, 14, 10, Math.PI, 0, false);
                 ctx.quadraticCurveTo(26, 28, 16, 38);
                 ctx.quadraticCurveTo(6, 28, 6, 14);
-                ctx.fillStyle = '#002878';
+                ctx.fillStyle = '#406FD8';
                 ctx.fill();
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 1.5;
@@ -1374,25 +1374,39 @@ var _searchLeafletMarker = null;
         var pos = Cesium.Cartesian3.fromDegrees(lon, lat, 0);
         _searchMarkerBillboards.add({
             position: pos,
-            image: 'data:image/svg+xml,' + encodeURIComponent(
-                '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">'
-                + '<circle cx="12" cy="12" r="8" fill="#4a8af5" stroke="white" stroke-width="2.5"/>'
-                + '<circle cx="12" cy="12" r="12" fill="none" stroke="rgba(74,138,245,0.35)" stroke-width="1.5"/>'
-                + '</svg>'
-            ),
-            verticalOrigin: Cesium.VerticalOrigin.CENTER,
-            scale: 1.0,
+            image: (function() {
+                var c = document.createElement('canvas');
+                c.width = 32; c.height = 40;
+                var ctx = c.getContext('2d');
+                ctx.beginPath();
+                ctx.arc(16, 14, 10, Math.PI, 0, false);
+                ctx.quadraticCurveTo(26, 28, 16, 38);
+                ctx.quadraticCurveTo(6, 28, 6, 14);
+                ctx.fillStyle = '#406FD8';
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(16, 14, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                return c.toDataURL();
+            })(),
+            width: 28,
+            height: 35,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
             disableDepthTestDistance: Number.POSITIVE_INFINITY
         });
         _searchMarkerLabels.add({
             position: pos,
             text: name,
-            font: '12px Pretendard Variable, Inter, sans-serif',
-            fillColor: Cesium.Color.fromCssColorString('#c0ccdd'),
+            font: '11px Pretendard Variable, Inter, sans-serif',
+            fillColor: Cesium.Color.fromCssColorString('#406FD8'),
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 3,
             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-            pixelOffset: new Cesium.Cartesian2(0, 18),
+            pixelOffset: new Cesium.Cartesian2(0, -42),
             horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
             disableDepthTestDistance: Number.POSITIVE_INFINITY
         });

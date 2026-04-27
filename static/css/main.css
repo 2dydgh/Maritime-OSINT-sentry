@@ -3292,25 +3292,42 @@ header::after {
 
 /* ── Search Marker (Leaflet 2D) ── */
 .search-marker-dot {
-    width: 14px;
-    height: 14px;
-    background: #4a8af5;
-    border: 2.5px solid white;
-    border-radius: 50%;
-    box-shadow: 0 0 12px rgba(74, 138, 245, 0.5);
+    width: 20px;
+    height: 26px;
     position: relative;
-    left: -7px;
-    top: -7px;
+    left: -10px;
+    top: -26px;
+}
+.search-marker-dot::before {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background: var(--primary);
+    border: 1.5px solid white;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    box-shadow: 0 0 10px rgba(64, 111, 216, 0.5);
+}
+.search-marker-dot::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: 6px;
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
 }
 .search-marker-label {
-    color: #c0ccdd;
+    color: var(--primary);
     font-size: 11px;
     font-weight: 600;
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
     white-space: nowrap;
     position: relative;
     left: -20px;
-    top: -4px;
+    top: -30px;
     text-align: center;
 }
 .sri-local {
