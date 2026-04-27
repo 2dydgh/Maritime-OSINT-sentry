@@ -1526,7 +1526,7 @@ var _searchLeafletMarker = null;
             return;
         }
 
-        // 3D Cesium
+        // 3D Cesium — 마커 위치가 화면 중앙에 오도록 카메라 배치
         var alt = 80000;
         if (boundingbox) {
             var dLat = Math.abs(parseFloat(boundingbox[1]) - parseFloat(boundingbox[0]));
@@ -1538,11 +1538,12 @@ var _searchLeafletMarker = null;
             else if (span < 5) alt = 300000;
             else alt = 1000000;
         }
+        // pitch -90 = 수직으로 내려다봄 → 마커가 정확히 화면 중앙
         smoothFlyTo({
             destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
             orientation: {
                 heading: 0,
-                pitch: Cesium.Math.toRadians(-45),
+                pitch: Cesium.Math.toRadians(-90),
                 roll: 0
             }
         });
