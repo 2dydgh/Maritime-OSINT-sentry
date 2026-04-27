@@ -109,6 +109,43 @@
                 </button>
             </div>
 
+            <!-- 장소 검색 -->
+            <div id="mapSearchWrap">
+                <i class="fa-solid fa-magnifying-glass" id="mapSearchIcon"></i>
+                <input type="text" id="mapSearchInput" placeholder="장소 검색 (예: 인천항, Suez Canal)" autocomplete="off" />
+                <div id="mapSearchResults"></div>
+            </div>
+
+            <!-- 장소 정보 모달 -->
+            <div id="placeInfoModal" class="place-info-modal">
+                <button id="placeInfoClose" class="place-info-close"><i class="fa-solid fa-xmark"></i></button>
+                <div id="placeInfoPhoto" class="place-info-photo">
+                    <i class="fa-solid fa-image place-info-photo-fallback"></i>
+                </div>
+                <div class="place-info-body">
+                    <div id="placeInfoName" class="place-info-name"></div>
+                    <div id="placeInfoSub" class="place-info-sub"></div>
+                    <div id="placeInfoDesc" class="place-info-desc"></div>
+                    <div class="place-info-meta">
+                        <div class="place-info-row">
+                            <span class="place-info-key"><i class="fa-solid fa-location-dot"></i> 위치</span>
+                            <span id="placeInfoCoords" class="place-info-val"></span>
+                        </div>
+                        <div class="place-info-row">
+                            <span class="place-info-key"><i class="fa-solid fa-tag"></i> 유형</span>
+                            <span id="placeInfoType" class="place-info-val"></span>
+                        </div>
+                        <div class="place-info-row">
+                            <span class="place-info-key"><i class="fa-solid fa-earth-asia"></i> 지역</span>
+                            <span id="placeInfoRegion" class="place-info-val"></span>
+                        </div>
+                    </div>
+                    <a id="placeInfoWikiLink" class="place-info-wiki" href="#" target="_blank" rel="noopener">
+                        <i class="fa-solid fa-book-open"></i> Wikipedia에서 더 보기
+                    </a>
+                </div>
+            </div>
+
             <!-- 지역 탭 -->
             <div id="regionTabs"></div>
 
