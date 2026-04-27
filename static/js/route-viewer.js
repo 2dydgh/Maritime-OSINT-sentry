@@ -600,19 +600,47 @@ var RouteViewer = (function() {
             }
         });
 
+        // Pin marker generator (same shape as search marker)
+        function _routePinImage(fillColor) {
+            var c = document.createElement('canvas');
+            c.width = 32; c.height = 40;
+            var ctx = c.getContext('2d');
+            ctx.beginPath();
+            ctx.arc(16, 14, 10, Math.PI, 0, false);
+            ctx.quadraticCurveTo(26, 28, 16, 38);
+            ctx.quadraticCurveTo(6, 28, 6, 14);
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(16, 14, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            return c.toDataURL();
+        }
+
         // Start marker
         routeDataSource.entities.add({
             position: Cesium.Cartesian3.fromDegrees(routeCoords[0][0], routeCoords[0][1], ROUTE_ALT),
-            point: { pixelSize: 12, color: Cesium.Color.LIME, outlineColor: Cesium.Color.WHITE, outlineWidth: 2 },
+            billboard: {
+                image: _routePinImage('#10b981'),
+                width: 28,
+                height: 35,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
             label: {
                 text: fromPort ? fromPort.name : 'Start',
-                font: '13px Pretendard Variable, Inter, sans-serif',
-                fillColor: Cesium.Color.WHITE,
+                font: '11px Pretendard Variable, Inter, sans-serif',
+                fillColor: Cesium.Color.fromCssColorString('#10b981'),
                 outlineColor: Cesium.Color.BLACK,
-                outlineWidth: 2,
+                outlineWidth: 3,
                 style: Cesium.LabelStyle.FILL_AND_OUTLINE,
                 verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                pixelOffset: new Cesium.Cartesian2(0, -16),
+                pixelOffset: new Cesium.Cartesian2(0, -42),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
             }
         });
 
@@ -620,16 +648,23 @@ var RouteViewer = (function() {
         var last = routeCoords[routeCoords.length - 1];
         routeDataSource.entities.add({
             position: Cesium.Cartesian3.fromDegrees(last[0], last[1], ROUTE_ALT),
-            point: { pixelSize: 12, color: Cesium.Color.RED, outlineColor: Cesium.Color.WHITE, outlineWidth: 2 },
+            billboard: {
+                image: _routePinImage('#ef4444'),
+                width: 28,
+                height: 35,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
             label: {
                 text: toPort ? toPort.name : 'End',
-                font: '13px Pretendard Variable, Inter, sans-serif',
-                fillColor: Cesium.Color.WHITE,
+                font: '11px Pretendard Variable, Inter, sans-serif',
+                fillColor: Cesium.Color.fromCssColorString('#ef4444'),
                 outlineColor: Cesium.Color.BLACK,
-                outlineWidth: 2,
+                outlineWidth: 3,
                 style: Cesium.LabelStyle.FILL_AND_OUTLINE,
                 verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                pixelOffset: new Cesium.Cartesian2(0, -16),
+                pixelOffset: new Cesium.Cartesian2(0, -42),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
             }
         });
 
