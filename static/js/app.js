@@ -48,7 +48,7 @@ var SAT_COLORS = {
     sar: '#f97316',
     sigint: '#eab308',
     navigation: '#10b981',
-    early_warning: '#406FD8',
+    early_warning: '#3b82f6',
     space_station: '#002878',
     commercial_imaging: '#94a3b8',
 };

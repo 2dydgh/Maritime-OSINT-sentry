@@ -209,7 +209,7 @@ var BottomBar = (function() {
     }
 
     // FLAG — country count only (detail in popup)
-    var FLAG_COLORS = ['#406FD8', '#5b8ce8', '#7ba3ff', '#9bb8ff', '#b8cdff', '#8b9dc3', '#6b83a8'];
+    var FLAG_COLORS = ['#3b82f6', '#60a5fa', '#93bbfd', '#bdd4fe', '#dbeafe', '#94a3b8', '#64748b'];
 
     function updateFlagDistribution(vessels) {
         var countEl = document.getElementById('bottomFlagCount');

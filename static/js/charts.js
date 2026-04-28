@@ -9,7 +9,7 @@ var CHART_THEME = {
     warning: '#f97316',
     caution: '#eab308',
     safe: '#10b981',
-    accent: '#406FD8'
+    accent: '#3b82f6'
 };
 
 function initCharts() {

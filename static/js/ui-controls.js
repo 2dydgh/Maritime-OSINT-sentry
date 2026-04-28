@@ -691,7 +691,7 @@ async function fetchData() {
 
         var eventsSrc = await Cesium.GeoJsonDataSource.load(eventsJson, {
             markerSymbol: 'cross',
-            markerColor: Cesium.Color.fromCssColorString('#406FD8'),
+            markerColor: Cesium.Color.fromCssColorString('#3b82f6'),
             markerSize: 40
         });
         await viewer.dataSources.add(eventsSrc);
@@ -702,7 +702,7 @@ async function fetchData() {
         function alertIcon(type) {
             if (type === 'speeding') return { icon: 'fa-gauge-high', color: '#f59e0b', label: 'SPEEDING' };
             if (type === 'signal_lost') return { icon: 'fa-satellite-dish', color: '#f97316', label: 'SIGNAL LOST' };
-            if (type === 'dest_change') return { icon: 'fa-right-left', color: '#406FD8', label: 'DEST CHANGE' };
+            if (type === 'dest_change') return { icon: 'fa-right-left', color: '#3b82f6', label: 'DEST CHANGE' };
             return { icon: 'fa-triangle-exclamation', color: '#facc15', label: 'ALERT' };
         }
 
@@ -877,7 +877,7 @@ document.body.insertAdjacentHTML('beforeend', '\
             onmouseout="this.style.background=\'transparent\'">\
             \uc704\uc131 \uc601\uc0c1 \uac80\uc0c9 (Sentinel-2)\
         </div>\
-        <div style="padding:4px 16px 8px; color:rgba(64,111,216,0.45); font-size:0.68rem;">\
+        <div style="padding:4px 16px 8px; color:rgba(59,130,246,0.45); font-size:0.68rem;">\
             <span id="sentinelMenuCoords">--</span>\
         </div>\
     </div>\
@@ -909,7 +909,7 @@ function _addSentinelMarker(lat, lng) {
                 ctx.arc(16, 14, 10, Math.PI, 0, false);
                 ctx.quadraticCurveTo(26, 28, 16, 38);
                 ctx.quadraticCurveTo(6, 28, 6, 14);
-                ctx.fillStyle = '#406FD8';
+                ctx.fillStyle = '#3b82f6';
                 ctx.fill();
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 1.5;
@@ -930,7 +930,7 @@ function _addSentinelMarker(lat, lng) {
         label: {
             text: 'Sentinel-2',
             font: '10px JetBrains Mono, monospace',
-            fillColor: Cesium.Color.fromCssColorString('#406FD8'),
+            fillColor: Cesium.Color.fromCssColorString('#3b82f6'),
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 3,
             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
@@ -1400,7 +1400,7 @@ var _searchLeafletMarker = null;
                 ctx.arc(16, 14, 10, Math.PI, 0, false);
                 ctx.quadraticCurveTo(26, 28, 16, 38);
                 ctx.quadraticCurveTo(6, 28, 6, 14);
-                ctx.fillStyle = '#406FD8';
+                ctx.fillStyle = '#3b82f6';
                 ctx.fill();
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 1.5;
@@ -1420,7 +1420,7 @@ var _searchLeafletMarker = null;
             position: pos,
             text: name,
             font: '11px Pretendard Variable, Inter, sans-serif',
-            fillColor: Cesium.Color.fromCssColorString('#406FD8'),
+            fillColor: Cesium.Color.fromCssColorString('#3b82f6'),
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 3,
             style: Cesium.LabelStyle.FILL_AND_OUTLINE,

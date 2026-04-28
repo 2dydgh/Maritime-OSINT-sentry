@@ -911,9 +911,9 @@ function _getReticleImage() {
     var c = document.createElement('canvas');
     c.width = size; c.height = size;
     var ctx = c.getContext('2d');
-    ctx.strokeStyle = '#406FD8';
+    ctx.strokeStyle = '#3b82f6';
     ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#406FD8';
+    ctx.shadowColor = '#3b82f6';
     ctx.shadowBlur = 6;
 
     // Top-left corner
