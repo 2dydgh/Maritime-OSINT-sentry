@@ -455,6 +455,8 @@ function updateSatellitesForTime(sats, targetDate) {
     if (hudS3) hudS3.textContent = sats.length;
     var cs3 = document.getElementById('chipSatCount');
     if (cs3) cs3.textContent = sats.length;
+
+    if (viewer && viewer.scene) viewer.scene.requestRender();
 }
 window.updateSatellitesForTime = updateSatellitesForTime;
 

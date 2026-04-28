@@ -41,6 +41,9 @@ var RollViewer = (function () {
     var cameraAnimStart = 0;
     var CAMERA_ANIM_DURATION = 2.0; // seconds
 
+    // ── Camera preset animation state ──
+    var camPresetAnim = null;  // { from: {x,y,z}, to: {x,y,z}, start: elapsed, duration: 1.2 }
+
     // ── Turning scenario state ──
     var turnScenarioActive = false;
     var turnPhase = 'straight';   // 'straight' | 'entering' | 'turning' | 'exiting'
@@ -270,6 +273,7 @@ var RollViewer = (function () {
 
         // Build turn scenario UI overlay on canvas
         buildTurnScenarioUI(canvasWrap);
+        buildCanvasOverlays(canvasWrap);
 
         // Init Three.js
         initScene(canvasWrap);
@@ -1320,31 +1324,160 @@ var RollViewer = (function () {
         });
         canvasWrap.appendChild(turnBtnEl);
 
-        // HUD overlay
-        turnHudEl = document.createElement('div');
-        turnHudEl.className = 'rv-turn-hud';
-        turnHudEl.style.display = 'none';
-        turnHudEl.innerHTML =
-            '<div class="rv-turn-hud-row">' +
-            '<span class="rv-turn-hud-label">상태</span>' +
-            '<span class="rv-turn-hud-value" id="rv-turn-phase">직진</span>' +
+        // Unified HUD (always visible, turn rows toggle)
+        var hud = document.createElement('div');
+        hud.className = 'rv-canvas-hud';
+        hud.innerHTML =
+            // Always-visible row
+            '<div class="rv-canvas-hud-row rv-canvas-hud-main">' +
+            '<div class="rv-canvas-hud-item">' +
+            '<span class="rv-canvas-hud-label">ROLL</span>' +
+            '<span class="rv-canvas-hud-val" id="rv-hud-roll">0.0°</span>' +
             '</div>' +
-            '<div class="rv-turn-hud-row">' +
-            '<span class="rv-turn-hud-label">침로</span>' +
-            '<span class="rv-turn-hud-value" id="rv-turn-heading">000°</span>' +
+            '<div class="rv-canvas-hud-item">' +
+            '<span class="rv-canvas-hud-label">PITCH</span>' +
+            '<span class="rv-canvas-hud-val" id="rv-hud-pitch">0.0°</span>' +
             '</div>' +
-            '<div class="rv-turn-hud-row">' +
-            '<span class="rv-turn-hud-label">타각</span>' +
-            '<span class="rv-turn-hud-value" id="rv-turn-rudder">0°</span>' +
+            '<div class="rv-canvas-hud-item">' +
+            '<span class="rv-canvas-hud-label">SPD</span>' +
+            '<span class="rv-canvas-hud-val" id="rv-hud-speed">' + shipSpeed.toFixed(1) + ' kt</span>' +
             '</div>' +
-            '<div class="rv-turn-hud-row">' +
-            '<span class="rv-turn-hud-label">속력</span>' +
-            '<span class="rv-turn-hud-value" id="rv-turn-speed">' + shipSpeed + ' kt</span>' +
+            '</div>' +
+            // Turn scenario rows (hidden by default)
+            '<div class="rv-canvas-hud-turn" id="rv-hud-turn-section" style="display:none;">' +
+            '<div class="rv-canvas-hud-divider"></div>' +
+            '<div class="rv-canvas-hud-row">' +
+            '<div class="rv-canvas-hud-item">' +
+            '<span class="rv-canvas-hud-label">상태</span>' +
+            '<span class="rv-canvas-hud-val" id="rv-turn-phase">직진</span>' +
+            '</div>' +
+            '<div class="rv-canvas-hud-item">' +
+            '<span class="rv-canvas-hud-label">침로</span>' +
+            '<span class="rv-canvas-hud-val" id="rv-turn-heading">000°</span>' +
+            '</div>' +
+            '<div class="rv-canvas-hud-item">' +
+            '<span class="rv-canvas-hud-label">타각</span>' +
+            '<span class="rv-canvas-hud-val" id="rv-turn-rudder">0°</span>' +
+            '</div>' +
             '</div>' +
             '<div class="rv-turn-progress">' +
             '<div class="rv-turn-progress-fill" id="rv-turn-progress-fill"></div>' +
+            '</div>' +
             '</div>';
-        canvasWrap.appendChild(turnHudEl);
+        canvasWrap.appendChild(hud);
+
+        // Keep turnHudEl reference for toggle logic
+        turnHudEl = document.getElementById('rv-hud-turn-section');
+    }
+
+    // ── Canvas HUD overlay + Danger badge + Camera presets ──
+    function buildCanvasOverlays(canvasWrap) {
+
+        // 2. Danger badge (top-right)
+        var badge = document.createElement('div');
+        badge.className = 'rv-danger-badge';
+        badge.id = 'rv-danger-badge';
+        badge.textContent = 'SAFE';
+        badge.setAttribute('data-level', 'safe');
+        canvasWrap.appendChild(badge);
+
+        // 3. Camera preset buttons (bottom-right)
+        var camGroup = document.createElement('div');
+        camGroup.className = 'rv-cam-presets';
+
+        var presets = [
+            { id: 'beam', icon: 'fa-arrows-left-right', label: '측면', pos: { x: 0, y: 12, z: 45 } },
+            { id: 'bow', icon: 'fa-arrow-up', label: '선수', pos: { x: 35, y: 15, z: 0 } },
+            { id: 'stern', icon: 'fa-arrow-down', label: '선미', pos: { x: -35, y: 15, z: 0 } },
+            { id: 'top', icon: 'fa-eye', label: '탑뷰', pos: { x: 0, y: 55, z: 1 } }
+        ];
+
+        presets.forEach(function (p) {
+            var btn = document.createElement('button');
+            btn.className = 'rv-cam-btn';
+            btn.innerHTML = '<i class="fa-solid ' + p.icon + '"></i><span>' + p.label + '</span>';
+            btn.title = p.label + ' 시점';
+            btn.addEventListener('click', function () {
+                animateCameraToPreset(p.pos);
+            });
+            camGroup.appendChild(btn);
+        });
+        canvasWrap.appendChild(camGroup);
+    }
+
+    function animateCameraToPreset(targetPos) {
+        if (!camera || cameraAnimating) return;
+        var elapsed = (performance.now() - clockStart) / 1000;
+        camPresetAnim = {
+            fromPos: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+            toPos: { x: shipWorldPos.x + targetPos.x, y: targetPos.y, z: shipWorldPos.z + targetPos.z },
+            fromTarget: controls ? { x: controls.target.x, y: controls.target.y, z: controls.target.z } : { x: 0, y: 2, z: 0 },
+            toTarget: { x: shipWorldPos.x, y: 2, z: shipWorldPos.z },
+            start: elapsed,
+            duration: 1.0
+        };
+    }
+
+    function updateCameraPresetAnim(elapsed) {
+        if (!camPresetAnim) return;
+        var t = Math.min((elapsed - camPresetAnim.start) / camPresetAnim.duration, 1);
+        var e = easeOutCubic(t);
+
+        var fp = camPresetAnim.fromPos, tp = camPresetAnim.toPos;
+        var ft = camPresetAnim.fromTarget, tt = camPresetAnim.toTarget;
+
+        camera.position.set(
+            fp.x + (tp.x - fp.x) * e,
+            fp.y + (tp.y - fp.y) * e,
+            fp.z + (tp.z - fp.z) * e
+        );
+
+        if (controls) {
+            controls.target.set(
+                ft.x + (tt.x - ft.x) * e,
+                ft.y + (tt.y - ft.y) * e,
+                ft.z + (tt.z - ft.z) * e
+            );
+        }
+
+        camera.lookAt(
+            ft.x + (tt.x - ft.x) * e,
+            ft.y + (tt.y - ft.y) * e,
+            ft.z + (tt.z - ft.z) * e
+        );
+
+        if (t >= 1) {
+            camPresetAnim = null;
+            if (controls) controls.update();
+        }
+    }
+
+    function updateCanvasHUD(absRoll, absPitch, speed) {
+        // HUD values
+        var rollEl = document.getElementById('rv-hud-roll');
+        var pitchEl = document.getElementById('rv-hud-pitch');
+        var speedEl = document.getElementById('rv-hud-speed');
+
+        var level;
+        if (absRoll < 5) level = 'safe';
+        else if (absRoll < 10) level = 'caution';
+        else if (absRoll < 15) level = 'warning';
+        else level = 'danger';
+
+        if (rollEl) {
+            rollEl.textContent = absRoll.toFixed(1) + '\u00B0';
+            rollEl.setAttribute('data-level', level);
+        }
+        if (pitchEl) pitchEl.textContent = absPitch.toFixed(1) + '\u00B0';
+        if (speedEl) speedEl.textContent = speed.toFixed(1) + ' kt';
+
+        // Danger badge
+        var badge = document.getElementById('rv-danger-badge');
+        if (badge) {
+            var labels = { safe: 'SAFE', caution: 'CAUTION', warning: 'WARNING', danger: 'DANGER' };
+            badge.textContent = labels[level];
+            badge.setAttribute('data-level', level);
+        }
     }
 
     function toggleTurnScenario() {
@@ -1440,7 +1573,7 @@ var RollViewer = (function () {
 
         if (phaseEl) {
             phaseEl.textContent = phaseName;
-            phaseEl.className = 'rv-turn-hud-value' + (turnPhase === 'turning' ? ' rv-turn-danger' : turnPhase !== 'straight' ? ' rv-turn-active' : '');
+            phaseEl.className = 'rv-canvas-hud-val' + (turnPhase === 'turning' ? ' rv-turn-danger' : turnPhase !== 'straight' ? ' rv-turn-active' : '');
         }
         if (headingEl) headingEl.textContent = ('00' + Math.round(turnHeading)).slice(-3) + '°';
         if (rudderEl) rudderEl.textContent = (rudder > 0.5 ? (dir > 0 ? 'S' : 'P') + Math.round(rudder) + '°' : '0°');
@@ -1713,6 +1846,235 @@ var RollViewer = (function () {
     function addToShip(mesh) {
         shipGroup.add(mesh);
         return mesh;
+    }
+
+    // ── Procedural rust/weathering canvas texture ──
+    var _rustTextureCache = {};
+    function createRustTexture(baseColor, intensity) {
+        var key = baseColor + '|' + intensity;
+        if (_rustTextureCache[key]) return _rustTextureCache[key];
+
+        var THREE = window.THREE;
+        var sz = 256;
+        var canvas = document.createElement('canvas');
+        canvas.width = sz; canvas.height = sz;
+        var ctx = canvas.getContext('2d');
+
+        // Base hull color
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(0, 0, sz, sz);
+
+        var rustColors = ['#8B4513', '#A0522D', '#6B3410', '#CD853F', '#D2691E'];
+
+        // Rust patches (elliptical blotches)
+        var patchCount = Math.floor(25 * intensity);
+        for (var i = 0; i < patchCount; i++) {
+            var rx = Math.random() * sz;
+            var ry = Math.random() * sz;
+            var rw = 4 + Math.random() * 18;
+            var rh = 8 + Math.random() * 35;
+            ctx.globalAlpha = 0.08 + Math.random() * 0.25 * intensity;
+            ctx.fillStyle = rustColors[Math.floor(Math.random() * rustColors.length)];
+            ctx.beginPath();
+            ctx.ellipse(rx, ry, rw, rh, Math.random() * Math.PI, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Vertical rust streaks (water runoff drips)
+        var streakCount = Math.floor(6 * intensity);
+        for (var s = 0; s < streakCount; s++) {
+            var sx = Math.random() * sz;
+            var sy = Math.random() * sz * 0.5;
+            var sw = 1.5 + Math.random() * 3;
+            var sh = 25 + Math.random() * 70;
+            ctx.globalAlpha = 0.12 + Math.random() * 0.18 * intensity;
+            ctx.fillStyle = rustColors[Math.floor(Math.random() * rustColors.length)];
+            ctx.fillRect(sx, sy, sw, sh);
+        }
+
+        // Fine grime/dirt speckle
+        for (var d = 0; d < 150; d++) {
+            ctx.globalAlpha = Math.random() * 0.04 * intensity;
+            ctx.fillStyle = Math.random() > 0.5 ? '#2a2a2a' : '#4a3a2a';
+            ctx.fillRect(Math.random() * sz, Math.random() * sz, 1 + Math.random() * 2, 1 + Math.random() * 2);
+        }
+        ctx.globalAlpha = 1.0;
+
+        var texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        _rustTextureCache[key] = texture;
+        return texture;
+    }
+
+    // Rust intensity per ship type
+    var RUST_INTENSITY = {
+        cargo: 0.6, tanker: 0.5, passenger: 0.15,
+        fishing: 0.8, military: 0.12, tug: 0.7, other: 0.4
+    };
+
+    function rustHullMat(baseColor, type) {
+        var THREE = window.THREE;
+        var intensity = RUST_INTENSITY[type] || 0.4;
+        var texture = createRustTexture(baseColor, intensity);
+        var params = {
+            map: texture,
+            roughness: 0.55,
+            metalness: 0.3,
+            side: THREE.DoubleSide
+        };
+        if (shipEnvMap) {
+            params.envMap = shipEnvMap;
+            params.envMapIntensity = 0.35;
+        }
+        return new THREE.MeshStandardMaterial(params);
+    }
+
+    // ── Deck railing helper — stanchions + top bar + middle bar ──
+    function addDeckRailing(THREE, opts) {
+        var startX = opts.startX, endX = opts.endX;
+        var y = opts.y;              // deck surface Y
+        var z = opts.z;              // z position (beam edge)
+        var count = opts.postCount || 7;
+        var height = opts.postHeight || 0.8;
+        var color = opts.color || '#a1a1aa';
+        var length = Math.abs(endX - startX);
+        var midX = (startX + endX) / 2;
+
+        var mat = shipMat(color, { metalness: 0.4, roughness: 0.6 });
+
+        // Stanchions
+        var postGeo = new THREE.CylinderGeometry(0.02, 0.025, height, 4);
+        for (var i = 0; i <= count; i++) {
+            var x = startX + (endX - startX) * i / count;
+            addToShip(new THREE.Mesh(postGeo, mat)).position.set(x, y + height / 2, z);
+        }
+
+        // Top rail bar
+        var topGeo = new THREE.CylinderGeometry(0.015, 0.015, length, 4);
+        topGeo.rotateZ(Math.PI / 2);
+        addToShip(new THREE.Mesh(topGeo, mat)).position.set(midX, y + height, z);
+
+        // Middle rail bar
+        var midGeo = new THREE.CylinderGeometry(0.012, 0.012, length, 4);
+        midGeo.rotateZ(Math.PI / 2);
+        addToShip(new THREE.Mesh(midGeo, mat)).position.set(midX, y + height * 0.5, z);
+    }
+
+    // ── Ship detail helpers ──
+
+    // Bulbous bow — elongated sphere at waterline
+    function addBulbousBow(THREE, bowX, y, radius, color) {
+        var geo = new THREE.SphereGeometry(radius, 12, 8);
+        geo.scale(2.2, 0.7, 0.9);
+        addToShip(new THREE.Mesh(geo, shipMat(color, { roughness: 0.6 }))).position.set(bowX, y, 0);
+    }
+
+    // Anchor — shank + crown + flukes + ring
+    function addAnchor(THREE, x, y, z, scale) {
+        var mat = shipMat('#1a1a1a', { metalness: 0.8, roughness: 0.4 });
+        // Shank
+        addToShip(new THREE.Mesh(new THREE.BoxGeometry(0.05 * scale, 0.7 * scale, 0.05 * scale), mat)).position.set(x, y, z);
+        // Crown bar
+        addToShip(new THREE.Mesh(new THREE.BoxGeometry(0.04 * scale, 0.04 * scale, 0.35 * scale), mat)).position.set(x, y - 0.35 * scale, z);
+        // Flukes
+        var flukeGeo = new THREE.BoxGeometry(0.04 * scale, 0.22 * scale, 0.04 * scale);
+        var f1 = addToShip(new THREE.Mesh(flukeGeo, mat));
+        f1.position.set(x, y - 0.42 * scale, z + 0.15 * scale);
+        f1.rotation.x = 0.6;
+        var f2 = addToShip(new THREE.Mesh(flukeGeo.clone(), mat));
+        f2.position.set(x, y - 0.42 * scale, z - 0.15 * scale);
+        f2.rotation.x = -0.6;
+        // Ring at top
+        var ring = new THREE.TorusGeometry(0.06 * scale, 0.015 * scale, 6, 8);
+        addToShip(new THREE.Mesh(ring, mat)).position.set(x, y + 0.38 * scale, z);
+    }
+
+    // Hawsepipe — hull opening for anchor chain
+    function addHawsepipe(THREE, x, y, z, scale) {
+        var outerGeo = new THREE.CylinderGeometry(0.14 * scale, 0.14 * scale, 0.15 * scale, 8);
+        outerGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(outerGeo, shipMat('#374151', { metalness: 0.6 }))).position.set(x, y, z);
+        var innerGeo = new THREE.CylinderGeometry(0.10 * scale, 0.10 * scale, 0.17 * scale, 8);
+        innerGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(innerGeo, shipMat('#0a0a0a'))).position.set(x, y, z);
+    }
+
+    // Rudder blade + stock
+    function addRudder(THREE, sternX, y, height, color) {
+        var bladeGeo = new THREE.BoxGeometry(0.5, height, 0.06);
+        addToShip(new THREE.Mesh(bladeGeo, shipMat(color, { roughness: 0.7 }))).position.set(sternX, y, 0);
+        var stockGeo = new THREE.CylinderGeometry(0.04, 0.04, height * 0.6, 6);
+        addToShip(new THREE.Mesh(stockGeo, shipMat('#4b5563', { metalness: 0.5 }))).position.set(sternX + 0.1, y + height * 0.5, 0);
+    }
+
+    // Stem bar — vertical edge at bow front
+    function addStemBar(THREE, bowX, yBottom, yTop) {
+        var height = yTop - yBottom;
+        var geo = new THREE.BoxGeometry(0.08, height, 0.08);
+        addToShip(new THREE.Mesh(geo, shipMat('#27272a', { metalness: 0.5 }))).position.set(bowX, yBottom + height / 2, 0);
+    }
+
+    // ── createHullGeometry() — parametric hull with curved cross-section ──
+    function createHullGeometry(THREE, opts) {
+        var L = opts.length, B = opts.beam, D = opts.depth;
+        var bowFine = opts.bowFineness || 1.5;
+        var sternFull = opts.sternFullness || 0.7;
+
+        // Cross-section profile: starboard deck edge → keel
+        // [z_frac (1=halfBeam), y_frac (1=depth)]
+        var hp = [
+            [1.00, 0.00], [1.02, 0.08], [1.00, 0.25],
+            [0.94, 0.42], [0.80, 0.60], [0.55, 0.78],
+            [0.25, 0.92], [0.00, 1.00]
+        ];
+        // Full ring: starboard → keel → port
+        var ring = [];
+        for (var i = 0; i < hp.length; i++) ring.push(hp[i]);
+        for (var i = hp.length - 2; i >= 0; i--) ring.push([-hp[i][0], hp[i][1]]);
+        var NR = ring.length;
+        var NS = 14;
+        var sternX = -(L * 0.45), bowX = L * 0.55;
+        var positions = [];
+
+        for (var s = 0; s <= NS; s++) {
+            var t = s / NS;
+            var x = sternX + t * (bowX - sternX);
+            var wf;
+            if (t < 0.3) {
+                wf = sternFull + (1 - sternFull) * Math.pow(t / 0.3, 0.8);
+            } else if (t < 0.55) {
+                wf = 1.0;
+            } else {
+                wf = Math.pow(Math.max(1 - (t - 0.55) / 0.45, 0), bowFine);
+            }
+            wf = Math.max(wf, 0.015);
+            var halfB = B / 2 * wf;
+            var localD = D * Math.min(0.4 + 0.6 * wf / Math.max(sternFull, 0.3), 1.0);
+            for (var r = 0; r < NR; r++) {
+                positions.push(x, -ring[r][1] * localD, ring[r][0] * halfB);
+            }
+        }
+        // Triangulate hull surface
+        var indices = [];
+        for (var s = 0; s < NS; s++) {
+            for (var r = 0; r < NR - 1; r++) {
+                var a = s * NR + r, b = a + 1;
+                var c = (s + 1) * NR + r, d = c + 1;
+                indices.push(a, c, b);
+                indices.push(b, c, d);
+            }
+        }
+        // Close stern face
+        var sci = positions.length / 3;
+        positions.push(sternX, -D * sternFull * 0.5, 0);
+        for (var r = 0; r < NR - 1; r++) indices.push(r + 1, r, sci);
+
+        var geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geo.setIndex(indices);
+        geo.computeVertexNormals();
+        return geo;
     }
 
     // Waterline stripe — red band at hull waterline
@@ -2094,16 +2456,14 @@ var RollViewer = (function () {
 
     // ── Tanker: 낮고 긴 선체, 파이프라인, 매니폴드, 탱크돔, 캣워크 ──
     function buildTanker(THREE, color) {
-        var hullShape = new THREE.Shape();
-        hullShape.moveTo(-8, -2.2);
-        hullShape.lineTo(-8, 2.2);
-        hullShape.quadraticCurveTo(6, 2, 10, 0);
-        hullShape.quadraticCurveTo(6, -2, -8, -2.2);
-
-        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.5, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.2, bevelSegments: 3 });
-        hullGeo.rotateX(-Math.PI / 2);
-        var hull = new THREE.Mesh(hullGeo, shipMat(color));
-        hull.position.set(0, 1.2, -1.75);
+        // Hull — parametric curved cross-section with weathering
+        var hullGeo = createHullGeometry(THREE, {
+            length: 18, beam: 4.4, depth: 3.0,
+            bowFineness: 1.0, sternFullness: 0.8
+        });
+        var hullMat = rustHullMat('#e2e8f0', 'tanker');
+        var hull = new THREE.Mesh(hullGeo, hullMat);
+        hull.position.set(0, 3.0, 0);
         addToShip(hull);
 
         var deckGeo = new THREE.BoxGeometry(16, 0.2, 4.2);
@@ -2179,34 +2539,35 @@ var RollViewer = (function () {
         addToShip(new THREE.Mesh(radarGeo, shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-5.5, 8.8, 0);
 
         // Deck railing (port & starboard)
-        for (var dr = -3; dr <= 3; dr++) {
-            var railPostGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.8, 4);
-            addToShip(new THREE.Mesh(railPostGeo, shipMat('#a1a1aa'))).position.set(dr * 2.2, 3.5, 2.1);
-            addToShip(new THREE.Mesh(railPostGeo.clone(), shipMat('#a1a1aa'))).position.set(dr * 2.2, 3.5, -2.1);
-        }
-        var railBarGeo = new THREE.CylinderGeometry(0.015, 0.015, 14, 4);
-        railBarGeo.rotateZ(Math.PI / 2);
-        addToShip(new THREE.Mesh(railBarGeo, shipMat('#a1a1aa'))).position.set(0, 3.9, 2.1);
-        addToShip(new THREE.Mesh(railBarGeo.clone(), shipMat('#a1a1aa'))).position.set(0, 3.9, -2.1);
+        addDeckRailing(THREE, { startX: -6.6, endX: 7, y: 3.1, z: 2.1, postCount: 7, postHeight: 0.8 });
+        addDeckRailing(THREE, { startX: -6.6, endX: 7, y: 3.1, z: -2.1, postCount: 7, postHeight: 0.8 });
 
         // Bow mooring bollards
         var bowBollardGeo = new THREE.CylinderGeometry(0.1, 0.12, 0.3, 8);
         addToShip(new THREE.Mesh(bowBollardGeo, shipMat('#4b5563', { metalness: 0.6 }))).position.set(7, 3.2, 0.6);
         addToShip(new THREE.Mesh(bowBollardGeo.clone(), shipMat('#4b5563', { metalness: 0.6 }))).position.set(7, 3.2, -0.6);
+
+        // Stem bar
+        addStemBar(THREE, 10.5, 1.2, 3.2);
+        // Anchors + hawsepipes (port & starboard)
+        addAnchor(THREE, 8.5, 2.0, 2.0, 1.0);
+        addHawsepipe(THREE, 8.8, 2.6, 2.0, 1.0);
+        addAnchor(THREE, 8.5, 2.0, -2.0, 1.0);
+        addHawsepipe(THREE, 8.8, 2.6, -2.0, 1.0);
+        // Rudder
+        addRudder(THREE, -8.8, 0.8, 1.8, color);
     }
 
     // ── Cargo: 컨테이너 적재, 크레인, 높은 브릿지, 래싱브릿지, 레일링 ──
     function buildCargo(THREE, color) {
-        var hullShape = new THREE.Shape();
-        hullShape.moveTo(-7, -2);
-        hullShape.lineTo(-7, 2);
-        hullShape.quadraticCurveTo(3, 2, 9, 0);
-        hullShape.quadraticCurveTo(3, -2, -7, -2);
-
-        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.8, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.2, bevelSegments: 3 });
-        hullGeo.rotateX(-Math.PI / 2);
-        var hull = new THREE.Mesh(hullGeo, shipMat(color));
-        hull.position.set(0, 1.2, -1.9);
+        // Hull — parametric curved cross-section with weathering
+        var hullGeo = createHullGeometry(THREE, {
+            length: 17, beam: 3.8, depth: 3.0,
+            bowFineness: 1.3, sternFullness: 0.7
+        });
+        var hullMat = rustHullMat('#e2e8f0', 'cargo');
+        var hull = new THREE.Mesh(hullGeo, hullMat);
+        hull.position.set(0, 3.0, 0);
         addToShip(hull);
 
         var deckGeo = new THREE.BoxGeometry(15, 0.2, 3.8);
@@ -2288,34 +2649,35 @@ var RollViewer = (function () {
         addToShip(new THREE.Mesh(radarGeo, shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-5.5, 9.1, 0);
 
         // Deck railing
-        for (var dr = -3; dr <= 3; dr++) {
-            var railPostGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.7, 4);
-            addToShip(new THREE.Mesh(railPostGeo, shipMat('#a1a1aa'))).position.set(dr * 2, 3.45, 1.9);
-            addToShip(new THREE.Mesh(railPostGeo.clone(), shipMat('#a1a1aa'))).position.set(dr * 2, 3.45, -1.9);
-        }
-        var railBarGeo = new THREE.CylinderGeometry(0.015, 0.015, 13, 4);
-        railBarGeo.rotateZ(Math.PI / 2);
-        addToShip(new THREE.Mesh(railBarGeo, shipMat('#a1a1aa'))).position.set(0, 3.8, 1.9);
-        addToShip(new THREE.Mesh(railBarGeo.clone(), shipMat('#a1a1aa'))).position.set(0, 3.8, -1.9);
+        addDeckRailing(THREE, { startX: -6, endX: 6, y: 3.1, z: 1.9, postCount: 7, postHeight: 0.7 });
+        addDeckRailing(THREE, { startX: -6, endX: 6, y: 3.1, z: -1.9, postCount: 7, postHeight: 0.7 });
 
         // Bow bollards
         var bowBollardGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.25, 8);
         addToShip(new THREE.Mesh(bowBollardGeo, shipMat('#4b5563', { metalness: 0.6 }))).position.set(6, 3.2, 0.5);
         addToShip(new THREE.Mesh(bowBollardGeo.clone(), shipMat('#4b5563', { metalness: 0.6 }))).position.set(6, 3.2, -0.5);
+
+        // Stem bar
+        addStemBar(THREE, 9.5, 1.2, 3.2);
+        // Anchors + hawsepipes
+        addAnchor(THREE, 7.5, 2.0, 1.8, 1.0);
+        addHawsepipe(THREE, 7.8, 2.6, 1.8, 1.0);
+        addAnchor(THREE, 7.5, 2.0, -1.8, 1.0);
+        addHawsepipe(THREE, 7.8, 2.6, -1.8, 1.0);
+        // Rudder
+        addRudder(THREE, -7.8, 0.8, 1.6, color);
     }
 
     // ── Passenger: 다층 데크, 넓은 상부구조, 큰 펀넬, 구명정, 레이더돔 ──
     function buildPassenger(THREE, color) {
-        var hullShape = new THREE.Shape();
-        hullShape.moveTo(-7, -2.5);
-        hullShape.lineTo(-7, 2.5);
-        hullShape.quadraticCurveTo(5, 2.2, 10, 0);
-        hullShape.quadraticCurveTo(5, -2.2, -7, -2.5);
-
-        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.5, bevelEnabled: true, bevelThickness: 0.4, bevelSize: 0.3, bevelSegments: 4 });
-        hullGeo.rotateX(-Math.PI / 2);
-        var hull = new THREE.Mesh(hullGeo, shipMat('#f8fafc', { roughness: 0.5 }));
-        hull.position.set(0, 1.0, -1.75);
+        // Hull — parametric curved cross-section, elegant with light weathering
+        var hullGeo = createHullGeometry(THREE, {
+            length: 18, beam: 5.0, depth: 3.0,
+            bowFineness: 1.5, sternFullness: 0.6
+        });
+        var hullMat = rustHullMat('#f8fafc', 'passenger');
+        var hull = new THREE.Mesh(hullGeo, hullMat);
+        hull.position.set(0, 3.4, 0);
         addToShip(hull);
 
         // Multi-deck superstructure with window strips
@@ -2333,11 +2695,10 @@ var RollViewer = (function () {
             addToShip(winStrip);
 
             // Deck railing per level (port & starboard)
-            for (var rr = -2; rr <= 2; rr++) {
-                var rPostGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.5, 4);
-                addToShip(new THREE.Mesh(rPostGeo, shipMat('#d4d4d8'))).position.set(-0.5 + d * 0.3 + rr * 2, 4.2 + d * 1.05, deckDepths[d] / 2 + 0.02);
-                addToShip(new THREE.Mesh(rPostGeo.clone(), shipMat('#d4d4d8'))).position.set(-0.5 + d * 0.3 + rr * 2, 4.2 + d * 1.05, -deckDepths[d] / 2 - 0.02);
-            }
+            var rlX = -0.5 + d * 0.3;
+            var rlY = 3.9 + d * 1.05;
+            addDeckRailing(THREE, { startX: rlX - 4, endX: rlX + 4, y: rlY, z: deckDepths[d] / 2 + 0.02, postCount: 5, postHeight: 0.5, color: '#d4d4d8' });
+            addDeckRailing(THREE, { startX: rlX - 4, endX: rlX + 4, y: rlY, z: -deckDepths[d] / 2 - 0.02, postCount: 5, postHeight: 0.5, color: '#d4d4d8' });
         }
 
         // Lifeboat davits (port & starboard, 3 per side on deck 2)
@@ -2392,20 +2753,28 @@ var RollViewer = (function () {
         var bowBollGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.25, 8);
         addToShip(new THREE.Mesh(bowBollGeo, shipMat('#4b5563', { metalness: 0.6 }))).position.set(7.5, 3.1, 0.5);
         addToShip(new THREE.Mesh(bowBollGeo.clone(), shipMat('#4b5563', { metalness: 0.6 }))).position.set(7.5, 3.1, -0.5);
+
+        // Stem bar
+        addStemBar(THREE, 10.5, 1.0, 3.2);
+        // Anchors + hawsepipes
+        addAnchor(THREE, 8.5, 2.0, 2.2, 0.9);
+        addHawsepipe(THREE, 8.8, 2.6, 2.2, 0.9);
+        addAnchor(THREE, 8.5, 2.0, -2.2, 0.9);
+        addHawsepipe(THREE, 8.8, 2.6, -2.2, 0.9);
+        // Rudder
+        addRudder(THREE, -7.8, 0.6, 1.6, '#cbd5e1');
     }
 
     // ── Fishing: 작은 선체, 아웃리거/붐, 마스트, A프레임, 그물드럼, 항해등 ──
     function buildFishing(THREE, color) {
-        var hullShape = new THREE.Shape();
-        hullShape.moveTo(-4, -1.5);
-        hullShape.quadraticCurveTo(-4.3, 0, -4, 1.5);
-        hullShape.quadraticCurveTo(1, 1.3, 5, 0);
-        hullShape.quadraticCurveTo(1, -1.3, -4, -1.5);
-
-        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 2.5, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.15, bevelSegments: 3 });
-        hullGeo.rotateX(-Math.PI / 2);
-        var hull = new THREE.Mesh(hullGeo, shipMat(color));
-        hull.position.set(0, 1.0, -1.25);
+        // Hull — parametric curved cross-section with heavy weathering
+        var hullGeo = createHullGeometry(THREE, {
+            length: 10, beam: 2.8, depth: 2.0,
+            bowFineness: 1.5, sternFullness: 0.8
+        });
+        var hullMat = rustHullMat('#e2e8f0', 'fishing');
+        var hull = new THREE.Mesh(hullGeo, hullMat);
+        hull.position.set(0, 2.5, 0);
         addToShip(hull);
 
         var deckGeo = new THREE.BoxGeometry(8, 0.15, 2.8);
@@ -2413,8 +2782,8 @@ var RollViewer = (function () {
 
         // Bulwark (raised hull edges)
         var bulwarkGeo = new THREE.BoxGeometry(7, 0.4, 0.08);
-        addToShip(new THREE.Mesh(bulwarkGeo, shipMat(color, { roughness: 0.7 }))).position.set(0.5, 2.8, 1.4);
-        addToShip(new THREE.Mesh(bulwarkGeo.clone(), shipMat(color, { roughness: 0.7 }))).position.set(0.5, 2.8, -1.4);
+        addToShip(new THREE.Mesh(bulwarkGeo, shipMat('#cbd5e1', { roughness: 0.7 }))).position.set(0.5, 2.8, 1.4);
+        addToShip(new THREE.Mesh(bulwarkGeo.clone(), shipMat('#cbd5e1', { roughness: 0.7 }))).position.set(0.5, 2.8, -1.4);
 
         // Bridge (with roof)
         var bridgeGeo = new THREE.BoxGeometry(2, 1.8, 2);
@@ -2489,20 +2858,26 @@ var RollViewer = (function () {
         var bollGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.2, 6);
         addToShip(new THREE.Mesh(bollGeo, shipMat('#374151', { metalness: 0.6 }))).position.set(3.5, 2.7, 0.8);
         addToShip(new THREE.Mesh(bollGeo.clone(), shipMat('#374151', { metalness: 0.6 }))).position.set(3.5, 2.7, -0.8);
+
+        // Stem bar
+        addStemBar(THREE, 5.5, 1.0, 2.8);
+        // Anchor (port only — small vessel)
+        addAnchor(THREE, 4.5, 1.8, 1.2, 0.7);
+        addHawsepipe(THREE, 4.7, 2.3, 1.2, 0.7);
+        // Rudder
+        addRudder(THREE, -4.5, 0.6, 1.2, color);
     }
 
     // ── Military: 날렵한 선체, 스텔스 상부구조, 무장, CIWS, 헬기패드, 레이더 ──
     function buildMilitary(THREE, color) {
-        var hullShape = new THREE.Shape();
-        hullShape.moveTo(-7, -1.8);
-        hullShape.lineTo(-7, 1.8);
-        hullShape.quadraticCurveTo(3, 1.5, 10, 0);
-        hullShape.quadraticCurveTo(3, -1.5, -7, -1.8);
-
-        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 2.8, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 3 });
-        hullGeo.rotateX(-Math.PI / 2);
-        var hull = new THREE.Mesh(hullGeo, shipMat('#6b7280', { roughness: 0.6 }));
-        hull.position.set(0, 1.2, -1.4);
+        // Hull — parametric, sharp knife bow with minimal weathering
+        var hullGeo = createHullGeometry(THREE, {
+            length: 18, beam: 3.2, depth: 2.5,
+            bowFineness: 2.5, sternFullness: 0.5
+        });
+        var hullMat = rustHullMat('#9ca3af', 'military');
+        var hull = new THREE.Mesh(hullGeo, hullMat);
+        hull.position.set(0, 2.9, 0);
         addToShip(hull);
 
         var deckGeo = new THREE.BoxGeometry(15, 0.15, 3.2);
@@ -2603,25 +2978,37 @@ var RollViewer = (function () {
         addToShip(new THREE.Mesh(netGeo, shipMat('#fbbf24', { roughness: 0.9 }))).position.set(-6, 3.06, 0);
 
         // Deck railing
-        for (var dr = -3; dr <= 4; dr++) {
-            var railPostGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 4);
-            addToShip(new THREE.Mesh(railPostGeo, shipMat('#71717a'))).position.set(dr * 2, 3.3, 1.6);
-            addToShip(new THREE.Mesh(railPostGeo.clone(), shipMat('#71717a'))).position.set(dr * 2, 3.3, -1.6);
-        }
+        addDeckRailing(THREE, { startX: -6, endX: 8, y: 3.0, z: 1.6, postCount: 8, postHeight: 0.6, color: '#71717a' });
+        addDeckRailing(THREE, { startX: -6, endX: 8, y: 3.0, z: -1.6, postCount: 8, postHeight: 0.6, color: '#71717a' });
+
+        // Stem bar (sharp bow edge)
+        addStemBar(THREE, 10.5, 1.2, 3.0);
+        // Anchors + hawsepipes
+        addAnchor(THREE, 8.5, 2.0, 1.5, 0.9);
+        addHawsepipe(THREE, 8.8, 2.6, 1.5, 0.9);
+        addAnchor(THREE, 8.5, 2.0, -1.5, 0.9);
+        addHawsepipe(THREE, 8.8, 2.6, -1.5, 0.9);
+        // Twin rudders (warship)
+        var twinRudderMat = shipMat('#6b7280', { roughness: 0.7 });
+        var rBlade1 = new THREE.BoxGeometry(0.45, 1.4, 0.05);
+        addToShip(new THREE.Mesh(rBlade1, twinRudderMat)).position.set(-7.8, 0.8, 0.5);
+        addToShip(new THREE.Mesh(rBlade1.clone(), twinRudderMat)).position.set(-7.8, 0.8, -0.5);
+        // Sonar dome (instead of bulbous bow)
+        var sonarGeo = new THREE.SphereGeometry(0.5, 10, 8);
+        sonarGeo.scale(1.5, 0.8, 0.8);
+        addToShip(new THREE.Mesh(sonarGeo, shipMat('#52525b', { roughness: 0.4 }))).position.set(10.5, 1.0, 0);
     }
 
     // ── Tug: 짧고 넓은 선체, 큰 브릿지, 예인 장비, 푸시니, 서치라이트 ──
     function buildTug(THREE, color) {
-        var hullShape = new THREE.Shape();
-        hullShape.moveTo(-3, -1.8);
-        hullShape.quadraticCurveTo(-3.3, 0, -3, 1.8);
-        hullShape.quadraticCurveTo(1, 1.8, 4, 0);
-        hullShape.quadraticCurveTo(1, -1.8, -3, -1.8);
-
-        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 3.5, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.2, bevelSegments: 3 });
-        hullGeo.rotateX(-Math.PI / 2);
-        var hull = new THREE.Mesh(hullGeo, shipMat(color));
-        hull.position.set(0, 1.2, -1.75);
+        // Hull — parametric, bluff bow, wide with heavy weathering
+        var hullGeo = createHullGeometry(THREE, {
+            length: 8, beam: 3.6, depth: 2.8,
+            bowFineness: 0.8, sternFullness: 0.9
+        });
+        var hullMat = rustHullMat('#e2e8f0', 'tug');
+        var hull = new THREE.Mesh(hullGeo, hullMat);
+        hull.position.set(0, 3.0, 0);
         addToShip(hull);
 
         var deckGeo = new THREE.BoxGeometry(6, 0.2, 3.2);
@@ -2705,20 +3092,27 @@ var RollViewer = (function () {
         var bowBollGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.25, 8);
         addToShip(new THREE.Mesh(bowBollGeo, shipMat('#4b5563', { metalness: 0.6 }))).position.set(2.5, 3.2, 0.8);
         addToShip(new THREE.Mesh(bowBollGeo.clone(), shipMat('#4b5563', { metalness: 0.6 }))).position.set(2.5, 3.2, -0.8);
+
+        // Stem bar
+        addStemBar(THREE, 4.5, 1.2, 3.2);
+        // Anchor (port only — small vessel)
+        addAnchor(THREE, 3.5, 1.8, 1.6, 0.7);
+        addHawsepipe(THREE, 3.7, 2.4, 1.6, 0.7);
+        // Rudder
+        addRudder(THREE, -3.5, 0.6, 1.4, color);
     }
 
     // ── Generic/Unknown: 소형 다목적 선박 — 둥근 선체, 중앙 캐빈, 작업 데크, 레일링 ──
     function buildGenericShip(THREE, color) {
-        // Rounded hull
-        var hullShape = new THREE.Shape();
-        hullShape.moveTo(-5, -1.6);
-        hullShape.quadraticCurveTo(-5.5, 0, -5, 1.6);
-        hullShape.quadraticCurveTo(2, 2.2, 6, 0);
-        hullShape.quadraticCurveTo(2, -2.2, -5, -1.6);
-
-        var hullGeo = new THREE.ExtrudeGeometry(hullShape, { depth: 2.5, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.2, bevelSegments: 3 });
-        hullGeo.rotateX(-Math.PI / 2);
-        addToShip(new THREE.Mesh(hullGeo, shipMat(color))).position.set(0, 1.2, -1.25);
+        // Hull — parametric curved cross-section with weathering
+        var hullGeo = createHullGeometry(THREE, {
+            length: 11, beam: 3.2, depth: 2.5,
+            bowFineness: 1.2, sternFullness: 0.7
+        });
+        var hullMat = rustHullMat('#e2e8f0', 'other');
+        var hull = new THREE.Mesh(hullGeo, hullMat);
+        hull.position.set(0, 2.8, 0);
+        addToShip(hull);
 
         // Flat work deck
         var deckGeo = new THREE.BoxGeometry(10, 0.15, 3.2);
@@ -2726,8 +3120,8 @@ var RollViewer = (function () {
 
         // Bulwark (raised edges around deck)
         var bulwarkGeo = new THREE.BoxGeometry(9, 0.35, 0.06);
-        addToShip(new THREE.Mesh(bulwarkGeo, shipMat(color, { roughness: 0.7 }))).position.set(0, 3.05, 1.6);
-        addToShip(new THREE.Mesh(bulwarkGeo.clone(), shipMat(color, { roughness: 0.7 }))).position.set(0, 3.05, -1.6);
+        addToShip(new THREE.Mesh(bulwarkGeo, shipMat('#cbd5e1', { roughness: 0.7 }))).position.set(0, 3.05, 1.6);
+        addToShip(new THREE.Mesh(bulwarkGeo.clone(), shipMat('#cbd5e1', { roughness: 0.7 }))).position.set(0, 3.05, -1.6);
 
         // Center cabin (box + slanted roof)
         var cabinGeo = new THREE.BoxGeometry(3, 1.8, 2.4);
@@ -2761,31 +3155,35 @@ var RollViewer = (function () {
             addToShip(new THREE.Mesh(bollGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(4 - fb * 1.5, 3.1, 0);
         }
 
-        // Railing around deck (port, starboard, stern)
-        for (var rp = -2; rp <= 2; rp++) {
-            var railPostGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.8, 4);
-            addToShip(new THREE.Mesh(railPostGeo, shipMat('#a1a1aa'))).position.set(rp * 2, 3.3, 1.6);
-            addToShip(new THREE.Mesh(railPostGeo.clone(), shipMat('#a1a1aa'))).position.set(rp * 2, 3.3, -1.6);
-        }
-        // Railing bars (port & starboard)
-        var railBarGeo = new THREE.CylinderGeometry(0.018, 0.018, 8, 4);
-        railBarGeo.rotateZ(Math.PI / 2);
-        addToShip(new THREE.Mesh(railBarGeo, shipMat('#a1a1aa'))).position.set(0, 3.7, 1.6);
-        addToShip(new THREE.Mesh(railBarGeo.clone(), shipMat('#a1a1aa'))).position.set(0, 3.7, -1.6);
+        // Railing around deck (port & starboard)
+        addDeckRailing(THREE, { startX: -4, endX: 4, y: 2.9, z: 1.6, postCount: 5, postHeight: 0.8 });
+        addDeckRailing(THREE, { startX: -4, endX: 4, y: 2.9, z: -1.6, postCount: 5, postHeight: 0.8 });
 
-        // Stern railing
+        // Stern railing (across beam)
+        var sternRailMat = shipMat('#a1a1aa', { metalness: 0.4, roughness: 0.6 });
+        var sRailPostGeo = new THREE.CylinderGeometry(0.02, 0.025, 0.8, 4);
         for (var sp = -1; sp <= 1; sp++) {
-            var sRailGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.8, 4);
-            addToShip(new THREE.Mesh(sRailGeo, shipMat('#a1a1aa'))).position.set(-4.5, 3.3, sp * 1.0);
+            addToShip(new THREE.Mesh(sRailPostGeo, sternRailMat)).position.set(-4.5, 3.3, sp * 1.0);
         }
-        var sBarGeo = new THREE.CylinderGeometry(0.018, 0.018, 2.2, 4);
-        sBarGeo.rotateX(Math.PI / 2);
-        addToShip(new THREE.Mesh(sBarGeo, shipMat('#a1a1aa'))).position.set(-4.5, 3.7, 0);
+        var sTopGeo = new THREE.CylinderGeometry(0.015, 0.015, 2.2, 4);
+        sTopGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(sTopGeo, sternRailMat)).position.set(-4.5, 3.7, 0);
+        var sMidGeo = new THREE.CylinderGeometry(0.012, 0.012, 2.2, 4);
+        sMidGeo.rotateX(Math.PI / 2);
+        addToShip(new THREE.Mesh(sMidGeo, sternRailMat)).position.set(-4.5, 3.3, 0);
 
         // Deck equipment (small crane/davit)
         var davitGeo = new THREE.CylinderGeometry(0.04, 0.05, 1.5, 6);
         davitGeo.rotateZ(0.3);
         addToShip(new THREE.Mesh(davitGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(2.5, 3.6, 0.8);
+
+        // Stem bar
+        addStemBar(THREE, 6.5, 1.2, 3.0);
+        // Anchor (port only)
+        addAnchor(THREE, 5.0, 1.8, 1.4, 0.8);
+        addHawsepipe(THREE, 5.2, 2.4, 1.4, 0.8);
+        // Rudder
+        addRudder(THREE, -5.5, 0.6, 1.2, color);
     }
 
     // ── startAnimation() ──
@@ -2809,6 +3207,7 @@ var RollViewer = (function () {
             var elapsed = (now - clockStart) / 1000;
 
             animateCamera(elapsed);
+            updateCameraPresetAnim(elapsed);
             // ── Cloud animation: slow drift + gentle bobbing ──
             if (cloudGroup) {
                 cloudGroup.rotation.y = elapsed * 0.008;
@@ -2871,9 +3270,7 @@ var RollViewer = (function () {
                 }
             }
 
-            // Update HUD speed display
-            var speedEl = document.getElementById('rv-turn-speed');
-            if (speedEl) speedEl.textContent = smoothSpeed.toFixed(1) + ' kt';
+            // Speed is now updated via updateCanvasHUD
 
             // Roll & Pitch calculation — scaled by wave height (2m baseline)
             var waveScale = Math.max(weather.waveHeight / 2.0, 0.3);
@@ -2970,12 +3367,17 @@ var RollViewer = (function () {
             var absPitch = Math.abs(smoothPitch);
             updateGauge(absRoll, smoothRoll);
             updatePitchGauge(absPitch, smoothPitch);
+            updateCanvasHUD(absRoll, absPitch, smoothSpeed);
 
             // Push to history, cap at 60
             rollHistory.push(absRoll);
             if (rollHistory.length > 60) rollHistory.shift();
             pitchHistory.push(absPitch);
             if (pitchHistory.length > 60) pitchHistory.shift();
+
+            // ── Camera roll sync — tilt camera with ship roll ──
+            var camRollRad = smoothRoll * (Math.PI / 180) * 0.3;  // 30% of ship roll
+            camera.up.set(Math.sin(camRollRad), Math.cos(camRollRad), 0);
 
             if (controls) controls.update();
 
@@ -3199,14 +3601,14 @@ var RollViewer = (function () {
                     smooth: true,
                     symbol: 'none',
                     data: rollHistory.slice(),
-                    lineStyle: { color: '#38bdf8', width: 2 },
+                    lineStyle: { color: '#a1a1aa', width: 2 },
                     areaStyle: {
                         color: {
                             type: 'linear',
                             x: 0, y: 0, x2: 0, y2: 1,
                             colorStops: [
-                                { offset: 0, color: 'rgba(56,189,248,0.25)' },
-                                { offset: 1, color: 'rgba(56,189,248,0)' }
+                                { offset: 0, color: 'rgba(161,161,170,0.2)' },
+                                { offset: 1, color: 'rgba(161,161,170,0)' }
                             ]
                         }
                     }
@@ -3217,14 +3619,14 @@ var RollViewer = (function () {
                     smooth: true,
                     symbol: 'none',
                     data: pitchHistory.slice(),
-                    lineStyle: { color: '#38bdf8', width: 1.5, type: 'dashed' },
+                    lineStyle: { color: '#71717a', width: 1.5, type: 'dashed' },
                     areaStyle: {
                         color: {
                             type: 'linear',
                             x: 0, y: 0, x2: 0, y2: 1,
                             colorStops: [
-                                { offset: 0, color: 'rgba(56,189,248,0.12)' },
-                                { offset: 1, color: 'rgba(56,189,248,0)' }
+                                { offset: 0, color: 'rgba(113,113,122,0.1)' },
+                                { offset: 1, color: 'rgba(113,113,122,0)' }
                             ]
                         }
                     }
@@ -3284,6 +3686,10 @@ var RollViewer = (function () {
             window.removeEventListener('resize', _resizeHandler);
             _resizeHandler = null;
         }
+
+        // Clear texture caches
+        _rustTextureCache = {};
+        _shipMatCache = {};
 
         // Dispose Three.js scene objects
         if (scene) {

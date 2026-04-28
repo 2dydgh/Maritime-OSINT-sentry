@@ -393,6 +393,8 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
     if (currentMapMode === '2d') {
         setTimeout(function() { if (typeof syncProximityToLeaflet === 'function') syncProximityToLeaflet(); }, 50);
     }
+
+    if (viewer && viewer.scene) viewer.scene.requestRender();
 }
 window.renderProximityLines = renderProximityLines;
 

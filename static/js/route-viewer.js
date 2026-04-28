@@ -213,6 +213,9 @@ var RouteViewer = (function() {
         // COG lines
         if (typeof shipCogLines !== 'undefined') hideIfVisible(shipCogLines);
 
+        // Hide 3D ship models
+        if (ship3dDataSource) hideIfVisible(ship3dDataSource);
+
         // Satellite data source
         if (typeof satDataSource !== 'undefined') hideIfVisible(satDataSource);
 

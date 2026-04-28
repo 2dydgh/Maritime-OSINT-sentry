@@ -535,6 +535,11 @@ satDataSource.show = false;
 proximityDataSource = new Cesium.CustomDataSource('Proximity');
 viewer.dataSources.add(proximityDataSource);
 
+// Ship 3D Model DataSource
+ship3dDataSource = new Cesium.CustomDataSource('Ship3D');
+viewer.dataSources.add(ship3dDataSource);
+ship3dDataSource.show = false;
+
 // Proximity Primitive Collections
 proximityLines = viewer.scene.primitives.add(new Cesium.PolylineCollection());
 proximityLabels = viewer.scene.primitives.add(new Cesium.LabelCollection());
@@ -564,3 +569,4 @@ SHIP_TYPES.forEach(async function(type) {
     shipDataSources[type] = ds;
     await viewer.dataSources.add(ds);
 });
+

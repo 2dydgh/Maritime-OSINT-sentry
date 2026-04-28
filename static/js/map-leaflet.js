@@ -32,6 +32,7 @@ var REGION_TABS_2D = [
 ];
 
 var REGION_TABS_3D = [
+    { key: 'world', label: '전체' },
     { key: 'korea', label: '한국 해역' },
     { key: 'arctic', label: '북극항로' },
     { key: 'somalia', label: '아덴만' },

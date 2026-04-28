@@ -437,6 +437,7 @@ async function loadHistoryWindow(centerDate, opts) {
         });
         shipBillboardMap = {};
         shipLabelMap = {};
+        if (typeof clearShip3dModels === 'function') clearShip3dModels();
         if (shipCogLines) { shipCogLines.removeAll(); shipCogLineMap = {}; }
         newEntities.forEach(function(item) { item.ds.entities.add(item.def); });
 
@@ -538,6 +539,7 @@ async function setTimeMode(mode) {
         });
         shipBillboardMap = {};
         shipLabelMap = {};
+        if (typeof clearShip3dModels === 'function') clearShip3dModels();
         if (shipCogLines) { shipCogLines.removeAll(); shipCogLineMap = {}; }
 
         currentWindowCenter = null;
@@ -574,6 +576,7 @@ async function setTimeMode(mode) {
         });
         shipBillboardMap = {};
         shipLabelMap = {};
+        if (typeof clearShip3dModels === 'function') clearShip3dModels();
         if (shipCogLines) { shipCogLines.removeAll(); shipCogLineMap = {}; }
 
         var rangeLoaded = await loadHistoryRange();

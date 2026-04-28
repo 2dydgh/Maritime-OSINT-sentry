@@ -407,6 +407,11 @@ function updateShipsLayer(ships) {
         if (countEl) animateCount(countEl, typeShips.length.toLocaleString());
     });
 
+    // Update 3D models if zoomed in
+    if (ship3dEnabled && typeof updateShip3dModels === 'function') {
+        updateShip3dModels(ships);
+    }
+
     // 2D mode Leaflet marker update
     if (currentMapMode === '2d' && leafletMap) {
         var newMarkersByType = {};
@@ -482,6 +487,9 @@ function updateShipsLayer(ships) {
             }
         });
     }
+
+    // requestRenderMode: 데이터 변경 후 Cesium에 렌더 요청
+    if (viewer && viewer.scene) viewer.scene.requestRender();
 }
 
 function showAircraftInfo(icao24) {
@@ -744,6 +752,8 @@ function updateAircraftLayer(aircraft) {
             if (countEl) animateCount(countEl, (byType[type] || []).length.toLocaleString());
         });
     }
+
+    if (viewer && viewer.scene) viewer.scene.requestRender();
 }
 window.updateAircraftLayer = updateAircraftLayer;
 
