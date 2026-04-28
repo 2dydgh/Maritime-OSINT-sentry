@@ -1105,23 +1105,38 @@ function showShipInfo(entityOrMmsi) {
 
     title.textContent = s.name || 'UNKNOWN';
 
-    var rows = '\
-        <tr><th>Name</th><td>' + (s.name || 'UNKNOWN') + '</td></tr>\
-        <tr><th>MMSI</th><td>' + s.mmsi + '</td></tr>\
-        <tr><th>Type</th><td>' + (s.type || 'unknown') + '</td></tr>\
-        <tr><th>Country</th><td>' + (s.country || 'UNKNOWN') + '</td></tr>\
-        <tr><th>SOG</th><td>' + (s.sog && Math.abs(parseFloat(s.sog) - 102.3) < 0.2 ? '신호없음 (SOG N/A)' : (s.sog || 0) + ' kts') + '</td></tr>\
-        <tr><th>COG</th><td>' + (s.cog || 0) + '\u00b0</td></tr>\
-        <tr><th>Heading</th><td>' + (s.heading || 0) + '\u00b0</td></tr>';
-    if (s.length) rows += '<tr><th>Length</th><td>' + s.length + ' m</td></tr>';
-    if (s.beam) rows += '<tr><th>Beam</th><td>' + s.beam + ' m</td></tr>';
-    if (s.draught) rows += '<tr><th>Draught</th><td>' + s.draught + ' m</td></tr>';
-    if (s.destination && s.destination !== 'UNKNOWN') rows += '<tr><th>Destination</th><td>' + s.destination + '</td></tr>';
-    if (s.eta) rows += '<tr><th>ETA</th><td>' + s.eta + '</td></tr>';
-    if (s.callsign) rows += '<tr><th>Callsign</th><td>' + s.callsign + '</td></tr>';
-    if (s.imo) rows += '<tr><th>IMO</th><td>' + s.imo + '</td></tr>';
+    // Speed display
+    var speed = (s.sog && Math.abs(parseFloat(s.sog) - 102.3) < 0.2) ? 'N/A' : (parseFloat(s.sog) || 0).toFixed(1);
+    var course = (s.cog || 0) + '';
+    // Nav status
+    var statusText = s.status || s.type || 'unknown';
+    var sogVal = parseFloat(s.sog) || 0;
+    var statusColor = sogVal > 0.5 ? 'var(--accent-green)' : 'var(--text-dim)';
+    var statusDot = sogVal > 0.5 ? '●' : '○';
 
-    body.innerHTML = '<table class="cesium-infoBox-defaultTable"><tbody>' + rows + '</tbody></table>';
+    // Key stats cards
+    var statsHtml = '<div class="ship-stats-row">';
+    statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">SPEED</div><div class="ship-stat-value">' + speed + '</div><div class="ship-stat-unit">knots</div></div>';
+    statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">COURSE</div><div class="ship-stat-value">' + course + '°</div><div class="ship-stat-unit">heading</div></div>';
+    statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">STATUS</div><div class="ship-stat-value" style="color:' + statusColor + '">' + statusDot + '</div><div class="ship-stat-unit">' + statusText + '</div></div>';
+    statsHtml += '</div>';
+
+    // Detail card rows
+    var detailHtml = '<div class="ship-detail-card">';
+    detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">MMSI</span><span class="ship-detail-val">' + s.mmsi + '</span></div>';
+    detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">Type</span><span class="ship-detail-val">' + (s.type || 'unknown') + '</span></div>';
+    detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">Country</span><span class="ship-detail-val">' + (s.country || 'UNKNOWN') + '</span></div>';
+    detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">Heading</span><span class="ship-detail-val">' + (s.heading || 0) + '°</span></div>';
+    if (s.length) detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">Length</span><span class="ship-detail-val">' + s.length + ' m</span></div>';
+    if (s.beam) detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">Beam</span><span class="ship-detail-val">' + s.beam + ' m</span></div>';
+    if (s.draught) detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">Draught</span><span class="ship-detail-val">' + s.draught + ' m</span></div>';
+    if (s.destination && s.destination !== 'UNKNOWN') detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">Destination</span><span class="ship-detail-val">' + s.destination + '</span></div>';
+    if (s.eta) detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">ETA</span><span class="ship-detail-val">' + s.eta + '</span></div>';
+    if (s.callsign) detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">Callsign</span><span class="ship-detail-val">' + s.callsign + '</span></div>';
+    if (s.imo) detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">IMO</span><span class="ship-detail-val">' + s.imo + '</span></div>';
+    detailHtml += '</div>';
+
+    body.innerHTML = statsHtml + detailHtml;
 
     // Render model summary cards from registry
     if (window.ModelRegistry) {
