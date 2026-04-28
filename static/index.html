@@ -436,34 +436,32 @@
 
     <!-- Bottom Stats Bar -->
     <div id="bottomBar">
-        <div class="stat-card stat-card-bar" id="statRisk">
-            <div class="stat-card-info">
-                <span class="stat-card-label">RISK</span>
-                <span class="stat-card-value stat-card-value-risk" id="bottomRisk">0</span>
-            </div>
+        <div class="bottom-stat" id="statRisk">
+            <span class="bottom-label">RISK</span>
+            <span class="stat-card-value stat-card-value-risk bottom-val" id="bottomRisk">0</span>
             <div class="risk-area-bars" id="riskAreaBars"></div>
         </div>
-        <div class="stat-card stat-card-compact" id="statWindWave">
+        <div class="bottom-sep"></div>
+        <div class="bottom-stat" id="statWindWave">
             <div class="wind-wave-row">
-                <span class="stat-card-label">WIND</span>
-                <span class="stat-card-value" id="bottomWind">--<span class="stat-card-unit">kt</span></span>
+                <span class="bottom-label">WIND</span>
+                <span class="stat-card-value bottom-val" id="bottomWind">--<span class="stat-card-unit">kt</span></span>
                 <span class="stat-card-loc" id="bottomWindLoc"></span>
             </div>
-            <div class="wind-wave-divider"></div>
             <div class="wind-wave-row">
-                <span class="stat-card-label">WAVE</span>
-                <span class="stat-card-value" id="bottomWave">--<span class="stat-card-unit">m</span></span>
+                <span class="bottom-label">WAVE</span>
+                <span class="stat-card-value bottom-val" id="bottomWave">--<span class="stat-card-unit">m</span></span>
                 <span class="stat-card-loc" id="bottomWaveLoc"></span>
             </div>
         </div>
-        <div class="stat-card" id="statFlag">
-            <div class="stat-card-info">
-                <span class="stat-card-label">FLAG</span>
-                <span class="stat-card-value" id="bottomFlagCount">0</span>
-            </div>
+        <div class="bottom-sep"></div>
+        <div class="bottom-stat" id="statFlag">
+            <span class="bottom-label">FLAG</span>
+            <span class="stat-card-value bottom-val" id="bottomFlagCount">0</span>
             <span class="flag-emojis" id="flagEmojis"></span>
             <span class="flag-top-label">TOP 5</span>
         </div>
+        <div class="bottom-sep"></div>
         <div class="treemap-row" id="vesselTreemap"></div>
         <div class="treemap-row" id="aircraftTreemap"></div>
     </div>

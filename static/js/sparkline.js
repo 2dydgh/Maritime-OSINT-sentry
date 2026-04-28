@@ -261,7 +261,7 @@ var BottomBar = (function() {
         }
 
         // Remove active from all cards
-        var cards = document.querySelectorAll('.stat-card');
+        var cards = document.querySelectorAll('.stat-card, .bottom-stat');
         cards.forEach(function(c) { c.classList.remove('active'); });
 
         var card = document.getElementById(cardId);
@@ -317,7 +317,7 @@ var BottomBar = (function() {
     function closeDetail() {
         var popup = document.getElementById('bottomDetailPopup');
         if (popup) popup.classList.remove('visible');
-        var cards = document.querySelectorAll('.stat-card');
+        var cards = document.querySelectorAll('.stat-card, .bottom-stat');
         cards.forEach(function(c) { c.classList.remove('active'); });
         _activePopup = null;
     }

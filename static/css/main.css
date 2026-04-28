@@ -50,21 +50,10 @@
     display: flex;
     flex-direction: column;
     width: 48px;
-    background: var(--panel-gradient);
-    border-right: 1px solid rgba(64, 111, 216, 0.1);
+    background: var(--bg-color);
+    border-right: 1px solid var(--panel-border);
     overflow: hidden;
     position: relative;
-}
-
-#leftSidebar::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: var(--highlight-line);
-    z-index: 1;
 }
 
 /* Icon Rail */
@@ -80,12 +69,12 @@
 }
 
 .rail-icon {
-    width: 40px;
-    height: 48px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.1);
-    color: #c8cdd3;
+    width: 38px;
+    height: 40px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
     font-size: 1.1rem;
     cursor: pointer;
     display: flex;
@@ -93,19 +82,31 @@
     align-items: center;
     justify-content: center;
     gap: 3px;
-    transition: all 0.2s;
+    transition: color 0.2s;
     position: relative;
 }
 
 .rail-icon:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: var(--text-main);
+    color: var(--text-sub);
+    background: transparent;
 }
 
 .rail-icon.active {
+    background: var(--primary-muted);
+    color: var(--primary);
+    box-shadow: none;
+}
+
+.rail-icon.active::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 22px;
     background: var(--primary);
-    color: #fff;
-    box-shadow: 0 0 12px rgba(64, 111, 216, 0.3);
+    border-radius: 0 3px 3px 0;
 }
 
 .rail-label {
@@ -151,9 +152,9 @@
 }
 
 .rail-separator {
-    width: 28px;
+    width: 22px;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(64, 111, 216, 0.4), transparent);
+    background: rgba(255, 255, 255, 0.06);
     margin: 6px auto;
     flex-shrink: 0;
 }
@@ -267,15 +268,55 @@
 
 /* Bottom Stats Bar */
 #bottomBar {
-    height: 52px;
-    background: var(--panel-gradient);
-    border-top: 1px solid rgba(64, 111, 216, 0.1);
+    height: 38px;
+    background: var(--bg-color);
+    border-top: 1px solid var(--panel-border);
     display: flex;
-    gap: 6px;
-    padding: 6px 10px 6px 0;
-    align-items: stretch;
+    gap: 0;
+    padding: 0 16px;
+    align-items: center;
     flex-shrink: 0;
     overflow: hidden;
+}
+
+.bottom-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    cursor: pointer;
+    height: 100%;
+    transition: background 0.15s;
+}
+
+.bottom-stat:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.bottom-stat.active {
+    background: rgba(59, 130, 246, 0.06);
+}
+
+.bottom-label {
+    color: var(--text-muted);
+    font-size: 8px;
+    letter-spacing: 1px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.bottom-val {
+    color: var(--text-sub);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.bottom-sep {
+    width: 1px;
+    height: 16px;
+    background: #1e1e21;
+    flex-shrink: 0;
 }
 
 .stat-card {
@@ -307,7 +348,7 @@
 .bottom-detail-popup {
     display: none;
     position: absolute;
-    bottom: 68px;
+    bottom: 54px;
     left: 0;
     width: 440px;
     background: var(--panel-bg-solid);
@@ -2899,13 +2940,17 @@ body {
     right: 12px;
     z-index: 100;
     display: flex;
-    align-items: center;
-    gap: 8px;
+    align-items: flex-start;
+    pointer-events: none;
 }
 
-#mapTopBar #mapModeToggle {
-    position: static;
-    flex-shrink: 0;
+#mapTopBar > * {
+    pointer-events: auto;
+}
+
+#mapTopBar #mapSearchWrap {
+    order: -1;
+    margin-right: auto;
 }
 
 #mapTopBar #regionTabs {
@@ -2913,16 +2958,28 @@ body {
     transform: none;
     display: flex;
     flex-shrink: 0;
+    order: 1;
+}
+
+#mapTopBar #layerChips {
+    margin-left: 6px;
+    order: 2;
+}
+
+#mapTopBar #mapModeToggle {
+    position: static;
+    flex-shrink: 0;
+    order: 3;
+    margin-left: 6px;
 }
 
 #layerChips {
-    margin-left: auto;
     display: flex;
-    gap: 3px;
+    gap: 2px;
     flex-shrink: 0;
-    background: rgba(0, 0, 0, 0.65);
+    background: rgba(0, 0, 0, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 3px;
     backdrop-filter: blur(4px);
 }
@@ -2934,7 +2991,7 @@ body {
     background: rgba(0, 0, 0, 0.65);
     backdrop-filter: blur(4px);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    border-radius: 7px;
     padding: 8px 14px;
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
     font-size: 0.78rem;
@@ -3025,18 +3082,16 @@ body {
 
 /* ── Map Search ── */
 #mapSearchWrap {
-    position: relative;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 5px 12px;
     display: flex;
     align-items: center;
-    background: var(--panel-bg-solid);
-    border: 1px solid var(--panel-border);
-    border-radius: 8px;
-    padding: 0 10px;
-    height: 32px;
-    min-width: 180px;
-    max-width: 280px;
+    gap: 8px;
+    backdrop-filter: blur(4px);
+    width: 200px;
     transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
-    backdrop-filter: blur(8px);
 }
 #mapSearchWrap:focus-within {
     border-color: rgba(64, 111, 216, 0.5);
@@ -3313,12 +3368,12 @@ body {
 
 #mapModeToggle {
     display: flex;
-    gap: 3px;
-    background: rgba(0, 0, 0, 0.65);
+    background: rgba(0, 0, 0, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 3px;
     backdrop-filter: blur(4px);
+    overflow: hidden;
 }
 
 .map-mode-btn {
@@ -3327,7 +3382,7 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.06);
     color: var(--text-dim);
     padding: 6px 14px;
-    border-radius: 6px;
+    border-radius: 7px;
     cursor: pointer;
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
     font-size: 0.75rem;
