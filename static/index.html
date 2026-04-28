@@ -44,20 +44,24 @@
 <body>
     <div id="app-layout">
     <!-- Top Header -->
-    <header class="glass-panel">
-        <div class="header-brand">
-            <div class="pulse-dot"></div>
-            MARITIME OSINT SENTRY
-            <span style="color: var(--text-dim); font-weight: 300; font-size: 0.9rem;">| STRATEGIC
-                DASHBOARD</span>
-        </div>
-        <div class="header-stats">
-            <div class="header-clock">
-                <span id="headerUtcClock">--:--:-- KST</span>
+    <header class="header-bar">
+        <div class="header-accent-line"></div>
+        <div class="header-inner">
+            <div class="header-brand">
+                <div class="brand-icon">M</div>
+                <div class="brand-text">
+                    <span class="brand-name">Maritime OSINT Sentry</span>
+                    <span class="brand-sub">Strategic Dashboard</span>
+                </div>
             </div>
-            <div class="header-latency">
-                <div class="ws-led connected" id="headerWsLed"></div>
-                <span class="header-latency-value" id="headerLatency">--<span class="stat-card-unit">ms</span></span>
+            <div class="header-stats">
+                <div class="header-chip">
+                    <span id="headerUtcClock">--:--:-- KST</span>
+                </div>
+                <div class="header-chip">
+                    <div class="ws-led connected" id="headerWsLed"></div>
+                    <span id="headerLatency">--<span class="stat-card-unit">ms</span></span>
+                </div>
             </div>
         </div>
     </header>
