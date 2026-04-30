@@ -5,7 +5,7 @@
 var currentMapMode = '3d';
 var leafletMap = null;
 var viewer = null; // set in map-cesium.js
-var shipDataMap = {};
+var shipDataMap = DataService.ships;
 var shipDataSources = {};
 // Primitive Collection 참조 (신규)
 var shipBillboards = {};      // { type: BillboardCollection }
@@ -34,7 +34,7 @@ var AIRCRAFT_COLORS = {
     other:      '#9ca3af'
 };
 
-var aircraftDataMap = {};
+var aircraftDataMap = DataService.aircraft;
 var aircraftBillboards = {};      // { type: BillboardCollection }
 var aircraftLabels = {};           // { type: LabelCollection }
 var aircraftBillboardMap = {};     // { icao24: Billboard }
@@ -63,8 +63,8 @@ var proximityCpaLabels = null; // LabelCollection
 var proximityMap = {};         // { targetMmsi: { line, label, cogSel, cogTgt, cpaPoint, cpaLabel } }
 var selectedProximityMmsi = null;
 var collisionTargetMmsi = null;
-var latestWsShipsMmsis = new Set();
-var collisionData = { distance: { risks: [] }, ml: { risks: [] } };
+var latestWsShipsMmsis = DataService.latestShipMmsis;
+var collisionData = DataService.collision;
 var collisionActiveTab = 'distance';
 var mlRiskFilter = null;
 var distRiskFilter = null;
