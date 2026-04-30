@@ -398,20 +398,21 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
 }
 window.renderProximityLines = renderProximityLines;
 
-function renderNearbyPanel(nearbyVessels) {
-    var section = document.getElementById('nearbyVesselsSection');
-    var list = document.getElementById('nearbyVesselsList');
+var _nearbyModal = null;
 
-    if (nearbyVessels.length === 0) {
-        section.style.display = 'none';
-        return;
+function renderNearbyPanel(nearbyVessels) {
+    // Close existing modal
+    if (_nearbyModal && _nearbyModal.parentNode) {
+        _nearbyModal.parentNode.removeChild(_nearbyModal);
+        _nearbyModal = null;
     }
 
-    section.style.display = 'block';
+    if (nearbyVessels.length === 0) return;
+
     var hasMlMatches = nearbyVessels.some(function(nv) { return nv.mlRiskLevel != null && nv.mlRiskLevel > 0; });
-    var mlIndicator = document.getElementById('nearbyMlIndicator');
-    if (mlIndicator) mlIndicator.style.display = hasMlMatches ? 'inline' : 'none';
-    list.innerHTML = nearbyVessels.map(function(nv) {
+
+    // Build rows
+    var rowsHtml = nearbyVessels.map(function(nv) {
         var isCollisionTarget = collisionTargetMmsi != null && (nv.mmsi == collisionTargetMmsi);
         var hasMlRisk = nv.mlRiskLevel != null && nv.mlRiskLevel > 0;
         var hasDistRiskDot = nv.distSeverity != null;
@@ -423,35 +424,97 @@ function renderNearbyPanel(nearbyVessels) {
                 : isCollisionTarget
                     ? { css: '#f43f5e' }
                     : { css: '#64748b' };
-        var ML_RISK_BADGE = { 3: { color: '#f43f5e', bg: 'rgba(244,63,94,0.2)' }, 2: { color: '#f97316', bg: 'rgba(249,115,22,0.2)' }, 1: { color: '#eab308', bg: 'rgba(234,179,8,0.2)' } };
-        var mlBadgeStyle = hasMlRisk ? ML_RISK_BADGE[nv.mlRiskLevel] || ML_RISK_BADGE[1] : null;
+        var ML_RISK_BADGE = { 3: '#ef4444', 2: '#fb923c', 1: '#fbbf24' };
+        var mlBadgeColor = hasMlRisk ? ML_RISK_BADGE[nv.mlRiskLevel] || ML_RISK_BADGE[1] : null;
 
         var hasDistRisk = nv.distSeverity != null;
-        var DIST_RISK_BADGE = { danger: { color: '#f43f5e', bg: 'rgba(244,63,94,0.2)' }, caution: { color: '#f97316', bg: 'rgba(249,115,22,0.2)' }, warning: { color: '#eab308', bg: 'rgba(234,179,8,0.2)' } };
-        var distBadgeStyle = hasDistRisk ? DIST_RISK_BADGE[nv.distSeverity] || DIST_RISK_BADGE['warning'] : null;
+        var DIST_RISK_BADGE = { danger: '#ef4444', caution: '#fb923c', warning: '#fbbf24' };
+        var distBadgeColor = hasDistRisk ? DIST_RISK_BADGE[nv.distSeverity] || DIST_RISK_BADGE['warning'] : null;
 
-        var riskStyle = mlBadgeStyle || distBadgeStyle || null;
-        var highlight = riskStyle
-            ? 'background:' + riskStyle.bg + ';border:1px solid ' + riskStyle.color + '30;border-radius:6px;'
+        var riskColor = mlBadgeColor || distBadgeColor || null;
+        var highlight = riskColor
+            ? 'border-left:2px solid ' + riskColor + ';'
             : isCollisionTarget
-                ? 'background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.3);border-radius:6px;'
+                ? 'border-left:2px solid #ef4444;'
                 : '';
         var mlBadge = hasMlRisk
-            ? '<span class="collision-badge" style="background:' + mlBadgeStyle.bg + ';color:' + mlBadgeStyle.color + ';flex-shrink:0;">AI ' + nv.mlRiskLabel + '</span>'
+            ? '<span class="collision-badge" style="color:' + mlBadgeColor + ';flex-shrink:0;"><span class="collision-dot" style="background:' + mlBadgeColor + '"></span>AI ' + nv.mlRiskLabel + '</span>'
             : '';
         var distBadge = hasDistRisk
-            ? '<span class="collision-badge" style="background:' + distBadgeStyle.bg + ';color:' + distBadgeStyle.color + ';flex-shrink:0;">CPA ' + nv.distRiskLabel + '</span>'
+            ? '<span class="collision-badge" style="color:' + distBadgeColor + ';flex-shrink:0;"><span class="collision-dot" style="background:' + distBadgeColor + '"></span>CPA ' + nv.distRiskLabel + '</span>'
             : '';
         var anyRisk = hasMlRisk || hasDistRisk || isCollisionTarget;
-        return '<div class="nearby-row" data-mmsi="' + nv.mmsi + '" data-lat="' + nv.lat + '" data-lng="' + nv.lng + '" style="' + highlight + '">\
-            <span class="nearby-dot" style="background:' + color.css + '"></span>\
-            <span class="nearby-name">' + (anyRisk ? '\u26a0 ' : '') + nv.name + '</span>\
-            ' + mlBadge + distBadge + '\
-            <span class="nearby-dist" style="' + (anyRisk ? 'color:' + color.css + ';font-weight:700;' : '') + '">' + nv.distance.toFixed(1) + ' nm</span>\
-        </div>';
+        return '<div class="nearby-row" data-mmsi="' + nv.mmsi + '" data-lat="' + nv.lat + '" data-lng="' + nv.lng + '" style="' + highlight + '">'
+            + '<span class="nearby-dot" style="background:' + color.css + '"></span>'
+            + '<span class="nearby-name">' + (anyRisk ? '\u26a0 ' : '') + nv.name + '</span>'
+            + mlBadge + distBadge
+            + '<span class="nearby-dist" style="' + (anyRisk ? 'color:' + color.css + ';font-weight:700;' : '') + '">' + nv.distance.toFixed(1) + ' nm</span>'
+            + '</div>';
     }).join('');
 
-    list.querySelectorAll('.nearby-row').forEach(function(row) {
+    // Create modal
+    _nearbyModal = document.createElement('div');
+    _nearbyModal.className = 'nearby-modal';
+    _nearbyModal.innerHTML =
+        '<div class="nearby-modal-header">'
+            + '<span class="nearby-modal-title">NEARBY VESSELS'
+            + (hasMlMatches ? ' <span style="font-size:0.55rem;color:var(--accent);font-weight:400;">AI</span>' : '')
+            + '</span>'
+            + '<span class="nearby-modal-count">' + nearbyVessels.length + '</span>'
+            + '<button class="nearby-modal-close">&times;</button>'
+        + '</div>'
+        + '<div class="nearby-modal-body">' + rowsHtml + '</div>';
+
+    document.body.appendChild(_nearbyModal);
+
+    // Close button
+    _nearbyModal.querySelector('.nearby-modal-close').addEventListener('click', function() {
+        if (_nearbyModal && _nearbyModal.parentNode) {
+            _nearbyModal.parentNode.removeChild(_nearbyModal);
+            _nearbyModal = null;
+        }
+    });
+
+    // Drag to move
+    (function() {
+        var header = _nearbyModal.querySelector('.nearby-modal-header');
+        var modal = _nearbyModal;
+        var dragging = false, startX, startY, origX, origY;
+
+        header.addEventListener('mousedown', function(e) {
+            if (e.target.closest('.nearby-modal-close')) return;
+            dragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            var rect = modal.getBoundingClientRect();
+            origX = rect.left;
+            origY = rect.top;
+            // Switch to top/left positioning
+            if (!modal.classList.contains('is-dragged')) {
+                modal.style.left = origX + 'px';
+                modal.style.top = origY + 'px';
+                modal.style.bottom = 'auto';
+                modal.style.transform = 'none';
+                modal.classList.add('is-dragged');
+            }
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!dragging) return;
+            var dx = e.clientX - startX;
+            var dy = e.clientY - startY;
+            modal.style.left = (origX + dx) + 'px';
+            modal.style.top = (origY + dy) + 'px';
+        });
+
+        document.addEventListener('mouseup', function() {
+            dragging = false;
+        });
+    })();
+
+    // Row click — fly to vessel
+    _nearbyModal.querySelectorAll('.nearby-row').forEach(function(row) {
         row.addEventListener('click', function() {
             var lat = parseFloat(row.dataset.lat);
             var lng = parseFloat(row.dataset.lng);
@@ -471,6 +534,12 @@ function clearProximity() {
     selectedProximityMmsi = null;
     collisionTargetMmsi = null;
     proximityMissCount = 0;
+
+    // Close nearby modal
+    if (_nearbyModal && _nearbyModal.parentNode) {
+        _nearbyModal.parentNode.removeChild(_nearbyModal);
+        _nearbyModal = null;
+    }
 
     // 자동 추적 + 충돌 페어 초기화
     _collisionTrackingActive = false;

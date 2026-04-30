@@ -165,7 +165,7 @@ var BottomBar = (function() {
 
         var mlRisks = (typeof collisionData !== 'undefined' && collisionData.ml && collisionData.ml.risks) || [];
         if (mlRisks.length === 0) {
-            el.innerHTML = '<span style="font-size:0.55rem;color:var(--text-dim);">위험 없음</span>';
+            el.innerHTML = '<span style="font-size:0.65rem;color:var(--text-sub);">위험 없음</span>';
             _prevAreaCounts = {};
             return;
         }
@@ -181,9 +181,8 @@ var BottomBar = (function() {
 
         // Sort by count desc, show all
         var sorted = Object.keys(areaCounts).sort(function(a, b) { return areaCounts[b] - areaCounts[a]; });
-        var top = sorted;
 
-        el.innerHTML = top.map(function(name) {
+        el.innerHTML = sorted.map(function(name) {
             var count = areaCounts[name];
             var changed = _prevAreaCounts[name] !== count;
             return '<span class="risk-area-tag">' + name + ' <b class="' + (changed ? 'updated' : '') + '">' + count + '</b></span>';
@@ -271,7 +270,7 @@ var BottomBar = (function() {
 
         if (cardId === 'statRisk') {
             html = _buildRiskDetail();
-        } else if (cardId === 'statWindWave') {
+        } else if (cardId === 'statWind' || cardId === 'statWave') {
             html = _buildWindWaveDetail();
         } else if (cardId === 'statFlag') {
             html = _buildFlagDetail();
@@ -568,7 +567,7 @@ var BottomBar = (function() {
 
     // Bind click events
     document.addEventListener('DOMContentLoaded', function() {
-        ['statRisk', 'statWindWave', 'statFlag'].forEach(function(id) {
+        ['statRisk', 'statWind', 'statWave', 'statFlag'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.addEventListener('click', function() { showDetail(id); });
         });

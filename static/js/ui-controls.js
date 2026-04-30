@@ -700,10 +700,10 @@ async function fetchData() {
         var seenAlertIds = new Set();
 
         function alertIcon(type) {
-            if (type === 'speeding') return { icon: 'fa-gauge-high', color: '#f59e0b', label: 'SPEEDING' };
-            if (type === 'signal_lost') return { icon: 'fa-satellite-dish', color: '#f97316', label: 'SIGNAL LOST' };
+            if (type === 'speeding') return { icon: 'fa-gauge-high', color: '#93c5fd', label: 'SPEEDING' };
+            if (type === 'signal_lost') return { icon: 'fa-satellite-dish', color: '#60a5fa', label: 'SIGNAL LOST' };
             if (type === 'dest_change') return { icon: 'fa-right-left', color: '#3b82f6', label: 'DEST CHANGE' };
-            return { icon: 'fa-triangle-exclamation', color: '#facc15', label: 'ALERT' };
+            return { icon: 'fa-triangle-exclamation', color: '#bfdbfe', label: 'ALERT' };
         }
 
         function _rebuildFeedTicker(container) {
@@ -1056,6 +1056,7 @@ makeDraggable(
 var shipInfoBackBtn = document.getElementById('shipInfoBack');
 if (shipInfoBackBtn) {
     shipInfoBackBtn.addEventListener('click', function() {
+        if (window.ShipPreview3D) ShipPreview3D.dispose();
         clearProximity();
         clearShipHighlight();
     });
@@ -1136,7 +1137,33 @@ function showShipInfo(entityOrMmsi) {
     if (s.imo) detailHtml += '<div class="ship-detail-row"><span class="ship-detail-key">IMO</span><span class="ship-detail-val">' + s.imo + '</span></div>';
     detailHtml += '</div>';
 
+    if (window.ShipPreview3D) ShipPreview3D.dispose();
     body.innerHTML = statsHtml + detailHtml;
+
+    // 3D Ship Model Preview (thumbnail — click to open modal)
+    var previewContainer = document.createElement('div');
+    previewContainer.className = 'ship-preview-container';
+    previewContainer.id = 'shipPreview3d';
+    previewContainer.title = 'Click to enlarge';
+    body.appendChild(previewContainer);
+
+    // Expand hint
+    var expandHint = document.createElement('div');
+    expandHint.className = 'ship-preview-expand-hint';
+    expandHint.innerHTML = '<i class="fa-solid fa-expand"></i>';
+    previewContainer.appendChild(expandHint);
+
+    var shipTypeKey = ShipBuilders.getShipTypeKey(s);
+    var dims = {
+        length: s.length ? parseFloat(s.length) : null,
+        beam: s.beam ? parseFloat(s.beam) : null,
+        draught: s.draught ? parseFloat(s.draught) : null
+    };
+    ShipPreview3D.init(previewContainer, shipTypeKey, dims);
+
+    previewContainer.addEventListener('click', function () {
+        ShipPreview3D.openModal();
+    });
 
     // Render model summary cards from registry
     if (window.ModelRegistry) {
@@ -1567,16 +1594,80 @@ var _searchLeafletMarker = null;
         });
     }
 
+    // ── Region presets inside search ──
+    var presetEl = document.getElementById('regionPresets');
+
+    function buildPresets() {
+        if (!presetEl) return;
+        // Use 3D regions if available, otherwise 2D
+        var regions3d = (typeof REGIONS !== 'undefined') ? REGIONS : {};
+        var regions2d = (typeof REGION_VIEWS !== 'undefined') ? REGION_VIEWS : {};
+        var tabs3d = (typeof REGION_TABS_3D !== 'undefined') ? REGION_TABS_3D : [];
+        var tabs2d = (typeof REGION_TABS_2D !== 'undefined') ? REGION_TABS_2D : [];
+        var tabs = (currentMapMode === '2d') ? tabs2d : tabs3d;
+        var html = '<div class="presets-label">QUICK NAVIGATION</div><div class="preset-grid">';
+        tabs.forEach(function(t) {
+            html += '<button class="preset-btn" data-region="' + t.key + '">' + t.label + '</button>';
+        });
+        html += '</div>';
+        presetEl.innerHTML = html;
+    }
+
+    function showPresets() {
+        if (!presetEl) return;
+        buildPresets();
+        presetEl.classList.add('open');
+    }
+
+    function hidePresets() {
+        if (presetEl) presetEl.classList.remove('open');
+    }
+
+    if (presetEl) {
+        presetEl.addEventListener('click', function(e) {
+            var btn = e.target.closest('.preset-btn');
+            if (!btn) return;
+            var region = btn.dataset.region;
+            presetEl.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            hidePresets();
+            // Also update hidden regionTabs active state
+            var regionTabs = document.getElementById('regionTabs');
+            if (regionTabs) {
+                regionTabs.querySelectorAll('.region-tab').forEach(function(b) { b.classList.remove('active'); });
+                var matchTab = regionTabs.querySelector('[data-region="' + region + '"]');
+                if (matchTab) matchTab.classList.add('active');
+            }
+            if (currentMapMode === '2d' && typeof flyToRegion2D === 'function') {
+                flyToRegion2D(region);
+            } else if (typeof flyToRegion === 'function') {
+                flyToRegion(region);
+            }
+        });
+    }
+
     // ── Event listeners ──
+    input.addEventListener('focus', function() {
+        var q = input.value.trim();
+        if (q.length < 2) {
+            showPresets();
+        }
+    });
+
     input.addEventListener('input', function() {
         clearTimeout(debounceTimer);
         var q = input.value.trim();
-        if (q.length < 2) { closeResults(); return; }
+        if (q.length < 2) {
+            closeResults();
+            showPresets();
+            return;
+        }
+        hidePresets();
         debounceTimer = setTimeout(function() { doSearch(q); }, 200);
     });
 
     input.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') { closeResults(); closePlaceInfo(); input.blur(); }
+        if (e.key === 'Escape') { closeResults(); hidePresets(); closePlaceInfo(); input.blur(); }
         if (e.key === 'Enter') {
             var first = results.querySelector('.search-result-item');
             if (first) first.click();
@@ -1594,6 +1685,9 @@ var _searchLeafletMarker = null;
 
     // 외부 클릭 시 결과 닫기
     document.addEventListener('click', function(e) {
-        if (!e.target.closest('#mapSearchWrap') && !e.target.closest('.place-info-modal')) closeResults();
+        if (!e.target.closest('#mapSearchWrap') && !e.target.closest('.place-info-modal')) {
+            closeResults();
+            hidePresets();
+        }
     });
 })();

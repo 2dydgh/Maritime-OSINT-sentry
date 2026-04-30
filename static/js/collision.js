@@ -87,20 +87,19 @@ if (tabDist) tabDist.addEventListener('click', function() { switchCollisionTab('
 if (tabMl) tabMl.addEventListener('click', function() { switchCollisionTab('ml'); });
 
 function collisionSeverityBadge(severity) {
-    var colors = { danger: '#f43f5e', caution: '#f97316', warning: '#eab308' };
-    var labels = { danger: '\u26A0 위험', caution: '\u25C6 경고', warning: '\u25B2 주의' };
-    var bgs = { danger: 'rgba(244,63,94,0.2)', caution: 'rgba(249,115,22,0.2)', warning: 'rgba(234,179,8,0.2)' };
-    var c = colors[severity] || '#eab308';
-    var bg = bgs[severity] || 'rgba(234,179,8,0.2)';
+    var colors = { danger: '#ef4444', caution: '#fb923c', warning: '#fbbf24' };
+    var dots = { danger: '#ef4444', caution: '#fb923c', warning: '#fbbf24' };
+    var labels = { danger: '위험', caution: '경고', warning: '주의' };
+    var c = colors[severity] || '#fbbf24';
+    var d = dots[severity] || '#fbbf24';
     var lbl = labels[severity] || severity;
-    return '<span class="collision-badge" style="background:' + bg + ';color:' + c + '">' + lbl + '</span>';
+    return '<span class="collision-badge" style="color:' + c + '"><span class="collision-dot" style="background:' + d + '"></span>' + lbl + '</span>';
 }
 
 function mlRiskBadge(level, label) {
-    var colors = { 0: '#10b981', 1: '#eab308', 2: '#f97316', 3: '#f43f5e' };
-    var bgs = { 0: 'rgba(16,185,129,0.2)', 1: 'rgba(234,179,8,0.2)', 2: 'rgba(249,115,22,0.2)', 3: 'rgba(244,63,94,0.2)' };
+    var colors = { 0: '#6ee7b7', 1: '#fbbf24', 2: '#fb923c', 3: '#ef4444' };
     var icons = { 0: '\u24EA', 1: '\u2460', 2: '\u2461', 3: '\u2462' };
-    return '<span class="collision-badge" style="background:' + bgs[level] + ';color:' + colors[level] + '">' + icons[level] + ' ' + label + '</span>';
+    return '<span class="collision-badge" style="color:' + colors[level] + '"><span class="collision-dot" style="background:' + colors[level] + '"></span>' + icons[level] + ' ' + label + '</span>';
 }
 
 function _renderCollisionTicker(list, cardsHtml, count) {
