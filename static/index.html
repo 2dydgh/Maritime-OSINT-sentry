@@ -463,6 +463,21 @@
 
     </div><!-- /app-layout -->
 
+    <!-- Chat Panel -->
+    <div id="chat-panel" class="chat-panel">
+        <div class="chat-panel-header" id="chat-toggle-btn">
+            <span class="chat-panel-title">AI 어시스턴트</span>
+            <span class="chat-panel-toggle-icon">&#9650;</span>
+        </div>
+        <div class="chat-panel-body">
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input-row">
+                <input type="text" id="chat-input" class="chat-input" placeholder="질문을 입력하세요..." autocomplete="off" />
+                <button id="chat-send-btn" class="chat-send-btn" title="전송">&#9654;</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Centered Loader -->
     <div id="loading" class="glass-panel">
         <i class="fa-solid fa-circle-notch fa-spin"></i> <span id="loading-text">서버 연결 중...</span>
@@ -489,6 +504,7 @@
     <script src="js/websocket.js?v=4"></script>
     <script src="js/ui-controls.js?v=7"></script>
     <script src="js/charts.js?v=5"></script>
+    <script src="js/chat.js?v=1"></script>
     <script>
         // ── 앱 부트스트랩 ──
         document.addEventListener('DOMContentLoaded', function() {
