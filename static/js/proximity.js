@@ -284,6 +284,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
         var tgt = shipDataMap[nv.mmsi] || shipDataMap[String(nv.mmsi)]
             || (nv.lat != null ? { lat: nv.lat, lng: nv.lng, sog: 0, cog: 0, name: '' } : null);
         if (!sel || !tgt) { console.warn('[proximity] renderLines skip: sel=', !!sel, 'tgt=', !!tgt, 'mmsi=', nv.mmsi); return; }
+        if (!isFinite(sel.lat) || !isFinite(sel.lng) || !isFinite(tgt.lat) || !isFinite(tgt.lng)) { return; }
 
         // 근접 라인 — PolylineCollection (높이 10m, 해수면 바로 위)
         var lineWidth = isRiskPair ? 4 : isCollisionTarget ? 4 : 1.5;
@@ -351,7 +352,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
 
             // CPA 마커 + 라벨
             var cpa = computeCpa(sel, tgt);
-            if (cpa.tcpaMin > 0 && cpa.tcpaMin < 60) {
+            if (cpa && isFinite(cpa.lat) && isFinite(cpa.lng) && cpa.tcpaMin > 0 && cpa.tcpaMin < 60) {
                 var cpaPoint = proximityCpaPoints.add({
                     position: Cesium.Cartesian3.fromDegrees(cpa.lng, cpa.lat),
                     pixelSize: 10,
