@@ -298,8 +298,9 @@
 }
 
 .ship-stat-unit {
-    color: var(--text-dim);
+    color: var(--text-sub);
     font-size: 8px;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
 }
 
 .ship-detail-card {
@@ -323,6 +324,7 @@
 .ship-detail-key {
     color: var(--text-sub);
     font-size: 11px;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
 }
 
 .ship-detail-val {
@@ -527,7 +529,7 @@
 .detail-label {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.55rem;
-    color: var(--text-dim);
+    color: var(--text-sub);
     flex: 1;
     text-transform: capitalize;
 }
@@ -542,14 +544,14 @@
 .detail-pct {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.45rem;
-    color: var(--text-dim);
+    color: var(--text-sub);
     margin-left: 2px;
 }
 
 .detail-section-title {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.5rem;
-    color: var(--text-dim);
+    color: var(--text-sub);
     text-transform: uppercase;
     letter-spacing: 0.3px;
     margin: 8px 0 4px;
@@ -602,7 +604,7 @@
 .detail-wx-unit {
     font-size: 0.55rem;
     font-weight: 400;
-    color: var(--text-dim);
+    color: var(--text-sub);
 }
 
 .detail-wx-loc {
@@ -977,7 +979,7 @@
 .roll-viewer-section-title {
     font-size: 0.6rem;
     font-weight: 600;
-    color: var(--text-dim);
+    color: var(--text-sub);
     letter-spacing: 1px;
     text-transform: uppercase;
     margin-bottom: 8px;
@@ -994,7 +996,7 @@
 }
 
 .rv-info-label {
-    color: var(--text-dim);
+    color: var(--text-sub);
 }
 
 .rv-info-value {
@@ -1566,10 +1568,11 @@ body {
 }
 
 .brand-sub {
-    color: var(--text-dim);
+    color: var(--text-sub);
     font-size: 12px;
     font-weight: 300;
     letter-spacing: 0.3px;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
 }
 
 .header-stats {
@@ -1736,7 +1739,7 @@ body {
 }
 
 .stat-label {
-    color: var(--text-dim);
+    color: var(--text-sub);
     font-size: 0.6rem;
     font-weight: 600;
     text-transform: uppercase;
@@ -1918,7 +1921,7 @@ body {
     justify-content: space-between;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.6rem;
-    color: var(--text-dim);
+    color: var(--text-sub);
     margin-bottom: 2px;
 }
 
@@ -1931,7 +1934,7 @@ body {
 
 .feed-card .feed-time {
     font-size: 0.58rem;
-    color: var(--text-dim);
+    color: var(--text-sub);
     opacity: 0.7;
 }
 
@@ -1947,7 +1950,7 @@ body {
 .feed-card .feed-body {
     font-size: 0.72rem;
     line-height: 1.6;
-    color: var(--text-dim);
+    color: var(--text-sub);
 }
 
 .feed-card .feed-body .feed-country {
@@ -2322,7 +2325,7 @@ body {
 }
 
 .nearby-dist {
-    color: var(--text-dim);
+    color: var(--text-sub);
     flex-shrink: 0;
 }
 
@@ -2548,7 +2551,7 @@ body {
 }
 
 .collision-row .col-ship small {
-    color: var(--text-dim);
+    color: var(--text-sub);
     font-size: 0.68rem;
     margin-left: 4px;
 }
@@ -2561,12 +2564,12 @@ body {
 }
 
 .collision-row .col-pairs small {
-    color: var(--text-dim);
+    color: var(--text-sub);
     font-size: 0.7rem;
 }
 
 .collision-row .col-area {
-    color: var(--text-dim);
+    color: var(--text-sub);
     font-size: 0.72rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2664,7 +2667,7 @@ body {
 
 .risk-stat-label {
     font-size: 0.6rem;
-    color: var(--text-dim);
+    color: var(--text-sub);
     font-weight: 500;
     letter-spacing: 0.2px;
     opacity: 0.7;
@@ -3381,7 +3384,7 @@ body {
 }
 
 .search-result-item .sri-detail {
-    color: var(--text-dim);
+    color: var(--text-sub);
     font-size: 0.65rem;
     white-space: nowrap;
     overflow: hidden;
@@ -3504,7 +3507,7 @@ body {
 }
 
 .place-info-sub {
-    color: var(--text-dim);
+    color: var(--text-sub);
     font-size: 0.68rem;
     margin-bottom: 8px;
 }
@@ -3536,7 +3539,7 @@ body {
 }
 
 .place-info-key {
-    color: var(--text-dim);
+    color: var(--text-sub);
     font-size: 0.65rem;
 }
 
@@ -3762,7 +3765,7 @@ body {
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
     font-weight: 600;
     letter-spacing: 0.08em;
-    color: var(--text-dim);
+    color: var(--text-sub);
 }
 
 .summary-total-badge {
@@ -4626,9 +4629,12 @@ input[type="range"]#routeSpeedSlider {
     background: transparent;
     border: 1px solid rgba(255,255,255,0.06);
     margin-top: 8px;
-    cursor: pointer;
+    cursor: grab;
     transition: border-color 0.2s, box-shadow 0.2s;
     box-sizing: border-box;
+}
+.ship-preview-container:active {
+    cursor: grabbing;
 }
 .ship-preview-container:hover {
     border-color: rgba(56,189,248,0.35);
@@ -4676,7 +4682,7 @@ input[type="range"]#routeSpeedSlider {
 }
 .ship-preview-modal {
     width: min(680px, 90vw);
-    height: min(480px, 75vh);
+    max-height: min(520px, 80vh);
     background: #0f1923;
     border: 1px solid rgba(56,189,248,0.2);
     border-radius: 12px;
@@ -4722,6 +4728,7 @@ input[type="range"]#routeSpeedSlider {
 }
 .ship-preview-modal-body {
     flex: 1;
+    min-height: 320px;
     position: relative;
     cursor: grab;
 }
@@ -4732,9 +4739,10 @@ input[type="range"]#routeSpeedSlider {
     display: flex;
     gap: 20px;
     justify-content: center;
-    padding: 10px 16px;
+    padding: 12px 16px;
     background: rgba(30,41,59,0.6);
     border-top: 1px solid rgba(56,189,248,0.1);
+    flex-shrink: 0;
 }
 .modal-dim {
     display: flex;

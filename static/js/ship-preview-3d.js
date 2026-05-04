@@ -158,9 +158,10 @@ var ShipPreview3D = (function () {
         var size = new THREE.Vector3();
         box.getSize(size);
         var center = box.getCenter(new THREE.Vector3());
-        var maxDim = Math.max(size.x, size.z);
-        var dist = maxDim * (isModal ? 1.5 : 1.7);
-        camera.position.set(0, dist * 0.4, dist);
+        var maxDim = Math.max(size.x, size.z) || 10;
+        // Extra room for dimension lines (length below, beam to side)
+        var dist = maxDim * (isModal ? 2.2 : 1.7);
+        camera.position.set(center.x, center.y + dist * 0.45, center.z + dist);
         controls.target.copy(center);
         controls.update();
 

@@ -100,6 +100,6 @@ var ML_RISK_LABELS = { 3: '위험', 2: '경고', 1: '주의' };
 var ship3dDataSource = null;       // CustomDataSource for 3D model entities
 var ship3dEntityMap = {};          // { mmsi: Entity }
 var ship3dEnabled = false;         // whether 3D models are currently shown
-var SHIP_3D_HEIGHT_THRESHOLD = 30000;  // camera height (m) below which 3D models appear
+var SHIP_3D_HEIGHT_THRESHOLD = 0;  // disabled — 3D models submerge into terrain, fix later
 var SHIP_3D_MAX_COUNT = 25;        // max simultaneous 3D model entities
 var SHIP_3D_MODEL_URL = 'models/ships/cargo.glb';
