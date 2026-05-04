@@ -4918,7 +4918,7 @@ input[type="range"]#routeSpeedSlider {
 
 .chat-msg-typing {
     align-self: flex-start;
-    color: var(--text-dim, #52525b);
+    color: var(--text-sub, #a1a1aa);
     font-style: italic;
     font-size: 0.7rem;
     background: transparent;
