@@ -570,3 +570,11 @@ SHIP_TYPES.forEach(async function(type) {
     await viewer.dataSources.add(ds);
 });
 
+// ── EventBus Subscribers ──
+
+EventBus.on('command:flyTo', function(data) {
+    smoothFlyTo({
+        destination: Cesium.Cartesian3.fromDegrees(data.lng, data.lat, data.height || 50000)
+    });
+});
+

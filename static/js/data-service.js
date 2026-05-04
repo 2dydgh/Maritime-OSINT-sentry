@@ -8,12 +8,16 @@ window.DataService = {
     collision: { distance: { risks: [] }, ml: { risks: [] } },
     latestShipMmsis: new Set(),
 
+    _TYPE_MAP: { military_vessel: 'military', unknown: 'other', yacht: 'other' },
+
     updateShips: function(ships) {
         var counts = {};
+        var TYPE_MAP = DataService._TYPE_MAP;
         ships.forEach(function(s) {
+            var raw = s.type || 'other';
+            s.type = TYPE_MAP[raw] || raw;
             DataService.ships[s.mmsi] = s;
-            var type = s.type || 'other';
-            counts[type] = (counts[type] || 0) + 1;
+            counts[s.type] = (counts[s.type] || 0) + 1;
         });
         // Preserve Set reference — clear and re-populate instead of replacing
         DataService.latestShipMmsis.clear();

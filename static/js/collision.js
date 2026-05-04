@@ -373,33 +373,29 @@ function _handleCollisionCardClick(card) {
 
     var midLat = (latA + latB) / 2;
     var midLng = (lngA + lngB) / 2;
-    smoothFlyTo({
-        destination: Cesium.Cartesian3.fromDegrees(midLng, midLat, 15000)
-    });
+    EventBus.emit('command:flyTo', { lat: midLat, lng: midLng, height: 15000 });
 
     if (collisionActiveTab === 'ml') {
         // AI 분석 탭: 해당 두 선박만 표시 (근접 선박 전체 X)
-        selectedProximityMmsi = null;
-        collisionTargetMmsi = mmsiB;
-        var distNm = haversineNm(latA, lngA, latB, lngB);
         var riskLevel = parseInt(card.dataset.riskLevel) || 1;
-        // shipDataMap에 선박이 없을 때를 대비해 _selData fallback 포함
-        var selFallback = { lat: latA, lng: lngA, sog: parseFloat(card.dataset.sogA) || 0, cog: parseFloat(card.dataset.cogA) || 0, name: card.dataset.nameA || '' };
-        renderProximityLines(mmsiA, [{
-            mmsi: mmsiB,
-            lat: latB,
-            lng: lngB,
-            distance: distNm,
-            mlRiskLevel: riskLevel,
-            _selData: selFallback
-        }]);
-        renderNearbyPanel([]);
+        EventBus.emit('ship:selected', {
+            mmsi: mmsiA,
+            target: mmsiB,
+            mode: 'pair',
+            riskLevel: riskLevel,
+            latA: latA, lngA: lngA,
+            latB: latB, lngB: lngB,
+            sogA: parseFloat(card.dataset.sogA) || 0,
+            cogA: parseFloat(card.dataset.cogA) || 0,
+            nameA: card.dataset.nameA || ''
+        });
     } else {
         // 거리 기반 탭: 근접 선박 전체 표시
-        collisionTargetMmsi = mmsiB;
-        selectedProximityMmsi = mmsiA;
-        proximityMissCount = 0;
-        updateProximity();
+        EventBus.emit('ship:selected', {
+            mmsi: mmsiA,
+            target: mmsiB,
+            mode: 'proximity'
+        });
     }
 
     // 충돌 쌍 자동 추적 시작 (카메라 따라가기 + 위험 해제 감지)
@@ -475,7 +471,8 @@ async function fetchCollisionRisks() {
     try {
         var resp = await fetch('/api/v1/collision/risks');
         if (!resp.ok) return;
-        collisionData = await resp.json();
+        var data = await resp.json();
+        DataService.updateCollision(data);
         renderCollisionList();
 
         var mlSerious = (collisionData.ml?.risks || []).filter(function(r) { return r.risk_level >= 2; }).length;
@@ -497,3 +494,9 @@ window.fetchCollisionRisks = fetchCollisionRisks;
 function _updateHeaderCollisionStats() {
     // Removed — stats now only shown in drawer header pills
 }
+
+// ── EventBus Subscribers ──
+
+EventBus.on('proximity:cleared', function() {
+    clearCollisionPair();
+});

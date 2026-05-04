@@ -597,3 +597,24 @@ var BottomBar = (function() {
 })();
 
 window.BottomBar = BottomBar;
+
+// ── EventBus Subscribers ──
+
+EventBus.on('ships:updated', function(data) {
+    BottomBar.updateVesselTypes(data.counts);
+    BottomBar.updateFlagDistribution(data.ships);
+    BottomBar._storeVessels(data.ships);
+});
+
+EventBus.on('aircraft:updated', function(data) {
+    if (BottomBar.updateAircraftTypes) {
+        BottomBar.updateAircraftTypes(data.aircraft);
+    }
+});
+
+EventBus.on('collision:updated', function(data) {
+    var mlRisks = (data.ml && data.ml.risks) || [];
+    var mlByLevel = { 1: 0, 2: 0, 3: 0 };
+    mlRisks.forEach(function(r) { if (mlByLevel[r.risk_level] !== undefined) mlByLevel[r.risk_level]++; });
+    BottomBar.updateRiskLevels(mlByLevel[3], mlByLevel[2], mlByLevel[1]);
+});

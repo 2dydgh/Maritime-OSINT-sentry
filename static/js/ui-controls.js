@@ -1161,8 +1161,21 @@ function showShipInfo(entityOrMmsi) {
     };
     ShipPreview3D.init(previewContainer, shipTypeKey, dims);
 
-    previewContainer.addEventListener('click', function () {
-        ShipPreview3D.openModal();
+    // Distinguish drag (rotation) from click — only open modal on short, non-moved clicks
+    var _previewPointerStart = null;
+    previewContainer.addEventListener('pointerdown', function (e) {
+        _previewPointerStart = { x: e.clientX, y: e.clientY, t: Date.now() };
+    });
+    previewContainer.addEventListener('pointerup', function (e) {
+        if (!_previewPointerStart) return;
+        var dx = e.clientX - _previewPointerStart.x;
+        var dy = e.clientY - _previewPointerStart.y;
+        var dt = Date.now() - _previewPointerStart.t;
+        _previewPointerStart = null;
+        // Only open modal if pointer barely moved and was a quick tap
+        if (Math.abs(dx) < 5 && Math.abs(dy) < 5 && dt < 300) {
+            ShipPreview3D.openModal();
+        }
     });
 
     // Render model summary cards from registry
@@ -1691,3 +1704,31 @@ var _searchLeafletMarker = null;
         }
     });
 })();
+
+// ── EventBus Subscribers ──
+
+EventBus.on('ships:updated', function(data) {
+    var totalEl = document.getElementById('total-ships');
+    if (totalEl) animateCount(totalEl, data.ships.length.toLocaleString());
+
+    SHIP_TYPES.forEach(function(type) {
+        var countEl = document.getElementById('count-' + type);
+        if (countEl) animateCount(countEl, (data.counts[type] || 0).toLocaleString());
+    });
+});
+
+EventBus.on('aircraft:updated', function(data) {
+    var totalAcEl = document.getElementById('total-aircraft');
+    if (totalAcEl) animateCount(totalAcEl, data.aircraft.length.toLocaleString());
+    var chipAc = document.getElementById('chipAircraftCount');
+    if (chipAc) chipAc.textContent = data.aircraft.length.toLocaleString();
+
+    AIRCRAFT_TYPES.forEach(function(type) {
+        var countEl = document.getElementById('count-ac-' + type);
+        if (countEl) animateCount(countEl, (data.counts[type] || 0).toLocaleString());
+    });
+});
+
+EventBus.on('ws:status', function(status) {
+    if (typeof setWsStatus === 'function') setWsStatus(status);
+});

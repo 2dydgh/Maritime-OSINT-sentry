@@ -400,19 +400,8 @@ window.renderProximityLines = renderProximityLines;
 
 var _nearbyModal = null;
 
-function renderNearbyPanel(nearbyVessels) {
-    // Close existing modal
-    if (_nearbyModal && _nearbyModal.parentNode) {
-        _nearbyModal.parentNode.removeChild(_nearbyModal);
-        _nearbyModal = null;
-    }
-
-    if (nearbyVessels.length === 0) return;
-
-    var hasMlMatches = nearbyVessels.some(function(nv) { return nv.mlRiskLevel != null && nv.mlRiskLevel > 0; });
-
-    // Build rows
-    var rowsHtml = nearbyVessels.map(function(nv) {
+function _buildNearbyRowsHtml(nearbyVessels) {
+    return nearbyVessels.map(function(nv) {
         var isCollisionTarget = collisionTargetMmsi != null && (nv.mmsi == collisionTargetMmsi);
         var hasMlRisk = nv.mlRiskLevel != null && nv.mlRiskLevel > 0;
         var hasDistRiskDot = nv.distSeverity != null;
@@ -451,8 +440,39 @@ function renderNearbyPanel(nearbyVessels) {
             + '<span class="nearby-dist" style="' + (anyRisk ? 'color:' + color.css + ';font-weight:700;' : '') + '">' + nv.distance.toFixed(1) + ' nm</span>'
             + '</div>';
     }).join('');
+}
 
-    // Create modal
+function renderNearbyPanel(nearbyVessels) {
+    // Empty list — close modal
+    if (nearbyVessels.length === 0) {
+        if (_nearbyModal && _nearbyModal.parentNode) {
+            _nearbyModal.parentNode.removeChild(_nearbyModal);
+            _nearbyModal = null;
+        }
+        return;
+    }
+
+    var hasMlMatches = nearbyVessels.some(function(nv) { return nv.mlRiskLevel != null && nv.mlRiskLevel > 0; });
+    var rowsHtml = _buildNearbyRowsHtml(nearbyVessels);
+
+    // If modal already exists, update content in-place (no flicker)
+    if (_nearbyModal && _nearbyModal.parentNode) {
+        var countEl = _nearbyModal.querySelector('.nearby-modal-count');
+        if (countEl) countEl.textContent = nearbyVessels.length;
+        var bodyEl = _nearbyModal.querySelector('.nearby-modal-body');
+        if (bodyEl) bodyEl.innerHTML = rowsHtml;
+        // Re-bind row clicks
+        _nearbyModal.querySelectorAll('.nearby-row').forEach(function(row) {
+            row.addEventListener('click', function() {
+                var lat = parseFloat(row.dataset.lat);
+                var lng = parseFloat(row.dataset.lng);
+                EventBus.emit('command:flyTo', { lat: lat, lng: lng, height: 50000 });
+            });
+        });
+        return;
+    }
+
+    // Create modal (first time only)
     _nearbyModal = document.createElement('div');
     _nearbyModal.className = 'nearby-modal';
     _nearbyModal.innerHTML =
@@ -469,10 +489,7 @@ function renderNearbyPanel(nearbyVessels) {
 
     // Close button
     _nearbyModal.querySelector('.nearby-modal-close').addEventListener('click', function() {
-        if (_nearbyModal && _nearbyModal.parentNode) {
-            _nearbyModal.parentNode.removeChild(_nearbyModal);
-            _nearbyModal = null;
-        }
+        clearProximity();
     });
 
     // Drag to move
@@ -489,7 +506,6 @@ function renderNearbyPanel(nearbyVessels) {
             var rect = modal.getBoundingClientRect();
             origX = rect.left;
             origY = rect.top;
-            // Switch to top/left positioning
             if (!modal.classList.contains('is-dragged')) {
                 modal.style.left = origX + 'px';
                 modal.style.top = origY + 'px';
@@ -518,9 +534,7 @@ function renderNearbyPanel(nearbyVessels) {
         row.addEventListener('click', function() {
             var lat = parseFloat(row.dataset.lat);
             var lng = parseFloat(row.dataset.lng);
-            smoothFlyTo({
-                destination: Cesium.Cartesian3.fromDegrees(lng, lat, 50000)
-            });
+            EventBus.emit('command:flyTo', { lat: lat, lng: lng, height: 50000 });
         });
     });
 
@@ -543,7 +557,7 @@ function clearProximity() {
 
     // 자동 추적 + 충돌 페어 초기화
     _collisionTrackingActive = false;
-    if (typeof clearCollisionPair === 'function') clearCollisionPair();
+    EventBus.emit('proximity:cleared');
 
     // Primitive Collections 클리어
     if (proximityLines) proximityLines.removeAll();
@@ -643,3 +657,30 @@ function checkCollisionResolution() {
     }
 }
 window.checkCollisionResolution = checkCollisionResolution;
+
+// ── EventBus Subscribers ──
+
+EventBus.on('ship:selected', function(data) {
+    if (data.mode === 'pair') {
+        // ML tab: show only the specific pair
+        selectedProximityMmsi = null;
+        collisionTargetMmsi = data.target;
+        var distNm = haversineNm(data.latA, data.lngA, data.latB, data.lngB);
+        var selFallback = { lat: data.latA, lng: data.lngA, sog: data.sogA || 0, cog: data.cogA || 0, name: data.nameA || '' };
+        renderProximityLines(data.mmsi, [{
+            mmsi: data.target,
+            lat: data.latB,
+            lng: data.lngB,
+            distance: distNm,
+            mlRiskLevel: data.riskLevel,
+            _selData: selFallback
+        }]);
+        renderNearbyPanel([]);
+    } else if (data.mode === 'proximity') {
+        // Distance tab: show all nearby
+        collisionTargetMmsi = data.target;
+        selectedProximityMmsi = data.mmsi;
+        proximityMissCount = 0;
+        updateProximity();
+    }
+});

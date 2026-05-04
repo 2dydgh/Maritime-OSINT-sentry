@@ -220,14 +220,8 @@ function updateShipsLayer(ships) {
     var byType = {};
     SHIP_TYPES.forEach(function(t) { byType[t] = []; });
 
-    ships.forEach(function(s) { shipDataMap[s.mmsi] = s; });
-
-    var TYPE_MAP = { military_vessel: 'military', unknown: 'other', yacht: 'other' };
-
     ships.forEach(function(ship) {
-        var raw = ship.type || 'other';
-        var type = TYPE_MAP[raw] || raw;
-        ship.type = type;
+        var type = ship.type || 'other';
         if (byType[type]) byType[type].push(ship);
         else byType['other'].push(ship);
     });
@@ -301,9 +295,6 @@ function updateShipsLayer(ships) {
                     ds.entities.remove(entity);
                 }
             });
-
-            var countEl = document.getElementById('count-' + type);
-            if (countEl) animateCount(countEl, typeShips.length.toLocaleString());
         });
         return;
     }
@@ -402,9 +393,6 @@ function updateShipsLayer(ships) {
             delete shipBillboardMap[mmsi];
             delete shipLabelMap[mmsi];
         });
-
-        var countEl = document.getElementById('count-' + type);
-        if (countEl) animateCount(countEl, typeShips.length.toLocaleString());
     });
 
     // Update 3D models if zoomed in
@@ -527,8 +515,6 @@ window.showAircraftInfo = showAircraftInfo;
 function updateAircraftLayer(aircraft) {
     var byType = {};
     AIRCRAFT_TYPES.forEach(function(t) { byType[t] = []; });
-
-    aircraft.forEach(function(ac) { aircraftDataMap[ac.icao24] = ac; });
 
     aircraft.forEach(function(ac) {
         var type = ac.category || 'other';
@@ -653,9 +639,6 @@ function updateAircraftLayer(aircraft) {
                 delete aircraftBillboardMap[icao24];
                 delete aircraftLabelMap[icao24];
             });
-
-            var countEl = document.getElementById('count-ac-' + type);
-            if (countEl) animateCount(countEl, typeAircraft.length.toLocaleString());
         });
     }
 
@@ -747,10 +730,6 @@ function updateAircraftLayer(aircraft) {
             }
         });
 
-        AIRCRAFT_TYPES.forEach(function(type) {
-            var countEl = document.getElementById('count-ac-' + type);
-            if (countEl) animateCount(countEl, (byType[type] || []).length.toLocaleString());
-        });
     }
 
     if (viewer && viewer.scene) viewer.scene.requestRender();
@@ -767,7 +746,7 @@ function initWebSocket() {
 
     ws.onopen = function() {
         console.log("WebSocket connected!");
-        if (typeof setWsStatus === 'function') setWsStatus('connected');
+        EventBus.emit('ws:status', 'connected');
         var loadingText = document.getElementById('loading-text');
         if (loadingText) loadingText.textContent = 'AIS 데이터 수신 대기...';
     };
@@ -787,55 +766,11 @@ function initWebSocket() {
                         }
                     }
                 }
-                var loadingEl = document.getElementById('loading');
-                var loadingTextEl = document.getElementById('loading-text');
-                var isFirstLoad2d = Object.keys(leafletShipMarkers).length === 0 && currentMapMode === '2d';
 
                 _lastShipsData = data.ships || [];
 
-                if (isFirstLoad2d && loadingEl && loadingTextEl) {
-                    // 2D 첫 렌더링: 로딩 표시 → 화면 갱신 → 렌더링 → 로딩 숨김
-                    loadingTextEl.textContent = '선박 데이터 렌더링 중...';
-                    loadingEl.style.display = 'flex';
-                    requestAnimationFrame(function() {
-                        setTimeout(function() {
-                            updateShipsLayer(_lastShipsData);
-                            if (loadingEl) loadingEl.style.display = 'none';
-                        }, 0);
-                    });
-                } else {
-                    // 일반 업데이트
-                    if (loadingEl && loadingEl.style.display !== 'none') {
-                        loadingEl.style.display = 'none';
-                    }
-                    updateShipsLayer(_lastShipsData);
-                }
-
-                // Update ship type distribution chart
-                if (typeof updateShipTypeChart === 'function') updateShipTypeChart(data.ships || []);
-
-                latestWsShipsMmsis = new Set((data.ships || []).map(function(s) { return s.mmsi; }));
-
-                if (selectedProximityMmsi) {
-                    var now = Date.now();
-                    if (now - lastProximityUpdate >= PROXIMITY_THROTTLE_MS) {
-                        lastProximityUpdate = now;
-                        updateProximity();
-                    }
-                }
-
-
-                var totalShipsEl = document.getElementById('total-ships');
-                var totalCount = _lastShipsData.length;
-                animateCount(totalShipsEl, totalCount.toLocaleString());
-
-                // Bottom bar vessel count + type distribution
-                if (typeof BottomBar !== 'undefined') {
-                    // FLAG country distribution
-                    BottomBar.updateFlagDistribution(_lastShipsData);
-                    BottomBar._storeVessels(_lastShipsData);
-
-                }
+                // DataService handles state + emits 'ships:updated'
+                DataService.updateShips(_lastShipsData);
 
                 if (data.timestamp) {
                     var updated = new Date(data.timestamp);
@@ -843,18 +778,11 @@ function initWebSocket() {
                     document.getElementById('last-update').textContent = kst.toISOString().substring(11, 19);
                 }
 
-                // Update header latency indicator
                 _lastWsReceived = Date.now();
             }
             else if (data.type === "aircraft_update") {
-                updateAircraftLayer(data.aircraft || []);
-                var totalAcEl = document.getElementById('total-aircraft');
-                if (totalAcEl) animateCount(totalAcEl, (data.aircraft || []).length.toLocaleString());
-                var chipAc = document.getElementById('chipAircraftCount');
-                if (chipAc) chipAc.textContent = (data.aircraft || []).length.toLocaleString();
-                if (typeof BottomBar !== 'undefined' && BottomBar.updateAircraftTypes) {
-                    BottomBar.updateAircraftTypes(data.aircraft || []);
-                }
+                // DataService handles state + emits 'aircraft:updated'
+                DataService.updateAircraft(data.aircraft || []);
             }
         } catch (error) {
             console.error("Error parsing WebSocket message:", error);
@@ -863,12 +791,12 @@ function initWebSocket() {
 
     ws.onerror = function(error) {
         console.error("WebSocket error:", error);
-        if (typeof setWsStatus === 'function') setWsStatus('disconnected');
+        EventBus.emit('ws:status', 'disconnected');
     };
 
     ws.onclose = function() {
         console.log("WebSocket closed. Reconnecting in 2 seconds...");
-        if (typeof setWsStatus === 'function') setWsStatus('connecting');
+        EventBus.emit('ws:status', 'connecting');
         var loadingEl = document.getElementById('loading');
         if (loadingEl) {
             loadingEl.style.display = '';
@@ -893,6 +821,53 @@ setInterval(function() {
         led.className = 'ws-led ' + (ago <= 5 ? 'connected' : ago <= 15 ? 'connecting' : 'disconnected');
     }
 }, 1000);
+
+// ── EventBus Subscribers ──
+
+EventBus.on('ships:updated', function(data) {
+    var ships = data.ships;
+
+    // Loading overlay handling
+    var loadingEl = document.getElementById('loading');
+    var loadingTextEl = document.getElementById('loading-text');
+    var isFirstLoad2d = Object.keys(leafletShipMarkers).length === 0 && currentMapMode === '2d';
+
+    if (isFirstLoad2d && loadingEl && loadingTextEl) {
+        loadingTextEl.textContent = '선박 데이터 렌더링 중...';
+        loadingEl.style.display = 'flex';
+        requestAnimationFrame(function() {
+            setTimeout(function() {
+                updateShipsLayer(ships);
+                if (loadingEl) loadingEl.style.display = 'none';
+            }, 0);
+        });
+    } else {
+        if (loadingEl && loadingEl.style.display !== 'none') {
+            loadingEl.style.display = 'none';
+        }
+        updateShipsLayer(ships);
+    }
+
+    // Ship type distribution chart
+    if (typeof updateShipTypeChart === 'function') updateShipTypeChart(ships);
+
+    // Proximity refresh (throttled)
+    if (selectedProximityMmsi) {
+        var now = Date.now();
+        if (now - lastProximityUpdate >= PROXIMITY_THROTTLE_MS) {
+            lastProximityUpdate = now;
+            updateProximity();
+        }
+    }
+});
+
+EventBus.on('aircraft:updated', function(data) {
+    updateAircraftLayer(data.aircraft);
+});
+
+EventBus.on('ws:status', function(status) {
+    if (typeof setWsStatus === 'function') setWsStatus(status);
+});
 
 // ── Ship Highlight (targeting reticle on navigation) ──
 var _highlightEntity = null;
