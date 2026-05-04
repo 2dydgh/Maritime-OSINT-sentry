@@ -47,6 +47,23 @@ def classify_vessel(ais_type: int, mmsi: int) -> str:
     return "unknown"            # Not yet classified — will update when ShipStaticData arrives
 
 
+# AIS Navigational Status codes → human-readable
+_NAV_STATUS_MAP = {
+    0: "기관 항해 중",
+    1: "정박 중",
+    2: "조종 불능",
+    3: "조종 제한",
+    4: "흘수 제한",
+    5: "계류 중",
+    6: "좌초",
+    7: "조업 중",
+    8: "범선 항해 중",
+    11: "예인 중",
+    12: "추진 중",
+    14: "AIS-SART",
+    15: "",  # Not defined / default
+}
+
 # MMSI Maritime Identification Digit (MID) → Country mapping
 # First 3 digits of MMSI (for 9-digit MMSIs) encode the flag state
 MID_COUNTRY = {
@@ -307,6 +324,7 @@ def get_ais_vessels() -> list[dict]:
                 "draught": v.get("draught", 0),
                 "eta": v.get("eta", ""),
                 "ais_class": v.get("ais_class", "A"),
+                "status": v.get("status", ""),
             })
         ais_vessels_active.set(len(result))
         return result
@@ -395,6 +413,10 @@ def _ais_stream_loop():
                         vessel["heading"] = heading if heading != 511 else report.get("Cog", 0)
                         vessel["_updated"] = time.time()
                         vessel["ais_class"] = "B" if msg_type == "StandardClassBPositionReport" else "A"
+                        # Navigation status (Class A only)
+                        if msg_type == "PositionReport":
+                            nav_status = report.get("NavigationalStatus", 15)
+                            vessel["status"] = _NAV_STATUS_MAP.get(nav_status, "")
                         # Use metadata name if we don't have one yet
                         if not vessel.get("name") or vessel["name"] == "UNKNOWN":
                             vessel["name"] = metadata.get("ShipName", "UNKNOWN").strip() or "UNKNOWN"
