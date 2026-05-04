@@ -3268,7 +3268,6 @@ body {
 
 #mapSearchInput::placeholder {
     color: var(--text-sub);
-    opacity: 0.7;
 }
 
 /* Region presets dropdown inside search */
