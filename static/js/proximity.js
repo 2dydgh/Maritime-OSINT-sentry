@@ -324,6 +324,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
         if (showCollisionViz) {
             // COG 프로젝션 — 선택 선박
             var selEnd = projectPosition(sel.lat, sel.lng, sel.cog || 0, Math.max((sel.sog || 0) / 60 * 10, 0.5));
+            if (!isFinite(selEnd.lat) || !isFinite(selEnd.lng)) return;
             var cogSel = proximityCogLines.add({
                 positions: Cesium.Cartesian3.fromDegreesArrayHeights([
                     sel.lng, sel.lat, 100, selEnd.lng, selEnd.lat, 100
@@ -337,6 +338,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
 
             // COG 프로젝션 — 대상 선박
             var tgtEnd = projectPosition(tgt.lat, tgt.lng, tgt.cog || 0, Math.max((tgt.sog || 0) / 60 * 10, 0.5));
+            if (!isFinite(tgtEnd.lat) || !isFinite(tgtEnd.lng)) { entry.cogSel = cogSel; return; }
             var cogTgt = proximityCogLines.add({
                 positions: Cesium.Cartesian3.fromDegreesArrayHeights([
                     tgt.lng, tgt.lat, 100, tgtEnd.lng, tgtEnd.lat, 100

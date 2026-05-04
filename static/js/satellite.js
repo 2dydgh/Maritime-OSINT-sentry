@@ -295,7 +295,7 @@ function _propagateSatPositions() {
                 var cesiumColor = Cesium.Color.fromCssColorString(color);
 
                 var orbitCoords = _computeOrbitPath(satrec, now);
-                if (orbitCoords.length > 6) {
+                if (orbitCoords.length > 6 && orbitCoords.every(isFinite)) {
                     satDataSource.entities.add({
                         id: 'orbit-' + satId,
                         polyline: {
@@ -311,7 +311,7 @@ function _propagateSatPositions() {
                 }
 
                 var groundCoords = _computeGroundTrack(satrec, now);
-                if (groundCoords.length > 4) {
+                if (groundCoords.length > 4 && groundCoords.every(isFinite)) {
                     satDataSource.entities.add({
                         id: 'ground-' + satId,
                         polyline: {
