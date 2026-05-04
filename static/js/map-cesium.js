@@ -573,8 +573,11 @@ SHIP_TYPES.forEach(async function(type) {
 // ── EventBus Subscribers ──
 
 EventBus.on('command:flyTo', function(data) {
+    var lon = data.lng || data.lon;
+    var lat = data.lat;
+    if (!isFinite(lat) || !isFinite(lon)) return;
     smoothFlyTo({
-        destination: Cesium.Cartesian3.fromDegrees(data.lng, data.lat, data.height || 50000)
+        destination: Cesium.Cartesian3.fromDegrees(lon, lat, data.height || 50000)
     });
 });
 

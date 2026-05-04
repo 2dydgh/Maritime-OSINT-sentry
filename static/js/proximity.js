@@ -92,13 +92,14 @@ window.computeCpa = computeCpa;
  */
 function findNearbyVesselsCandidates(mmsi, radiusNm, maxCount) {
     var selected = shipDataMap[mmsi];
-    if (!selected) return { selected: selected, results: [] };
+    if (!selected || !isFinite(selected.lat) || !isFinite(selected.lng)) return { selected: null, results: [] };
 
     var results = [];
     for (var key in shipDataMap) {
         if (key == mmsi) continue;
         var vessel = shipDataMap[key];
         if (!latestWsShipsMmsis.has(vessel.mmsi)) continue;
+        if (!isFinite(vessel.lat) || !isFinite(vessel.lng)) continue;
 
         var dist = haversineNm(selected.lat, selected.lng, vessel.lat, vessel.lng);
         if (dist <= radiusNm) {
