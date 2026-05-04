@@ -4947,7 +4947,7 @@ input[type="range"]#routeSpeedSlider {
 }
 
 .chat-input::placeholder {
-    color: var(--text-dim, #52525b);
+    color: var(--text-sub, #a1a1aa);
 }
 
 .chat-input:focus {
