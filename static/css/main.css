@@ -138,7 +138,7 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.45rem;
     font-weight: 600;
-    color: rgba(148, 163, 184, 0.5);
+    color: var(--text-sub, #a1a1aa);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     text-align: center;
