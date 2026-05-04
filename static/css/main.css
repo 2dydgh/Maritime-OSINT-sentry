@@ -2760,7 +2760,7 @@ body {
 #mapNavControls {
     position: absolute;
     bottom: 20px;
-    left: 20px;
+    right: 20px;
     z-index: 100;
     display: grid;
     grid-template-areas:
@@ -4769,7 +4769,7 @@ input[type="range"]#routeSpeedSlider {
 .chat-bubble {
     position: fixed;
     bottom: 72px;
-    right: 20px;
+    left: 20px;
     width: 48px;
     height: 48px;
     border-radius: 50%;
@@ -4799,7 +4799,7 @@ input[type="range"]#routeSpeedSlider {
 .chat-panel {
     position: fixed;
     bottom: 72px;
-    right: 20px;
+    left: 20px;
     width: 360px;
     height: 460px;
     display: none;
