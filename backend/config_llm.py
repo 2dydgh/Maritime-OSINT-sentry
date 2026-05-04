@@ -1,7 +1,7 @@
 """LLM Agent configuration."""
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "qwen2.5:7b"
+OLLAMA_MODEL = "qwen2.5:3b"
 OLLAMA_TIMEOUT = 60  # seconds
 
 SYSTEM_PROMPT = """당신은 해양 상황 인식 시스템의 AI 어시스턴트입니다.
