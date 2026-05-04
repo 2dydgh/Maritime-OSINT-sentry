@@ -1,10 +1,11 @@
 // ── Maritime OSINT Sentry — Chat UI ──
-// IIFE module providing a collapsible AI assistant chat panel.
+// Floating bubble + panel chat interface for AI assistant.
 // Communicates with POST /api/v1/chat and dispatches EventBus commands.
 
 var ChatUI = (function () {
+    var _bubble = null;
     var _panel = null;
-    var _toggleBtn = null;
+    var _closeBtn = null;
     var _messages = null;
     var _input = null;
     var _sendBtn = null;
@@ -13,22 +14,22 @@ var ChatUI = (function () {
     var _typing = null;
 
     function init() {
+        _bubble = document.getElementById('chat-bubble');
         _panel = document.getElementById('chat-panel');
-        _toggleBtn = document.getElementById('chat-toggle-btn');
+        _closeBtn = document.getElementById('chat-close-btn');
         _messages = document.getElementById('chat-messages');
         _input = document.getElementById('chat-input');
         _sendBtn = document.getElementById('chat-send-btn');
 
-        if (!_panel || !_toggleBtn || !_messages || !_input || !_sendBtn) {
+        if (!_bubble || !_panel || !_messages || !_input || !_sendBtn) {
             console.warn('[ChatUI] Required DOM elements not found.');
             return;
         }
 
-        _toggleBtn.addEventListener('click', toggle);
+        _bubble.addEventListener('click', open);
+        if (_closeBtn) _closeBtn.addEventListener('click', close);
 
-        _sendBtn.addEventListener('click', function () {
-            send();
-        });
+        _sendBtn.addEventListener('click', function () { send(); });
 
         _input.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -38,13 +39,22 @@ var ChatUI = (function () {
         });
     }
 
+    function open() {
+        _isOpen = true;
+        _panel.classList.add('chat-panel-open');
+        _bubble.classList.add('chat-bubble-hidden');
+        _input.focus();
+    }
+
+    function close() {
+        _isOpen = false;
+        _panel.classList.remove('chat-panel-open');
+        _bubble.classList.remove('chat-bubble-hidden');
+    }
+
     function toggle() {
-        _isOpen = !_isOpen;
-        if (_isOpen) {
-            _panel.classList.add('chat-panel-open');
-        } else {
-            _panel.classList.remove('chat-panel-open');
-        }
+        if (_isOpen) close();
+        else open();
     }
 
     function send() {
@@ -62,7 +72,7 @@ var ChatUI = (function () {
         fetch('/api/v1/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, history: _history })
+            body: JSON.stringify({ message: text, history: _history.slice(-10) })
         })
         .then(function (res) {
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -82,7 +92,7 @@ var ChatUI = (function () {
         })
         .catch(function (err) {
             _hideTyping();
-            _appendMessage('assistant', '오류가 발생했습니다: ' + err.message);
+            _appendMessage('assistant', '오류가 발생했습니다. 다시 시도해주세요.');
             console.error('[ChatUI] fetch error:', err);
         })
         .finally(function () {
@@ -113,7 +123,7 @@ var ChatUI = (function () {
         if (_typing) return;
         _typing = document.createElement('div');
         _typing.className = 'chat-msg chat-msg-typing';
-        _typing.textContent = '입력 중...';
+        _typing.textContent = '생각 중...';
         _messages.appendChild(_typing);
         _messages.scrollTop = _messages.scrollHeight;
     }
@@ -127,6 +137,8 @@ var ChatUI = (function () {
 
     return {
         init: init,
+        open: open,
+        close: close,
         toggle: toggle,
         send: send
     };

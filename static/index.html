@@ -463,11 +463,14 @@
 
     </div><!-- /app-layout -->
 
-    <!-- Chat Panel -->
+    <!-- Chat Floating Bubble + Panel -->
+    <button id="chat-bubble" class="chat-bubble" title="AI 어시스턴트">
+        <i class="fa fa-comment-dots"></i>
+    </button>
     <div id="chat-panel" class="chat-panel">
-        <div class="chat-panel-header" id="chat-toggle-btn">
+        <div class="chat-panel-header">
             <span class="chat-panel-title">AI 어시스턴트</span>
-            <span class="chat-panel-toggle-icon">&#9650;</span>
+            <button id="chat-close-btn" class="chat-close-btn" title="닫기">&times;</button>
         </div>
         <div class="chat-panel-body">
             <div class="chat-messages" id="chat-messages"></div>
