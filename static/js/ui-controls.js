@@ -1732,3 +1732,17 @@ EventBus.on('aircraft:updated', function(data) {
 EventBus.on('ws:status', function(status) {
     if (typeof setWsStatus === 'function') setWsStatus(status);
 });
+
+EventBus.on('command:filter', function(data) {
+    var type = data.shipType;
+    if (!type) return;
+    var chips = document.querySelectorAll('.layer-chip[data-type]');
+    chips.forEach(function(chip) {
+        if (type === 'all') {
+            chip.classList.add('active');
+        } else {
+            chip.classList.toggle('active', chip.dataset.type === type);
+        }
+    });
+    if (typeof applyShipFilters === 'function') applyShipFilters();
+});
