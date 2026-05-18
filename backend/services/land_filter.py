@@ -139,3 +139,26 @@ def is_land_between(lat1: float, lon1: float, lat2: float, lon2: float) -> bool:
 def is_loaded() -> bool:
     """육지 데이터 로드 여부."""
     return _loaded
+
+
+def is_land_point(lat: float, lng: float) -> bool:
+    """True if (lat, lng) is over land. False if land data not loaded yet."""
+    if not _loaded or _land_tree is None:
+        return False
+    from shapely.geometry import Point
+    p = Point(lng, lat)
+    candidates = _land_tree.query(p)
+    for idx in candidates:
+        if _land_geom[idx].contains(p):
+            return True
+    return False
+
+
+def has_land_near(lat: float, lng: float, max_deg: float) -> bool:
+    """True if any land geometry lies within max_deg degrees of the point.
+    False if land data not loaded yet."""
+    if not _loaded or _land_tree is None:
+        return False
+    from shapely.geometry import box
+    bbox = box(lng - max_deg, lat - max_deg, lng + max_deg, lat + max_deg)
+    return len(_land_tree.query(bbox)) > 0
