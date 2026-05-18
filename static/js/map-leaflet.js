@@ -73,6 +73,16 @@ var leafletAreaSelectRect = null;
 var leafletAreaSelectStart = null;
 var leafletAreaResultRect = null;
 
+// ── Korean demo-mode state (drag-only rendering) ──
+// When demo is active, drag-area selection fetches /hazard/korea once and renders
+// hex cells + mock vessel markers only inside the selected bounds. No polling, no
+// always-on hex layer.
+var _demoActive = false;
+var koreaHazardCells = [];      // last-fetched /hazard/korea cells
+var koreaMockVessels = [];      // last-fetched mock vessels (AIS-shape with is_simulated)
+var leafletDemoHexLayer = null;  // hex cells inside last drag bounds
+var leafletDemoMockLayer = null; // mock vessel markers inside last drag bounds
+
 // Basemap layer references — swapped between satellite (default) and nautical chart (hazard mode)
 var _satBaseLayer = null;
 var _satLabelLayer = null;
@@ -772,6 +782,8 @@ function clearLeafletLayers() {
         leafletMap.removeLayer(leafletHazardHexLayer);
         leafletHazardHexLayer = null;
     }
+    // Clear demo-mode layers (drag-only hex cells + mock vessel markers)
+    if (typeof _clearDemoLayers === 'function') _clearDemoLayers();
     // Clear area-analysis state (rectangle + result panel)
     if (leafletAreaSelectActive) _exitAreaSelectMode();
     if (leafletAreaResultRect) {
@@ -841,6 +853,51 @@ function _nearestSeaArea(lat, lng) {
         if (d < bestDist) { bestDist = d; best = a; }
     }
     return best && bestDist < 20 ? best.name : null;
+}
+
+// ── Korean demo-mode lifecycle ───────────────────────────────────
+// Toggled by the left-rail demo button (Task 16). Backend's mock vessels
+// only flow through /hazard/korea (not WebSocket), so drag selection is
+// the single place that fetches + renders demo data.
+function setDemoActive(active) {
+    _demoActive = !!active;
+    if (!_demoActive) {
+        _clearDemoLayers();
+        koreaHazardCells = [];
+        koreaMockVessels = [];
+    }
+}
+window.setDemoActive = setDemoActive;
+
+function isDemoActive() {
+    return _demoActive;
+}
+window.isDemoActive = isDemoActive;
+
+async function _fetchKoreaHazard() {
+    try {
+        var resp = await fetch('/api/v1/hazard/korea');
+        var data = await resp.json();
+        koreaHazardCells = (data && data.cells) || [];
+        koreaMockVessels = (data && data.mock_vessels) || [];
+        return data;
+    } catch (e) {
+        console.warn('[korea-hazard] fetch failed:', e);
+        koreaHazardCells = [];
+        koreaMockVessels = [];
+        return null;
+    }
+}
+
+function _clearDemoLayers() {
+    if (leafletDemoHexLayer && leafletMap) {
+        leafletMap.removeLayer(leafletDemoHexLayer);
+    }
+    leafletDemoHexLayer = null;
+    if (leafletDemoMockLayer && leafletMap) {
+        leafletMap.removeLayer(leafletDemoMockLayer);
+    }
+    leafletDemoMockLayer = null;
 }
 
 // ── Main: build hazard hex grid from collision + ship data ──
@@ -1094,6 +1151,9 @@ function deactivateHazardZones() {
         leafletHazardHexLayer = null;
     }
     leafletHazardCells = [];
+
+    // Clear demo-mode layers (drag-only hex cells + mock vessel markers)
+    _clearDemoLayers();
 
     // Exit area-select mode + clear any drawn rectangle/result
     if (leafletAreaSelectActive) _exitAreaSelectMode();
