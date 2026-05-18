@@ -1,6 +1,7 @@
 import time
 import httpx
 from fastapi import APIRouter
+from backend.services import korea_hex_grid as _khg
 
 router = APIRouter(tags=["weather"])
 
@@ -104,4 +105,92 @@ async def get_wind_data():
     result = {"points": points, "timestamp": now}
     _wind_cache["data"] = result
     _wind_cache["ts"] = now
+    return result
+
+
+_korea_cache = {"data": None, "ts": 0}
+_KOREA_TTL = 600  # 10 minutes
+
+
+@router.get("/weather/korea-grid")
+async def get_korea_grid_weather():
+    """Per-cell weather over Korean coastal hex grid.
+
+    Returns wave, wind (knots), and visibility for each hex cell center.
+    Cached for 10 minutes.
+    """
+    now = time.time()
+    if _korea_cache["data"] and now - _korea_cache["ts"] < _KOREA_TTL:
+        return _korea_cache["data"]
+
+    cells = _khg.korea_cells()
+    if not cells:
+        return {"cells": [], "timestamp": now}
+
+    BATCH = 40
+    marine_by_idx: dict[int, dict] = {}
+    forecast_by_idx: dict[int, dict] = {}
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        # Marine (wave)
+        for start in range(0, len(cells), BATCH):
+            batch = cells[start:start + BATCH]
+            lats = ",".join(str(p[0]) for p in batch)
+            lons = ",".join(str(p[1]) for p in batch)
+            url = (
+                "https://marine-api.open-meteo.com/v1/marine?"
+                f"latitude={lats}&longitude={lons}"
+                "&current=wave_height,wave_direction,wave_period"
+                "&timeformat=unixtime"
+            )
+            try:
+                resp = await client.get(url)
+                entries = resp.json()
+                if isinstance(entries, dict):
+                    entries = [entries]
+                for i, e in enumerate(entries):
+                    marine_by_idx[start + i] = e.get("current", {})
+            except Exception:
+                pass
+
+        # Forecast (wind, visibility) — wind in knots
+        for start in range(0, len(cells), BATCH):
+            batch = cells[start:start + BATCH]
+            lats = ",".join(str(p[0]) for p in batch)
+            lons = ",".join(str(p[1]) for p in batch)
+            url = (
+                "https://api.open-meteo.com/v1/forecast?"
+                f"latitude={lats}&longitude={lons}"
+                "&current=wind_speed_10m,wind_direction_10m,visibility,precipitation"
+                "&wind_speed_unit=kn"
+                "&timeformat=unixtime"
+            )
+            try:
+                resp = await client.get(url)
+                entries = resp.json()
+                if isinstance(entries, dict):
+                    entries = [entries]
+                for i, e in enumerate(entries):
+                    forecast_by_idx[start + i] = e.get("current", {})
+            except Exception:
+                pass
+
+    merged = []
+    for i, (lat, lng) in enumerate(cells):
+        m = marine_by_idx.get(i, {})
+        f = forecast_by_idx.get(i, {})
+        merged.append({
+            "lat": lat,
+            "lng": lng,
+            "wave_height":    m.get("wave_height")    or 0.0,
+            "wave_direction": m.get("wave_direction") or 0.0,
+            "wave_period":    m.get("wave_period")    or 0.0,
+            "wind_speed":     f.get("wind_speed_10m") or 0.0,        # knots
+            "wind_direction": f.get("wind_direction_10m") or 0.0,
+            "visibility":     f.get("visibility")     or 20000.0,    # meters
+        })
+
+    result = {"cells": merged, "timestamp": now}
+    _korea_cache["data"] = result
+    _korea_cache["ts"] = now
     return result
