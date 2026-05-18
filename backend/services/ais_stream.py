@@ -326,6 +326,13 @@ def get_ais_vessels() -> list[dict]:
                 "ais_class": v.get("ais_class", "A"),
                 "status": v.get("status", ""),
             })
+        # Demo mode: merge in mock vessels so all downstream consumers
+        # (collision_analyzer, WebSocket broadcast, ships router, etc.)
+        # treat them identically to real AIS.
+        from backend.services import mock_vessel_service
+        if mock_vessel_service.is_active():
+            result.extend(mock_vessel_service.snapshot())
+
         ais_vessels_active.set(len(result))
         return result
 
