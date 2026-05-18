@@ -352,18 +352,32 @@ function _areaSelectMouseUp(e) {
     }).addTo(leafletMap);
 
     _exitAreaSelectMode();
-    _renderAreaResult(bounds);
+
+    if (_demoActive) {
+        // Demo: fetch /hazard/korea once, then draw hex cells + mock markers
+        // inside the bounds, then fill the result panel from backend subscores.
+        _fetchKoreaHazard().then(function() {
+            _renderDemoOverlaysInBounds(bounds);
+            _renderAreaResult(bounds);
+        });
+    } else {
+        _renderAreaResult(bounds);
+    }
 }
 
 function _renderAreaResult(bounds) {
     var panel = document.getElementById('hazardAreaResult');
     if (!panel) return;
 
+    // Demo branch sources backend cells (real subscores). Legacy branch uses
+    // the always-on ship-cluster cells from renderHazardHexGrid().
+    var sourceCells = _demoActive ? koreaHazardCells : leafletHazardCells;
+
     // Find cells whose bounding box intersects the selection rect.
     // Using intersects() (not contains center) so a small rect drawn inside a single cell still hits it.
-    var CELL_DEG = 1.2;  // must match renderHazardHexGrid
+    var CELL_DEG = 1.2;
     var halfCell = CELL_DEG / 2;
-    var hits = leafletHazardCells.filter(function(cell) {
+    var hits = sourceCells.filter(function(cell) {
         var cellBounds = L.latLngBounds(
             [cell.lat - halfCell, cell.lng - halfCell],
             [cell.lat + halfCell, cell.lng + halfCell]
@@ -371,16 +385,20 @@ function _renderAreaResult(bounds) {
         return bounds.intersects(cellBounds);
     });
 
-    var avgEl  = document.getElementById('harAvgScore');
-    var maxEl  = document.getElementById('harMaxScore');
-    var cntEl  = document.getElementById('harCount');
-    var listEl = document.getElementById('harList');
+    var avgEl     = document.getElementById('harAvgScore');
+    var maxEl     = document.getElementById('harMaxScore');
+    var cntEl     = document.getElementById('harCount');
+    var listEl    = document.getElementById('harList');
+    var envEl     = document.getElementById('harEnvSummary');
+    var staticEl  = document.getElementById('harStatic');
 
     if (hits.length === 0) {
         avgEl.textContent = '--';
         maxEl.textContent = '--';
         cntEl.textContent = '0';
         listEl.innerHTML = '<div class="har-empty">선택한 영역에 위험 해역이 없습니다.</div>';
+        if (envEl) envEl.style.display = 'none';
+        if (staticEl) staticEl.style.display = 'none';
         panel.style.display = 'block';
         return;
     }
@@ -402,15 +420,68 @@ function _renderAreaResult(bounds) {
 
     listEl.innerHTML = hits.map(function(c) {
         var color = _hazardColor(c.score);
+        var name  = c.name || ('셀 ' + (c.lat).toFixed(1) + '°N ' + (c.lng).toFixed(1) + '°E');
+        var cause = c.cause || '';
         return '<div class="har-row">' +
                    '<span class="har-row-dot" style="background:' + color + '"></span>' +
-                   '<span class="har-row-name">' + c.name + '</span>' +
-                   '<span class="har-row-cause">' + c.cause + '</span>' +
+                   '<span class="har-row-name">' + name + '</span>' +
+                   '<span class="har-row-cause">' + cause + '</span>' +
                    '<span class="har-row-score" style="color:' + color + '">' + Math.round(c.score) + '</span>' +
                '</div>';
     }).join('');
 
+    // Environment summary — only available for demo cells (have subscores)
+    var withSubs = hits.filter(function(c) { return c.subscores; });
+    if (envEl) {
+        if (withSubs.length > 0) {
+            var waveVals = withSubs.map(function(c){ return c.subscores.wave_raw; }).filter(function(v){ return v != null; });
+            var windVals = withSubs.map(function(c){ return c.subscores.wind_raw; }).filter(function(v){ return v != null; });
+            var visVals  = withSubs.map(function(c){ return c.subscores.vis_raw;  }).filter(function(v){ return v != null; });
+            var trafSum  = withSubs.reduce(function(s,c){ return s + (c.subscores.traffic_n || 0); }, 0);
+
+            _setEnvText('harWaveAvg', waveVals.length ? _mean(waveVals).toFixed(1) : '--');
+            _setEnvText('harWaveMax', waveVals.length ? Math.max.apply(null, waveVals).toFixed(1) : '--');
+            _setEnvText('harWindAvg', windVals.length ? Math.round(_mean(windVals)) : '--');
+            _setEnvText('harWindMax', windVals.length ? Math.round(Math.max.apply(null, windVals)) : '--');
+            _setEnvText('harVisAvg',  visVals.length  ? _mean(visVals).toFixed(1) : '--');
+            _setEnvText('harVisMin',  visVals.length  ? Math.min.apply(null, visVals).toFixed(1) : '--');
+            _setEnvText('harTrafficN', trafSum);
+            envEl.style.display = 'block';
+        } else {
+            envEl.style.display = 'none';
+        }
+    }
+
+    // Static hazard zones — unique names across hit cells
+    if (staticEl) {
+        var staticNames = [];
+        withSubs.forEach(function(c) {
+            (c.subscores.static_names || []).forEach(function(n) {
+                if (staticNames.indexOf(n) === -1) staticNames.push(n);
+            });
+        });
+        var staticListEl = document.getElementById('harStaticList');
+        if (staticNames.length > 0 && staticListEl) {
+            staticListEl.innerHTML = staticNames.map(function(n) {
+                return '<div class="har-static-item">' + n + '</div>';
+            }).join('');
+            staticEl.style.display = 'block';
+        } else {
+            staticEl.style.display = 'none';
+        }
+    }
+
     panel.style.display = 'block';
+}
+
+function _setEnvText(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function _mean(arr) {
+    if (!arr.length) return 0;
+    return arr.reduce(function(s,v){ return s+v; }, 0) / arr.length;
 }
 
 function _hazardColor(score) {
@@ -424,6 +495,8 @@ function clearAreaResult() {
         leafletMap.removeLayer(leafletAreaResultRect);
         leafletAreaResultRect = null;
     }
+    // Closing the result panel also removes the on-demand demo overlays.
+    _clearDemoLayers();
 }
 window.clearAreaResult = clearAreaResult;
 
@@ -898,6 +971,142 @@ function _clearDemoLayers() {
         leafletMap.removeLayer(leafletDemoMockLayer);
     }
     leafletDemoMockLayer = null;
+    // Mock vessels were temporarily registered into shipDataMap so showShipInfo
+    // can render them — pull them out on clear so they don't ghost the panel.
+    if (window.shipDataMap) {
+        koreaMockVessels.forEach(function(v) {
+            if (window.shipDataMap[v.mmsi] && window.shipDataMap[v.mmsi].is_simulated) {
+                delete window.shipDataMap[v.mmsi];
+            }
+        });
+    }
+}
+
+// Draw a single hex cell from the backend /hazard/korea response.
+// Cell shape: { lat, lng, score, cause, subscores: { wave_raw, wind_raw, vis_raw, traffic_n, static_names } }
+function _drawDemoHexCell(group, cell) {
+    var CELL_DEG = 1.2;
+    var score = cell.score;
+    var isHighDanger = score >= 90;
+    var fillColor = isHighDanger ? '#ef4444' : '#f97316';
+    var fillOpacity = isHighDanger ? 0.50 : 0.38;
+    var weight = isHighDanger ? 2.0 : 1.2;
+    var strokeColor = isHighDanger ? '#ff2a2a' : '#ff6a00';
+
+    var ringRadii = isHighDanger ? [0.62, 0.80, 1.00] : [0.62, 0.82];
+    var ringClasses = isHighDanger
+        ? ['hazard-ring ring-danger ring-1', 'hazard-ring ring-danger ring-2', 'hazard-ring ring-danger ring-3']
+        : ['hazard-ring ring-high ring-1', 'hazard-ring ring-high ring-2'];
+    ringRadii.forEach(function(rf, ri) {
+        L.circle([cell.lat, cell.lng], {
+            radius: CELL_DEG * rf * 111320,
+            color: strokeColor,
+            weight: isHighDanger ? 1.5 : 1.0,
+            opacity: 0,
+            fill: false,
+            interactive: false,
+            className: ringClasses[ri]
+        }).addTo(group);
+    });
+
+    var radius = CELL_DEG * 0.52;
+    var hexPts = _hexPolygon(cell.lat, cell.lng, radius);
+    var hex = L.polygon(hexPts, {
+        color: strokeColor,
+        weight: weight,
+        opacity: 0.9,
+        fillColor: fillColor,
+        fillOpacity: fillOpacity,
+        className: 'hazard-hex' + (isHighDanger ? ' hex-danger' : ' hex-high')
+    });
+
+    var dot = L.circleMarker([cell.lat, cell.lng], {
+        radius: isHighDanger ? 5 : 4,
+        fillColor: fillColor,
+        fillOpacity: 1.0,
+        color: isHighDanger ? '#ff6666' : '#ffaa44',
+        weight: 2,
+        className: 'hazard-dot' + (isHighDanger ? ' dot-danger' : '')
+    });
+
+    var sub = cell.subscores || {};
+    var seaName = (typeof _nearestSeaArea === 'function') ? _nearestSeaArea(cell.lat, cell.lng) : null;
+    var name = seaName || ('위험 셀 ' + cell.lat.toFixed(1) + '°N ' + cell.lng.toFixed(1) + '°E');
+    cell.name = name;  // memoize for area-result list
+
+    hex.bindPopup(
+        '<div class="hazard-popup">' +
+            '<div class="hpop-title">' + name + '</div>' +
+            '<div class="hpop-row"><span>위험도</span><b style="color:' + fillColor + '">' + Math.round(score) + '</b></div>' +
+            '<div class="hpop-row"><span>주요 원인</span><b>' + (cell.cause || '-') + '</b></div>' +
+            (sub.wave_raw != null ? '<div class="hpop-row"><span>파고</span><b>' + sub.wave_raw + 'm</b></div>' : '') +
+            (sub.wind_raw != null ? '<div class="hpop-row"><span>풍속</span><b>' + sub.wind_raw + 'kt</b></div>' : '') +
+            (sub.vis_raw != null ? '<div class="hpop-row"><span>시정</span><b>' + sub.vis_raw + 'km</b></div>' : '') +
+            (sub.traffic_n != null ? '<div class="hpop-row"><span>선박</span><b>' + sub.traffic_n + '척</b></div>' : '') +
+        '</div>',
+        { className: 'hazard-popup-wrapper', maxWidth: 240 }
+    );
+
+    hex.addTo(group);
+    dot.addTo(group);
+}
+
+// Render hex cells + mock vessel markers within the drag bounds.
+// Called by the area-select mouseup handler when _demoActive is true.
+function _renderDemoOverlaysInBounds(bounds) {
+    if (!leafletMap) return;
+    _clearDemoLayers();
+
+    var CELL_DEG = 1.2;
+    var halfCell = CELL_DEG / 2;
+    var hexHits = koreaHazardCells.filter(function(c) {
+        if (c.lat == null || c.lng == null) return false;
+        var cellBounds = L.latLngBounds(
+            [c.lat - halfCell, c.lng - halfCell],
+            [c.lat + halfCell, c.lng + halfCell]
+        );
+        return bounds.intersects(cellBounds);
+    });
+
+    if (hexHits.length > 0) {
+        var hexGroup = L.layerGroup();
+        hexHits.forEach(function(cell) { _drawDemoHexCell(hexGroup, cell); });
+        hexGroup.addTo(leafletMap);
+        leafletDemoHexLayer = hexGroup;
+    }
+
+    // Mock vessel markers — drop into shipDataMap so showShipInfo can render them
+    // and the simulation badge (Task 17) finds is_simulated. Pulled back out on
+    // _clearDemoLayers so they don't ghost the panel after demo OFF.
+    var mockHits = koreaMockVessels.filter(function(v) {
+        return v.lat != null && v.lng != null && bounds.contains([v.lat, v.lng]);
+    });
+    if (mockHits.length > 0) {
+        var mockGroup = L.layerGroup();
+        mockHits.forEach(function(v) {
+            if (window.shipDataMap) window.shipDataMap[v.mmsi] = v;
+            var marker = L.circleMarker([v.lat, v.lng], {
+                radius: 5,
+                fillColor: '#fbbf24',
+                fillOpacity: 0.9,
+                color: '#f59e0b',
+                weight: 1.5,
+                opacity: 0.95,
+                className: 'mock-vessel-marker'
+            });
+            marker.bindTooltip((v.name || 'mock') + ' · 시뮬레이션', {
+                className: 'ship-tooltip-2d',
+                direction: 'top',
+                offset: [0, -6]
+            });
+            marker.on('click', function() {
+                if (typeof showShipInfo === 'function') showShipInfo(v.mmsi);
+            });
+            mockGroup.addLayer(marker);
+        });
+        mockGroup.addTo(leafletMap);
+        leafletDemoMockLayer = mockGroup;
+    }
 }
 
 // ── Main: build hazard hex grid from collision + ship data ──
