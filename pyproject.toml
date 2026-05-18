@@ -38,6 +38,7 @@ lite = [
     "pyshp>=2.3",
 ]
 dev = [
+    "pillow>=12.2.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
 ]
