@@ -5837,3 +5837,49 @@ input[type="range"]#routeSpeedSlider {
     font-family: 'JetBrains Mono', 'Pretendard Variable', monospace;
 }
 
+/* ── Hazard area-result: environmental summary ───────────── */
+.har-env-summary, .har-static {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+.har-env-title {
+    font: 600 10px/1.4 "Pretendard Variable","Inter",sans-serif;
+    color: var(--text-sub);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+}
+.har-env-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font: 400 11px/1.5 "Pretendard Variable","Inter",sans-serif;
+    color: var(--text);
+    padding: 2px 0;
+}
+.har-env-row span:first-child { color: var(--text-sub); }
+.har-env-row b { font-weight: 600; color: var(--text); }
+.har-static-list { display: flex; flex-direction: column; gap: 3px; }
+.har-static-list .har-static-item {
+    font: 400 11px/1.4 "Pretendard Variable","Inter",sans-serif;
+    color: var(--text);
+}
+.har-static-list .har-static-item::before {
+    content: "• ";
+    color: #ef4444;
+}
+
+/* ── Ship info simulated badge ───────────────────────────── */
+.sim-badge {
+    display: inline-block;
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    font: 500 9px/1 "Pretendard Variable","Inter",sans-serif;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+

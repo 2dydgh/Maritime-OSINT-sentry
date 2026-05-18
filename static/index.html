@@ -311,6 +311,18 @@
                     <div class="har-stat-val" id="harCount">--</div>
                 </div>
             </div>
+            <!-- 환경 요약 (드래그 후 셀별 subscores가 있을 때만 표시) -->
+            <div class="har-env-summary" id="harEnvSummary" style="display:none;">
+                <div class="har-env-title">환경 요약</div>
+                <div class="har-env-row"><span>파고</span><span>평균 <b id="harWaveAvg">--</b>m · 최대 <b id="harWaveMax">--</b>m</span></div>
+                <div class="har-env-row"><span>풍속</span><span>평균 <b id="harWindAvg">--</b>kt · 최대 <b id="harWindMax">--</b>kt</span></div>
+                <div class="har-env-row"><span>시정</span><span>평균 <b id="harVisAvg">--</b>km · 최저 <b id="harVisMin">--</b>km</span></div>
+                <div class="har-env-row"><span>트래픽</span><span><b id="harTrafficN">--</b>척</span></div>
+            </div>
+            <div class="har-static" id="harStatic" style="display:none;">
+                <div class="har-env-title">정적 위험구역</div>
+                <div id="harStaticList" class="har-static-list"></div>
+            </div>
             <div class="har-list-title">위험 해역 목록</div>
             <div class="har-list" id="harList"></div>
         </div>
