@@ -1,0 +1,65 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"id": "uldolmok", "name": "울돌목 협수로", "category": "narrow_strait"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [126.275, 34.580], [126.310, 34.580],
+          [126.310, 34.520], [126.275, 34.520],
+          [126.275, 34.580]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "jeju_strait", "name": "제주해협 항로교차", "category": "crossing"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [126.000, 34.200], [126.900, 34.200],
+          [126.900, 33.700], [126.000, 33.700],
+          [126.000, 34.200]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "busan_approach", "name": "부산항 진입로", "category": "port_approach"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [128.900, 35.150], [129.250, 35.150],
+          [129.250, 34.900], [128.900, 34.900],
+          [128.900, 35.150]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "incheon_approach", "name": "인천항 진입로", "category": "port_approach"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [126.100, 37.450], [126.600, 37.450],
+          [126.600, 37.150], [126.100, 37.150],
+          [126.100, 37.450]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {"id": "mokpo_approach", "name": "목포항 진입로", "category": "port_approach"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [126.150, 34.850], [126.500, 34.850],
+          [126.500, 34.550], [126.150, 34.550],
+          [126.150, 34.850]
+        ]]
+      }
+    }
+  ]
+}
