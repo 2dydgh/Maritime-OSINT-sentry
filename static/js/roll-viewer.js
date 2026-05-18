@@ -23,6 +23,12 @@ var RollViewer = (function () {
     var clockStart = null;
 
     var currentMmsi = null;
+    // ── LLM scenario override ──
+    var _baseWeather = null;       // observed weather snapshot (immutable after load)
+    var _baseShipSpeed = null;     // observed shipSpeed snapshot (immutable after load)
+    var _scenarioOverride = null;  // { windSpeed?, waveHeight?, wavePeriod?, waveDirection?, timeScale?, shipSpeed? } from LLM
+    var _timeScale = 1.0;          // wave-time multiplier (1=realtime)
+    var simWaveTime = 0;           // accumulated simulated wave time (separate from elapsed)
     var rollHistory = [];
     var pitchHistory = [];
     var rollChart = null;
@@ -31,6 +37,7 @@ var RollViewer = (function () {
     var weather = null;
     var shipType = 'other';
     var rollParams = null;
+    var naturalRollPeriod = null;  // beam/GM-derived ship roll period — drives resonance amplification
     var sogSignalLost = false;
 
     var sprayPoints = null;
@@ -59,6 +66,17 @@ var RollViewer = (function () {
     var smoothSpeed = 12;                  // lerp-smoothed current speed
     var smoothRoll = 0;                    // lerp-smoothed roll angle
     var smoothPitch = 0;                   // lerp-smoothed pitch angle
+
+    // ── Capsize scenario state ──
+    // Real capsized ships often end up *lying on their side* (rolled ~90°,
+    // settled to ~100-110°) and float that way for a long time before sinking.
+    // We don't go past ~110° because the ship model's origin is near the keel,
+    // and rotating past 90° starts pushing the visible bulk underwater.
+    // Stage timeline (seconds from trigger):
+    //   0  ..3.5  rolling      0° → 90°    (quadratic ease-in past PoNR ~60°)
+    //   3.5..6.5  settling     90° → 105°  (slumps a bit further, slight Y rise to expose hull side)
+    //   >6.5     floating      105° + gentle wave bob — ship lies visibly on its side
+    var _capsize = null;  // { startTime: number|null, direction: 1|-1, sinkY: number }
 
     // Turning cycle timings (seconds)
     var TURN_TIMING = {
@@ -199,6 +217,14 @@ var RollViewer = (function () {
     function load(mmsi) {
         dispose();
 
+        // Stop proximity tracking — modal & globe lines tied to the previously selected ship are
+        // irrelevant in the roll viewer, and updateProximity() ticks would otherwise re-spawn the modal.
+        if (typeof window.clearProximity === 'function') {
+            window.clearProximity();
+        } else if (typeof window.closeNearbyModal === 'function') {
+            window.closeNearbyModal();
+        }
+
         var container = getContainer();
         if (!container) return;
 
@@ -228,6 +254,7 @@ var RollViewer = (function () {
         var ship = window.shipDataMap[mmsi];
         shipType = getShipTypeKey(ship);
         rollParams = ROLL_PARAMS[shipType] || ROLL_PARAMS['other'];
+        naturalRollPeriod = _estimateRollPeriod(ship, shipType);
 
         // Set ship speed from SOG, capped to realistic range (max 30kt for most ships)
         var rawSog = parseFloat(ship.sog);
@@ -243,7 +270,12 @@ var RollViewer = (function () {
         }
 
         // Get real weather from nearest grid point, fallback to random
-        weather = findNearestWeather(ship.lat, ship.lon);
+        _baseWeather = findNearestWeather(ship.lat, ship.lon);
+        _baseShipSpeed = shipSpeed;
+        _scenarioOverride = null;
+        _timeScale = 1.0;
+        simWaveTime = 0;
+        weather = Object.assign({}, _baseWeather);
         waterFlowOffset = { x: 0, z: 0 };
 
         // Build layout DOM
@@ -286,17 +318,6 @@ var RollViewer = (function () {
         buildSeaMarkers();
         buildRadarIndicator();
         startAnimation();
-
-        // Init ECharts roll chart
-        initRollChart(panel);
-        startChartUpdates();
-
-        // Resize chart after CSS fade-in transition
-        setTimeout(function () {
-            if (rollChart) {
-                rollChart.resize();
-            }
-        }, 350);
     }
 
     // ── initScene(container) ──
@@ -1314,7 +1335,7 @@ var RollViewer = (function () {
 
     // ── Turning scenario ──
     function buildTurnScenarioUI(canvasWrap) {
-        // Scenario play button
+        // Turn scenario play button — kept at top center for quick toggle
         turnBtnEl = document.createElement('button');
         turnBtnEl.className = 'rv-scenario-btn';
         turnBtnEl.innerHTML = '<i class="fa-solid fa-ship"></i> 선회 시나리오';
@@ -1324,64 +1345,106 @@ var RollViewer = (function () {
         });
         canvasWrap.appendChild(turnBtnEl);
 
-        // Unified HUD (always visible, turn rows toggle)
-        var hud = document.createElement('div');
-        hud.className = 'rv-canvas-hud';
-        hud.innerHTML =
-            // Always-visible row
-            '<div class="rv-canvas-hud-row rv-canvas-hud-main">' +
-            '<div class="rv-canvas-hud-item">' +
-            '<span class="rv-canvas-hud-label">ROLL</span>' +
-            '<span class="rv-canvas-hud-val" id="rv-hud-roll">0.0°</span>' +
-            '</div>' +
-            '<div class="rv-canvas-hud-item">' +
-            '<span class="rv-canvas-hud-label">PITCH</span>' +
-            '<span class="rv-canvas-hud-val" id="rv-hud-pitch">0.0°</span>' +
-            '</div>' +
-            '<div class="rv-canvas-hud-item">' +
-            '<span class="rv-canvas-hud-label">SPD</span>' +
-            '<span class="rv-canvas-hud-val" id="rv-hud-speed">' + shipSpeed.toFixed(1) + ' kt</span>' +
+        // (Bottom-left HUD removed — duplicated info that lives in the side panel and prediction modal.)
+
+        // Predicted-attitude modal (top-left, below back button) — shows ROLL & PITCH gauges,
+        // the SIMULATION OUTPUT separated from the right side panel which now holds REAL data only.
+        var prediction = document.createElement('div');
+        prediction.className = 'rv-prediction-modal';
+        prediction.id = 'rv-prediction-modal';
+        prediction.innerHTML =
+            '<div class="rv-prediction-header"><span>예상 자세 PREDICTION</span></div>' +
+            '<div class="rv-prediction-row">' +
+            '<div class="rv-tilt-indicator" id="rv-roll-tilt">' +
+            '<div class="rv-tilt-ring">' +
+            '<div class="rv-tilt-horizon" id="rv-roll-horizon"></div>' +
+            '<div class="rv-tilt-center"></div>' +
             '</div>' +
             '</div>' +
-            // Turn scenario rows (hidden by default)
-            '<div class="rv-canvas-hud-turn" id="rv-hud-turn-section" style="display:none;">' +
-            '<div class="rv-canvas-hud-divider"></div>' +
-            '<div class="rv-canvas-hud-row">' +
-            '<div class="rv-canvas-hud-item">' +
-            '<span class="rv-canvas-hud-label">상태</span>' +
-            '<span class="rv-canvas-hud-val" id="rv-turn-phase">직진</span>' +
+            '<div class="rv-tilt-info">' +
+            '<div class="rv-tilt-value" id="rv-gauge-value">0.0°</div>' +
+            '<div class="rv-tilt-label">횡요각 ROLL</div>' +
+            '<div class="roll-gauge roll-gauge-safe" id="rv-gauge">' +
+            '<div class="roll-gauge-track">' +
+            '<div class="roll-gauge-fill" id="rv-gauge-fill"></div>' +
+            '<div class="roll-gauge-threshold"></div>' +
             '</div>' +
-            '<div class="rv-canvas-hud-item">' +
-            '<span class="rv-canvas-hud-label">침로</span>' +
-            '<span class="rv-canvas-hud-val" id="rv-turn-heading">000°</span>' +
             '</div>' +
-            '<div class="rv-canvas-hud-item">' +
-            '<span class="rv-canvas-hud-label">타각</span>' +
-            '<span class="rv-canvas-hud-val" id="rv-turn-rudder">0°</span>' +
+            '</div>' +
+            '</div>' +
+            '<div class="rv-prediction-row">' +
+            '<div class="rv-tilt-indicator rv-tilt-pitch" id="rv-pitch-tilt">' +
+            '<div class="rv-tilt-ring">' +
+            '<div class="rv-tilt-horizon" id="rv-pitch-horizon"></div>' +
+            '<div class="rv-tilt-center"></div>' +
+            '</div>' +
+            '</div>' +
+            '<div class="rv-tilt-info">' +
+            '<div class="rv-tilt-value" id="rv-pitch-value">0.0°</div>' +
+            '<div class="rv-tilt-label">종요각 PITCH</div>' +
+            '<div class="roll-gauge roll-gauge-safe" id="rv-pitch-gauge">' +
+            '<div class="roll-gauge-track">' +
+            '<div class="roll-gauge-fill" id="rv-pitch-fill"></div>' +
+            '<div class="roll-gauge-threshold" style="left:50%;"></div>' +
+            '</div>' +
+            '</div>' +
+            '</div>' +
+            '</div>';
+        canvasWrap.appendChild(prediction);
+
+        // Top-right unified scenario status panel.
+        // Shows when turn scenario is active OR any weather/speed/time override is set.
+        // Holds: simulation badge, override list, turn state details — all in one place.
+        var scenarioOverlay = document.createElement('div');
+        scenarioOverlay.className = 'rv-canvas-hud-scenario';
+        scenarioOverlay.id = 'rv-canvas-hud-scenario';
+        scenarioOverlay.hidden = true;
+        scenarioOverlay.innerHTML =
+            '<div class="rv-scenario-header">' +
+            '<span>시뮬레이션</span>' +
+            '<button type="button" class="rv-scenario-clear-btn" id="rv-scenario-clear-btn" title="실제 관측값으로 복귀">초기화</button>' +
+            '</div>' +
+            '<div class="rv-scenario-overrides" id="rv-scenario-overrides"></div>' +
+            '<div class="rv-scenario-turn" id="rv-hud-turn-section" hidden>' +
+            '<div class="rv-scenario-turn-row">' +
+            '<div class="rv-scenario-turn-item">' +
+            '<span class="rv-scenario-turn-label">상태</span>' +
+            '<span class="rv-scenario-turn-val" id="rv-turn-phase">직진</span>' +
+            '</div>' +
+            '<div class="rv-scenario-turn-item">' +
+            '<span class="rv-scenario-turn-label">침로</span>' +
+            '<span class="rv-scenario-turn-val" id="rv-turn-heading">000°</span>' +
+            '</div>' +
+            '<div class="rv-scenario-turn-item">' +
+            '<span class="rv-scenario-turn-label">타각</span>' +
+            '<span class="rv-scenario-turn-val" id="rv-turn-rudder">0°</span>' +
             '</div>' +
             '</div>' +
             '<div class="rv-turn-progress">' +
             '<div class="rv-turn-progress-fill" id="rv-turn-progress-fill"></div>' +
             '</div>' +
             '</div>';
-        canvasWrap.appendChild(hud);
+        canvasWrap.appendChild(scenarioOverlay);
 
-        // Keep turnHudEl reference for toggle logic
+        // Wire up the clear button (now always in DOM, even when panel is hidden)
+        var clearBtn = document.getElementById('rv-scenario-clear-btn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                clearScenarioOverride();
+            });
+        }
+
+        // Keep turnHudEl reference for toggle logic (still uses id="rv-hud-turn-section")
         turnHudEl = document.getElementById('rv-hud-turn-section');
     }
 
-    // ── Canvas HUD overlay + Danger badge + Camera presets ──
+    // ── Canvas HUD overlay + Camera presets ──
     function buildCanvasOverlays(canvasWrap) {
 
-        // 2. Danger badge (top-right)
-        var badge = document.createElement('div');
-        badge.className = 'rv-danger-badge';
-        badge.id = 'rv-danger-badge';
-        badge.textContent = 'SAFE';
-        badge.setAttribute('data-level', 'safe');
-        canvasWrap.appendChild(badge);
+        // (Removed) Top-right SAFE/CAUTION badge — ROLL HUD value color already conveys the same level.
 
-        // 3. Camera preset buttons (bottom-right)
+        // Camera preset buttons (bottom-right)
         var camGroup = document.createElement('div');
         camGroup.className = 'rv-cam-presets';
 
@@ -1453,44 +1516,23 @@ var RollViewer = (function () {
     }
 
     function updateCanvasHUD(absRoll, absPitch, speed) {
-        // HUD values
-        var rollEl = document.getElementById('rv-hud-roll');
-        var pitchEl = document.getElementById('rv-hud-pitch');
-        var speedEl = document.getElementById('rv-hud-speed');
-
-        var level;
-        if (absRoll < 5) level = 'safe';
-        else if (absRoll < 10) level = 'caution';
-        else if (absRoll < 15) level = 'warning';
-        else level = 'danger';
-
-        if (rollEl) {
-            rollEl.textContent = absRoll.toFixed(1) + '\u00B0';
-            rollEl.setAttribute('data-level', level);
-        }
-        if (pitchEl) pitchEl.textContent = absPitch.toFixed(1) + '\u00B0';
-        if (speedEl) speedEl.textContent = speed.toFixed(1) + ' kt';
-
-        // Danger badge
-        var badge = document.getElementById('rv-danger-badge');
-        if (badge) {
-            var labels = { safe: 'SAFE', caution: 'CAUTION', warning: 'WARNING', danger: 'DANGER' };
-            badge.textContent = labels[level];
-            badge.setAttribute('data-level', level);
-        }
+        // Bottom-left HUD removed \u2014 ROLL/PITCH live in the prediction modal (separate update path
+        // via updateGauge / updatePitchGauge), and ship speed is shown in the side panel SHIP INFO.
+        // Keeping this function as a no-op so the animation loop call site is unaffected.
     }
 
-    function toggleTurnScenario() {
-        turnScenarioActive = !turnScenarioActive;
+    function setTurnScenario(active, direction) {
+        // direction: 1 = locked starboard, -1 = locked port, 0/undefined = alternate each cycle
+        turnScenarioActive = !!active;
         if (turnScenarioActive) {
-            turnElapsed = 0;
-            turnPhase = 'straight';
+            // Skip the 8-second 'straight' lead-in — when a user explicitly asks for
+            // a turn, they expect to see the ship turning immediately.
+            turnElapsed = TURN_TIMING.straight;
+            turnPhase = 'entering';
             turnHeading = 0;
             shipWorldPos = { x: 0, z: 0 };
             camFollow = { x: 0, z: 0 };
-            turnDirection = (Math.random() > 0.5) ? 1 : -1;
-            // controls stays enabled — user can zoom/pan slightly
-            if (turnHudEl) turnHudEl.style.display = '';
+            turnDirection = (direction === 1 || direction === -1) ? direction : 0;
             if (turnBtnEl) {
                 turnBtnEl.innerHTML = '<i class="fa-solid fa-stop"></i> 시나리오 정지';
                 turnBtnEl.classList.add('active');
@@ -1500,7 +1542,6 @@ var RollViewer = (function () {
                 controls.target.set(shipWorldPos.x, 2, shipWorldPos.z);
                 controls.enabled = true;
             }
-            if (turnHudEl) turnHudEl.style.display = 'none';
             if (turnBtnEl) {
                 turnBtnEl.innerHTML = '<i class="fa-solid fa-ship"></i> 선회 시나리오';
                 turnBtnEl.classList.remove('active');
@@ -1508,11 +1549,21 @@ var RollViewer = (function () {
             turnHeading = 0;
             camFollowHeading = 0;
         }
+        // Refresh top-right scenario panel — it shows turn details when active
+        _refreshWeatherDisplay();
+    }
+
+    function toggleTurnScenario() {
+        setTurnScenario(!turnScenarioActive);
     }
 
     // Returns { headingDelta, rollMultiplier, rudderAngle, phaseName }
     function computeTurnState(dt) {
         if (!turnScenarioActive) return { headingDelta: 0, rollMultiplier: 1, rudderAngle: 0, phaseName: '직진' };
+        // Capsized ship has no rudder authority — freeze heading once the capsize
+        // is *armed* (i.e. the pre-roll delay has elapsed and the ship is actually
+        // rolling over). During the delay the turn continues normally.
+        if (_capsize && _capsize.armed) return { headingDelta: 0, rollMultiplier: 0, rudderAngle: 0, phaseName: '제어 상실' };
 
         turnElapsed += dt;
         var cycleTime = turnElapsed % TURN_TOTAL;
@@ -1557,9 +1608,14 @@ var RollViewer = (function () {
             rollMult = 1 + (TURN_ROLL_MULT[shipType] - 1) * easeOut;
         }
 
-        // Alternate turn direction each cycle
-        var cycleIndex = Math.floor(turnElapsed / TURN_TOTAL);
-        var dir = (cycleIndex % 2 === 0) ? 1 : -1;
+        // Direction: locked (turnDirection ±1) or alternating each cycle (turnDirection 0)
+        var dir;
+        if (turnDirection === 1 || turnDirection === -1) {
+            dir = turnDirection;
+        } else {
+            var cycleIndex = Math.floor(turnElapsed / TURN_TOTAL);
+            dir = (cycleIndex % 2 === 0) ? 1 : -1;
+        }
 
         turnHeading += headingRate * dir * dt;
         // Normalize heading 0-360
@@ -1573,7 +1629,7 @@ var RollViewer = (function () {
 
         if (phaseEl) {
             phaseEl.textContent = phaseName;
-            phaseEl.className = 'rv-canvas-hud-val' + (turnPhase === 'turning' ? ' rv-turn-danger' : turnPhase !== 'straight' ? ' rv-turn-active' : '');
+            phaseEl.className = 'rv-scenario-turn-val' + (turnPhase === 'turning' ? ' rv-turn-danger' : turnPhase !== 'straight' ? ' rv-turn-active' : '');
         }
         if (headingEl) headingEl.textContent = ('00' + Math.round(turnHeading)).slice(-3) + '°';
         if (rudderEl) rudderEl.textContent = (rudder > 0.5 ? (dir > 0 ? 'S' : 'P') + Math.round(rudder) + '°' : '0°');
@@ -2384,13 +2440,13 @@ var RollViewer = (function () {
 
         // Ship dimensions by type for light placement
         var dims = {
-            tanker:    { bow: 10,  stern: -8,  beam: 2.2, mast: 8,   deck: 3.0 },
-            cargo:     { bow: 9,   stern: -7,  beam: 1.9, mast: 7.5, deck: 3.0 },
-            passenger: { bow: 10,  stern: -8,  beam: 2.3, mast: 9,   deck: 5.0 },
-            fishing:   { bow: 5,   stern: -4,  beam: 1.4, mast: 5,   deck: 2.5 },
-            military:  { bow: 9,   stern: -7,  beam: 1.6, mast: 7,   deck: 3.5 },
-            tug:       { bow: 4,   stern: -3,  beam: 1.6, mast: 5,   deck: 3.0 },
-            other:     { bow: 6,   stern: -5,  beam: 1.5, mast: 6,   deck: 3.0 }
+            tanker: { bow: 10, stern: -8, beam: 2.2, mast: 8, deck: 3.0 },
+            cargo: { bow: 9, stern: -7, beam: 1.9, mast: 7.5, deck: 3.0 },
+            passenger: { bow: 10, stern: -8, beam: 2.3, mast: 9, deck: 5.0 },
+            fishing: { bow: 5, stern: -4, beam: 1.4, mast: 5, deck: 2.5 },
+            military: { bow: 9, stern: -7, beam: 1.6, mast: 7, deck: 3.5 },
+            tug: { bow: 4, stern: -3, beam: 1.6, mast: 5, deck: 3.0 },
+            other: { bow: 6, stern: -5, beam: 1.5, mast: 6, deck: 3.0 }
         };
         var d = dims[type] || dims['other'];
 
@@ -3272,14 +3328,29 @@ var RollViewer = (function () {
 
             // Speed is now updated via updateCanvasHUD
 
+            // Advance simulated wave time (separate from elapsed so timeScale only affects waves, not clouds/water)
+            simWaveTime += dt * _timeScale;
+
             // Roll & Pitch calculation — scaled by wave height (2m baseline)
             var waveScale = Math.max(weather.waveHeight / 2.0, 0.3);
             var freqScale = weather.wavePeriod ? (8 / weather.wavePeriod) : 1;
 
             // Base wave-induced roll — primary swell + secondary + tertiary harmonics
             // (no Math.random — deterministic harmonics prevent per-frame jitter)
-            var w1 = elapsed * rollParams.freq * Math.PI * 2 * freqScale;
-            var primaryRoll = rollParams.amp * waveScale * Math.sin(w1);
+            var w1 = simWaveTime * rollParams.freq * Math.PI * 2 * freqScale;
+
+            // Resonance amplification — when wave period approaches the ship's
+            // natural roll period, each successive wave reinforces the swing
+            // instead of cancelling. Real ships see 2-4x amplitude at resonance.
+            // Matches the panel's _resonanceRisk thresholds for visual consistency.
+            var resonanceMult = 1.0;
+            if (naturalRollPeriod && weather.wavePeriod) {
+                var dT = Math.abs(naturalRollPeriod - weather.wavePeriod);
+                if (dT < 1.0) resonanceMult = 3.5;        // 공진 위험
+                else if (dT < 2.5) resonanceMult = 1.8;   // 공진 주의
+            }
+
+            var primaryRoll = rollParams.amp * waveScale * resonanceMult * Math.sin(w1);
             var secondaryRoll = rollParams.amp * 0.3 * waveScale * Math.sin(w1 * 1.7 + 1.2);
             var tertiaryRoll = rollParams.amp * 0.12 * waveScale * Math.sin(w1 * 3.1 + 2.7);
             var waveRoll = primaryRoll + secondaryRoll + tertiaryRoll;
@@ -3297,19 +3368,48 @@ var RollViewer = (function () {
 
             // Pitch: longer period, smaller amplitude, deterministic noise
             var pitchScale = turnScenarioActive ? Math.min(waveScale, 0.6) : waveScale;
-            var rawPitch = (rollParams.amp * 0.12) * pitchScale * Math.sin(w1 * 0.6)
-                + rollParams.amp * 0.04 * pitchScale * Math.sin(w1 * 1.3 + 0.8);
+            var rawPitch = (rollParams.amp * 0.35) * pitchScale * Math.sin(w1 * 0.6)
+                + rollParams.amp * 0.12 * pitchScale * Math.sin(w1 * 1.3 + 0.8);
 
             // Smooth roll & pitch — exponential lerp removes any remaining jitter
             var motionLerp = 1 - Math.pow(0.015, dt);  // ~τ=0.24s, smooth but responsive
             smoothRoll += (rawRoll - smoothRoll) * motionLerp;
             smoothPitch += (rawPitch - smoothPitch) * motionLerp;
 
+            // ── Capsize override — ship rolls onto its side and floats there ──
+            // During the optional pre-roll delay, the normal physics (turn heel,
+            // wave roll) is left untouched so the build-up is visible.
+            var capsizeSinkY = 0;
+            if (_capsize) {
+                if (_capsize.startTime === null) _capsize.startTime = elapsed;
+                var ct = elapsed - _capsize.startTime - (_capsize.delay || 0);
+                if (ct >= 0) {
+                    _capsize.armed = true;
+                    var capRollDeg;
+                    if (ct < 3.5) {
+                        var u1 = ct / 3.5;
+                        capRollDeg = 90 * (u1 * u1);                    // 0° → 90° (ease-in past PoNR)
+                        capsizeSinkY = 0;
+                    } else if (ct < 6.5) {
+                        var u2 = (ct - 3.5) / 3.0;
+                        capRollDeg = 90 + 15 * u2;                      // 90° → 105°
+                        capsizeSinkY = 0.6 * u2;
+                    } else {
+                        var capBob = 3 * Math.sin((ct - 6.5) * 0.6);    // ±3° bob
+                        capRollDeg = 105 + capBob;
+                        capsizeSinkY = 0.6;
+                    }
+                    smoothRoll = _capsize.direction * capRollDeg;
+                    _capsize.sinkY = capsizeSinkY;
+                }
+                // ct < 0 → still in the pre-capsize delay; no roll override yet.
+            }
+
             // ── Apply ship world position + rotations ──
             if (shipGroup) {
                 shipGroup.position.x = shipWorldPos.x;
                 shipGroup.position.z = shipWorldPos.z;
-                shipGroup.position.y = -0.8 + weather.waveHeight * 0.1 * Math.sin(elapsed * 0.8);
+                shipGroup.position.y = -0.8 + weather.waveHeight * 0.1 * Math.sin(elapsed * 0.8) + capsizeSinkY;
                 shipGroup.rotation.y = headingRad;
                 shipGroup.rotation.x = smoothRoll * (Math.PI / 180);
                 shipGroup.rotation.z = smoothPitch * (Math.PI / 180);
@@ -3403,6 +3503,25 @@ var RollViewer = (function () {
     }
 
     // ── buildInfoPanel(ship) ──
+    // Estimate natural roll period from ship beam (rough approximation, T = 0.85·B/√GM, GM ≈ 0.05·B)
+    function _estimateRollPeriod(ship, shipTypeKey) {
+        var beam = parseFloat(ship.beam) || 0;
+        if (beam > 0) {
+            var gm = 0.05 * beam;
+            return 0.85 * beam / Math.sqrt(gm);
+        }
+        var freq = (ROLL_PARAMS[shipTypeKey] && ROLL_PARAMS[shipTypeKey].freq) || 0.08;
+        return 1.0 / freq;
+    }
+
+    function _resonanceRisk(naturalPeriod, wavePeriod) {
+        if (!wavePeriod || wavePeriod <= 0) return { level: 'safe', label: '판정 불가' };
+        var delta = Math.abs(naturalPeriod - wavePeriod);
+        if (delta < 1.0) return { level: 'danger', label: '공진 위험' };
+        if (delta < 2.5) return { level: 'caution', label: '공진 주의' };
+        return { level: 'safe', label: '안전 범위' };
+    }
+
     function buildInfoPanel(ship) {
         var panel = document.createElement('div');
         panel.className = 'roll-viewer-panel';
@@ -3417,6 +3536,18 @@ var RollViewer = (function () {
         var sogVal = sogSignalLost
             ? shipSpeed.toFixed(1) + ' kt (신호없음, 기본값)'
             : shipSpeed.toFixed(1) + ' kt';
+
+        // Voyage info — fall back to '-' for missing AIS fields
+        var destination = (ship.destination && ship.destination !== 'UNKNOWN') ? ship.destination : '-';
+        var eta = ship.eta || '-';
+        var statusLabel = ship.status || '-';
+        var callsign = ship.callsign || '-';
+        var imo = ship.imo ? String(ship.imo) : '-';
+
+        // Roll analysis — estimated natural period vs observed wave period
+        var naturalPeriod = _estimateRollPeriod(ship, typeKey);
+        var wavePeriodObs = (_baseWeather && _baseWeather.wavePeriod) || 0;
+        var resonance = _resonanceRisk(naturalPeriod, wavePeriodObs);
         var hdgVal = ship.heading !== undefined ? ship.heading + '°' : (ship.cog !== undefined ? parseFloat(ship.cog).toFixed(0) + '°' : '-');
 
         panel.innerHTML =
@@ -3429,57 +3560,27 @@ var RollViewer = (function () {
             '<div class="rv-info-row"><span class="rv-info-label">침로</span><span class="rv-info-value">' + hdgVal + '</span></div>' +
             '</div>' +
             '<div class="roll-viewer-section">' +
-            '<div class="roll-viewer-section-title">횡요각 ROLL</div>' +
-            '<div class="rv-tilt-row">' +
-            '<div class="rv-tilt-indicator" id="rv-roll-tilt">' +
-            '<div class="rv-tilt-ring">' +
-            '<div class="rv-tilt-horizon" id="rv-roll-horizon"></div>' +
-            '<div class="rv-tilt-center"></div>' +
+            '<div class="roll-viewer-section-title">항해 정보 VOYAGE</div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">목적지</span><span class="rv-info-value">' + destination + '</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">ETA</span><span class="rv-info-value">' + eta + '</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">상태</span><span class="rv-info-value">' + statusLabel + '</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">호출부호</span><span class="rv-info-value">' + callsign + '</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">IMO</span><span class="rv-info-value">' + imo + '</span></div>' +
             '</div>' +
-            '</div>' +
-            '<div class="rv-tilt-info">' +
-            '<div class="rv-tilt-value" id="rv-gauge-value">0.0°</div>' +
-            '<div class="rv-tilt-label">현재 횡요각</div>' +
-            '<div class="roll-gauge roll-gauge-safe" id="rv-gauge">' +
-            '<div class="roll-gauge-track">' +
-            '<div class="roll-gauge-fill" id="rv-gauge-fill"></div>' +
-            '<div class="roll-gauge-threshold"></div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-            '<div class="roll-viewer-section">' +
-            '<div class="roll-viewer-section-title">종요각 PITCH</div>' +
-            '<div class="rv-tilt-row">' +
-            '<div class="rv-tilt-indicator rv-tilt-pitch" id="rv-pitch-tilt">' +
-            '<div class="rv-tilt-ring">' +
-            '<div class="rv-tilt-horizon" id="rv-pitch-horizon"></div>' +
-            '<div class="rv-tilt-center"></div>' +
-            '</div>' +
-            '</div>' +
-            '<div class="rv-tilt-info">' +
-            '<div class="rv-tilt-value" id="rv-pitch-value">0.0°</div>' +
-            '<div class="rv-tilt-label">현재 종요각</div>' +
-            '<div class="roll-gauge roll-gauge-safe" id="rv-pitch-gauge">' +
-            '<div class="roll-gauge-track">' +
-            '<div class="roll-gauge-fill" id="rv-pitch-fill"></div>' +
-            '<div class="roll-gauge-threshold" style="left:50%;"></div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
+            // ROLL/PITCH sections relocated to the prediction modal on the canvas — they are
+            // simulation OUTPUT, not real data. The side panel keeps only observed values.
             '<div class="roll-viewer-section">' +
             '<div class="roll-viewer-section-title">기상 WEATHER</div>' +
-            '<div class="rv-info-row"><span class="rv-info-label">풍속</span><span class="rv-info-value">' + weather.windSpeed + ' kt</span></div>' +
-            '<div class="rv-info-row"><span class="rv-info-label">파고</span><span class="rv-info-value">' + weather.waveHeight + ' m</span></div>' +
-            '<div class="rv-info-row"><span class="rv-info-label">주기</span><span class="rv-info-value">' + weather.wavePeriod + ' s</span></div>' +
-            '<div class="rv-info-row"><span class="rv-info-label">파향</span><span class="rv-info-value">' + Math.round(weather.waveDirection) + '°</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">풍속</span><span class="rv-info-value" id="rv-weather-wind">' + weather.windSpeed + ' kt</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">파고</span><span class="rv-info-value" id="rv-weather-wave">' + weather.waveHeight + ' m</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">주기</span><span class="rv-info-value" id="rv-weather-period">' + weather.wavePeriod + ' s</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">파향</span><span class="rv-info-value" id="rv-weather-direction">' + Math.round(weather.waveDirection) + '°</span></div>' +
             '</div>' +
-            '<div class="roll-viewer-section roll-viewer-section-chart">' +
-            '<div class="roll-viewer-section-title">이력 HISTORY</div>' +
-            '<div id="rv-roll-chart" style="width:100%;height:120px;"></div>' +
+            '<div class="roll-viewer-section">' +
+            '<div class="roll-viewer-section-title">횡요각 분석 ANALYSIS</div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">고유 횡요주기</span><span class="rv-info-value">' + naturalPeriod.toFixed(1) + ' s</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">파주기</span><span class="rv-info-value">' + (wavePeriodObs ? wavePeriodObs.toFixed(0) + ' s' : '-') + '</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">공진 판정</span><span class="rv-info-value rv-resonance rv-resonance-' + resonance.level + '">' + resonance.label + '</span></div>' +
             '</div>';
 
         return panel;
@@ -3546,14 +3647,15 @@ var RollViewer = (function () {
         if (tilt) tilt.setAttribute('data-level', level);
     }
 
-    // ── initRollChart(panel) ──
-    function initRollChart(panel) {
+    // ── initRollChart() ──
+    // Chart container now lives on the canvas (prediction modal), not in the side panel.
+    function initRollChart() {
         // Init history with 60 zeros
         rollHistory = [];
         pitchHistory = [];
         for (var i = 0; i < 60; i++) { rollHistory.push(0); pitchHistory.push(0); }
 
-        var chartEl = panel.querySelector('#rv-roll-chart');
+        var chartEl = document.getElementById('rv-roll-chart');
         if (!chartEl || !window.echarts) return;
 
         rollChart = echarts.init(chartEl);
@@ -3773,11 +3875,18 @@ var RollViewer = (function () {
         smoothSpeed = 12;
         smoothRoll = 0;
         smoothPitch = 0;
+        _capsize = null;
         camFollow = { x: 0, z: 0 };
         camFollowHeading = 0;
         weather = null;
         rollParams = null;
+        naturalRollPeriod = null;
         currentMmsi = null;
+        _baseWeather = null;
+        _baseShipSpeed = null;
+        _scenarioOverride = null;
+        _timeScale = 1.0;
+        simWaveTime = 0;
         rollHistory = [];
         pitchHistory = [];
 
@@ -3788,10 +3897,130 @@ var RollViewer = (function () {
         }
     }
 
+    // ── LLM scenario override API ──
+    var _OVERRIDE_KEY_TO_ID = {
+        windSpeed: 'rv-weather-wind',
+        waveHeight: 'rv-weather-wave',
+        wavePeriod: 'rv-weather-period',
+        waveDirection: 'rv-weather-direction'
+    };
+
+    function _refreshWeatherDisplay() {
+        // Side panel WEATHER section is INTENTIONALLY left untouched here.
+        // It must always show observed (base) values — built once on load() — so users
+        // can compare "real" vs "simulated" at a glance. The override badge/highlight
+        // logic that used to color those rows has been removed for that reason.
+
+        var ov = _scenarioOverride || {};
+        var hasTimeScale = ov.timeScale !== undefined && Math.abs(_timeScale - 1.0) > 0.01;
+
+        var weatherOverride = (ov.windSpeed !== undefined) || (ov.waveHeight !== undefined) ||
+            (ov.wavePeriod !== undefined) || (ov.waveDirection !== undefined);
+        var anyOverride = weatherOverride || (ov.shipSpeed !== undefined) || hasTimeScale;
+
+        // Top-right unified scenario panel: visible when override OR turn scenario is active
+        var hudScenario = document.getElementById('rv-canvas-hud-scenario');
+        var panelVisible = anyOverride || turnScenarioActive;
+        if (hudScenario) hudScenario.hidden = !panelVisible;
+
+        // Override rows
+        var overridesEl = document.getElementById('rv-scenario-overrides');
+        if (overridesEl) {
+            var rows = [];
+            if (ov.windSpeed !== undefined) rows.push(['풍속', Math.round(ov.windSpeed) + ' kt']);
+            if (ov.waveHeight !== undefined) rows.push(['파고', ov.waveHeight.toFixed(1) + ' m']);
+            if (ov.wavePeriod !== undefined) rows.push(['파주기', Math.round(ov.wavePeriod) + ' s']);
+            if (ov.waveDirection !== undefined) rows.push(['파향', Math.round(ov.waveDirection) + '°']);
+            if (ov.shipSpeed !== undefined) rows.push(['속력', ov.shipSpeed.toFixed(1) + ' kt']);
+            if (hasTimeScale) rows.push(['시간배율', _timeScale.toFixed(1) + '×']);
+            overridesEl.innerHTML = rows.map(function (r) {
+                return '<div class="rv-scenario-override-row"><span class="rv-scenario-override-label">' + r[0] +
+                    '</span><span class="rv-scenario-override-val">' + r[1] + '</span></div>';
+            }).join('');
+            overridesEl.hidden = rows.length === 0;
+        }
+
+        // Show/hide turn details section based on turn scenario state
+        var turnSection = document.getElementById('rv-hud-turn-section');
+        if (turnSection) turnSection.hidden = !turnScenarioActive;
+    }
+
+    function setScenarioOverride(params) {
+        if (!_baseWeather || !weather) return false;
+        params = params || {};
+        _scenarioOverride = Object.assign({}, _scenarioOverride || {}, params);
+        // Apply weather params to the EFFECTIVE `weather` (used by simulation).
+        // The side panel WEATHER section is rendered from the original baseWeather snapshot
+        // at load() and is never updated, so it stays as observed values.
+        var weatherKeys = ['windSpeed', 'waveHeight', 'wavePeriod', 'waveDirection'];
+        weatherKeys.forEach(function (k) {
+            if (params[k] !== undefined) weather[k] = params[k];
+        });
+        if (params.timeScale !== undefined) {
+            _timeScale = Math.max(0.25, Math.min(10, params.timeScale));
+        }
+        if (params.shipSpeed !== undefined) {
+            shipSpeed = Math.max(0, Math.min(35, params.shipSpeed));
+        }
+        _refreshWeatherDisplay();
+        return true;
+    }
+
+    function clearScenarioOverride() {
+        if (!_baseWeather) return false;
+        _scenarioOverride = null;
+        _timeScale = 1.0;
+        if (_baseShipSpeed !== null) shipSpeed = _baseShipSpeed;
+        Object.assign(weather, _baseWeather);
+        _refreshWeatherDisplay();
+        return true;
+    }
+
+    function isActive() {
+        if (!currentMmsi) return false;
+        var container = getContainer();
+        return !!(container && container.offsetParent !== null);
+    }
+
+    // ── Capsize scenario API ──
+    // direction: -1 = port (좌현/왼쪽), 1 = starboard (우현/오른쪽), 0 or undefined = random.
+    // delaySec: seconds to wait before the capsize stages begin. During the delay
+    //   the ship continues normal physics (turn heel, wave roll, etc.) so that
+    //   "선회 → 전복" reads as a build-up rather than an instant snap. Default 0.
+    // Coexists with the turn scenario — turn drives heading (rotation.y),
+    // capsize drives roll (rotation.x). The turn is only frozen once the
+    // capsize is *armed* (i.e. the delay has elapsed).
+    function triggerCapsize(direction, delaySec) {
+        if (!shipGroup) return false;
+        var dir;
+        if (direction === -1 || direction === 1) {
+            dir = direction;
+        } else {
+            dir = (Math.random() < 0.5) ? -1 : 1;
+        }
+        var d = (typeof delaySec === 'number' && delaySec > 0) ? Math.min(delaySec, 60) : 0;
+        _capsize = { startTime: null, direction: dir, sinkY: 0, delay: d, armed: false };
+        return true;
+    }
+
+    function clearCapsize() {
+        _capsize = null;
+        return true;
+    }
+
     // ── Public API ──
     return {
         load: load,
-        dispose: dispose
+        dispose: dispose,
+        setScenarioOverride: setScenarioOverride,
+        clearScenarioOverride: clearScenarioOverride,
+        setTurnScenario: setTurnScenario,
+        isTurnActive: function () { return turnScenarioActive; },
+        triggerCapsize: triggerCapsize,
+        clearCapsize: clearCapsize,
+        isCapsizing: function () { return !!_capsize; },
+        getCurrentMmsi: function () { return currentMmsi; },
+        isActive: isActive
     };
 
 })();

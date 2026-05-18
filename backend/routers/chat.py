@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class ChatRequest(BaseModel):
     message: str
     history: list = []
+    context: dict = {}
 
 
 class ChatResponse(BaseModel):
@@ -23,5 +24,5 @@ class ChatResponse(BaseModel):
 @router.post("/chat", response_model=ChatResponse)
 async def post_chat(req: ChatRequest):
     """Process a chat message through the maritime LLM agent."""
-    result = await llm_agent.chat(req.message, req.history)
+    result = await llm_agent.chat(req.message, req.history, req.context)
     return ChatResponse(text=result["text"], actions=result["actions"])

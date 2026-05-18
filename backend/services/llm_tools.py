@@ -39,8 +39,10 @@ TOOL_DEFINITIONS: list[dict] = [
             "name": "get_ships",
             "description": (
                 "현재 추적 중인 AIS 선박 목록을 반환합니다. "
-                "선박 유형(type)으로 필터링하거나 전체 목록을 가져올 수 있습니다. "
-                "각 선박의 MMSI, 이름, 유형, 위치(위도·경도), 속도, 침로, 상태 등이 포함됩니다."
+                "선박 유형(type) 또는 국적(country)으로 필터링하거나 전체 목록을 가져올 수 있습니다. "
+                "각 선박의 MMSI, 이름, 유형, 위치(위도·경도), 속도, 침로, 상태, 국적이 포함됩니다. "
+                "응답에는 'total_in_system' (시스템 전체 추적 척수)와 'returned' (이번 응답에 포함된 척수)가 같이 옵니다 — "
+                "두 값이 다르면 일부만 반환된 것이므로 답변에서 그렇게 명시하세요."
             ),
             "parameters": {
                 "type": "object",
@@ -50,13 +52,21 @@ TOOL_DEFINITIONS: list[dict] = [
                         "description": (
                             "필터링할 선박 유형. "
                             "가능한 값: cargo, tanker, passenger, fishing, military, tug, other. "
-                            "생략하면 전체 선박을 반환합니다."
+                            "생략하면 유형 필터 없음."
                         ),
                         "enum": ["cargo", "tanker", "passenger", "fishing", "military", "tug", "other"],
                     },
+                    "country": {
+                        "type": "string",
+                        "description": (
+                            "국적으로 필터링 (대소문자 무시, 부분 일치 허용). "
+                            "예: 'Japan', 'Korea', 'China', 'USA', 'Russia', 'Norway'. "
+                            "사용자가 '○○ 국적'이라고 하면 반드시 이 인자를 사용하세요."
+                        ),
+                    },
                     "limit": {
                         "type": "integer",
-                        "description": "반환할 최대 선박 수. 기본값 50, 최대 200.",
+                        "description": "반환할 최대 선박 수. 기본값 50, 최대 500. 국적/유형 필터를 쓸 때는 매칭 결과가 적으니 limit를 넉넉하게 (예: 500) 잡으세요.",
                         "default": 50,
                     },
                 },
@@ -106,9 +116,11 @@ TOOL_DEFINITIONS: list[dict] = [
         "function": {
             "name": "get_area_status",
             "description": (
-                "특정 항구 또는 해역 반경 20해리 내의 선박 현황을 반환합니다. "
+                "특정 항구 또는 해역 반경 내의 선박 현황을 반환합니다. "
                 "한국 주요 항구(부산, 인천, 울산, 광양, 평택, 목포, 제주) 또는 "
-                "임의의 위도·경도 좌표를 지정할 수 있습니다."
+                "임의의 위도·경도 좌표 + 반경(radius_nm)을 지정할 수 있습니다. "
+                "*해역* 단위 검색(예: '일본 주변 해역', '동중국해', '도쿄만')에는 lat/lon에 해당 중심 좌표를 넣고 "
+                "radius_nm을 100~400 정도로 넓게 잡으세요. 일본 중심: lat=36, lon=138 / 도쿄만: lat=35.5, lon=139.7 등."
             ),
             "parameters": {
                 "type": "object",
@@ -233,6 +245,161 @@ TOOL_DEFINITIONS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_roll_scenario",
+            "description": (
+                "현재 열려있는 횡요각(roll) 화면에 가상의 기상 시나리오를 적용합니다. "
+                "사용자가 풍속, 파고, 파주기, 파향, 시간 가속을 임의로 설정해 시뮬레이션하고 싶을 때 사용합니다. "
+                "횡요각 화면이 닫혀 있으면 적용되지 않으며, 사용자에게 화면을 먼저 열도록 안내해야 합니다. "
+                "지정하지 않은 파라미터는 실제 관측값을 그대로 유지합니다. clear=true 이면 모든 override를 해제합니다."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "wind_speed": {
+                        "type": "number",
+                        "description": "풍속 (노트, kt). 일반 범위 0~80.",
+                    },
+                    "wave_height": {
+                        "type": "number",
+                        "description": "유의파고 (미터, m). 일반 범위 0~15.",
+                    },
+                    "wave_period": {
+                        "type": "number",
+                        "description": "파주기 (초, s). 일반 범위 3~20.",
+                    },
+                    "wave_direction": {
+                        "type": "number",
+                        "description": "파향 (도, degree, 0=북쪽, 90=동쪽).",
+                    },
+                    "time_scale": {
+                        "type": "number",
+                        "description": "시간 가속 배율 (1=실시간, 5=5배속). 범위 0.25~10.",
+                    },
+                    "ship_speed": {
+                        "type": "number",
+                        "description": "선박 속력/속도/SOG (노트, kt). 사용자가 '속력', '속도', 'speed', 'SOG', '노트' 등을 언급하면 이 인자로 전달. 일반 범위 0~30.",
+                    },
+                    "clear": {
+                        "type": "boolean",
+                        "description": "true 이면 적용 중인 모든 override를 초기화하고 실제 관측값으로 복귀.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "return_to_globe",
+            "description": (
+                "현재 열려있는 전용 화면(횡요각 등)을 닫고 지구본 메인 지도로 돌아갑니다. "
+                "사용자가 '지구본으로', '메인으로', '뒤로', '닫아줘', '나가', '지도로 돌아가' 같은 표현을 쓰거나 "
+                "다른 위치로 이동을 요청하면 fly_to 호출 전에 이 도구를 먼저 호출하세요. "
+                "이미 지구본 화면이라면 아무 일도 일어나지 않습니다(안전한 no-op)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_roll_viewer",
+            "description": (
+                "특정 선박의 횡요각(roll) 시뮬레이션 화면을 엽니다. "
+                "사용자가 '○○ 배 횡요각 보여줘', '○○ 선박 선택해서 횡요각', "
+                "'○○ 띄워줘' 같이 *특정 선박의 횡요각/롤 화면*을 요청하면 이 도구를 호출하세요. "
+                "MMSI를 알면 mmsi 인자로 직접, 이름만 알면 name 인자로 호출하세요 — 백엔드가 이름→MMSI 변환을 처리합니다. "
+                "이미 같은 선박의 횡요각 화면이 열려 있으면 안전한 no-op."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mmsi": {
+                        "type": "integer",
+                        "description": "열고 싶은 선박의 MMSI 번호. 알면 우선 사용.",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "선박 이름 (부분 일치 검색). mmsi 미지정 시 사용.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_capsize",
+            "description": (
+                "현재 열려있는 횡요각 화면의 선박을 실제로 전복(capsize)시켜 시각화합니다. "
+                "선박이 한쪽으로 점점 기울어 복원력을 잃고 침몰하는 모습이 약 11초에 걸쳐 재생됩니다. "
+                "사용자가 '전복', '뒤집혀', '침몰', '가라앉아', 'capsize', 'sink' 등을 언급하면 이 도구를 호출하세요. "
+                "방향(direction)이 지정되지 않으면 무작위로 한쪽으로 기울어집니다. "
+                "clear=true 이면 진행 중인 전복 시뮬레이션을 즉시 해제합니다(선박 자세는 자연 복귀). "
+                "횡요각 화면이 닫혀 있으면 적용되지 않으니 사용자에게 화면을 먼저 열도록 안내해야 합니다."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "direction": {
+                        "type": "string",
+                        "description": "전복 방향. port=좌현(왼쪽), starboard=우현(오른쪽), random=무작위. 미지정 시 random.",
+                        "enum": ["port", "starboard", "random"],
+                    },
+                    "delay_seconds": {
+                        "type": "number",
+                        "description": (
+                            "전복 시작까지 대기할 시간(초, 0~60). 기본값 0(즉시 전복). "
+                            "set_turn_scenario와 함께 호출되는 '선회하다가 전복' 같은 복합 시나리오에서는 "
+                            "선회가 충분히 발달한 뒤 전복되도록 6~8초 정도 지연을 주세요. "
+                            "지연 동안에는 정상 물리(선회 헤들 등)가 그대로 작동합니다."
+                        ),
+                    },
+                    "clear": {
+                        "type": "boolean",
+                        "description": "true 이면 진행 중인 전복을 해제하고 정상 자세로 복귀합니다.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_turn_scenario",
+            "description": (
+                "현재 열려있는 횡요각 화면에서 선회(코너링) 시뮬레이션을 시작하거나 중지합니다. "
+                "선박이 좌현/우현으로 선회할 때 발생하는 횡요각 변화를 시각화합니다. "
+                "사용자가 '선회', '회전', '코너링', '돌아', 'turn', 'cornering' 같은 표현을 쓰면 이 도구를 사용하세요. "
+                "방향(direction)을 지정하지 않으면 무작위(좌/우)로 선회합니다."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "active": {
+                        "type": "boolean",
+                        "description": "true=시나리오 시작, false=중지. 사용자가 '시작/멈춰/정지' 등 의도를 명확히 한 경우 그에 맞춰 지정.",
+                    },
+                    "direction": {
+                        "type": "string",
+                        "description": "선회 방향. port=좌현(왼쪽), starboard=우현(오른쪽), random=무작위. 미지정 시 random.",
+                        "enum": ["port", "starboard", "random"],
+                    },
+                },
+                "required": ["active"],
+            },
+        },
+    },
 ]
 
 
@@ -256,22 +423,32 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
 # ---------------------------------------------------------------------------
 
 def _tool_get_ships(arguments: dict) -> dict:
-    """Return AIS vessel list, optionally filtered by type."""
+    """Return AIS vessel list, optionally filtered by type and/or country."""
     ship_type = arguments.get("type")
+    country = (arguments.get("country") or "").strip().lower()
     limit = int(arguments.get("limit", 50))
-    limit = min(limit, 200)
+    limit = min(limit, 500)
 
-    vessels = ais_stream.get_ais_vessels()
+    all_vessels = ais_stream.get_ais_vessels()
+    total_in_system = len(all_vessels)
 
+    vessels = all_vessels
     if ship_type:
         # Normalize: "military" matches "military_vessel" in the data
         normalized = "military_vessel" if ship_type == "military" else ship_type
         vessels = [v for v in vessels if v.get("type") == normalized]
 
+    if country:
+        # Substring match (case-insensitive) so "japan" matches "Japan", "JP", etc.
+        vessels = [v for v in vessels if country in (v.get("country") or "").lower()]
+
+    matched = len(vessels)
     vessels = vessels[:limit]
 
     return {
-        "count": len(vessels),
+        "total_in_system": total_in_system,
+        "matched": matched,
+        "returned": len(vessels),
         "ships": [
             {
                 "mmsi": v["mmsi"],
@@ -542,6 +719,166 @@ def _tool_get_ship_detail(arguments: dict) -> dict:
     }
 
 
+def _tool_return_to_globe(arguments: dict) -> dict:
+    """Close any dedicated panel (roll viewer, etc.) and return to the globe view."""
+    return {
+        "action": "return_to_globe",
+        "label": "지구본 메인 지도로 복귀",
+    }
+
+
+def _tool_open_roll_viewer(arguments: dict) -> dict:
+    """Resolve target ship and return open_roll_viewer action for the frontend."""
+    mmsi = arguments.get("mmsi")
+    name_query = (arguments.get("name") or "").strip().upper()
+
+    if mmsi is None and not name_query:
+        return {"error": "mmsi 또는 name 중 하나를 지정해야 합니다."}
+
+    vessels = ais_stream.get_ais_vessels()
+    target = None
+
+    if mmsi is not None:
+        try:
+            mmsi_int = int(mmsi)
+        except (TypeError, ValueError):
+            return {"error": f"잘못된 MMSI: {mmsi}"}
+        target = next((v for v in vessels if v["mmsi"] == mmsi_int), None)
+    elif name_query:
+        exact = [v for v in vessels if v.get("name", "").upper() == name_query]
+        if exact:
+            target = exact[0]
+        else:
+            partial = [v for v in vessels if name_query in v.get("name", "").upper()]
+            if partial:
+                target = partial[0]
+
+    if not target:
+        identifier = f"MMSI {mmsi}" if mmsi is not None else f"이름 '{name_query}'"
+        return {"error": f"{identifier} 선박을 찾을 수 없습니다."}
+
+    return {
+        "action": "open_roll_viewer",
+        "mmsi": int(target["mmsi"]),
+        "name": target.get("name", "UNKNOWN"),
+        "label": f"횡요각 화면 열기: {target.get('name', 'UNKNOWN')} (MMSI {target['mmsi']})",
+    }
+
+
+def _tool_trigger_capsize(arguments: dict) -> dict:
+    """Return capsize trigger/clear action for the frontend."""
+    if arguments.get("clear"):
+        return {
+            "action": "trigger_capsize",
+            "clear": True,
+            "label": "전복 시뮬레이션 해제 (정상 자세 복귀)",
+        }
+
+    direction = arguments.get("direction", "random")
+    # Frontend convention: -1 = port (좌현), 1 = starboard (우현), 0 = random.
+    dir_map = {"port": -1, "starboard": 1, "random": 0}
+    dir_value = dir_map.get(direction, 0)
+    label_dir = {"port": "좌현", "starboard": "우현", "random": "무작위 방향"}.get(direction, "무작위 방향")
+
+    raw_delay = arguments.get("delay_seconds", 0)
+    try:
+        delay = max(0.0, min(60.0, float(raw_delay)))
+    except (TypeError, ValueError):
+        delay = 0.0
+
+    label = f"전복 시뮬레이션 시작 ({label_dir})"
+    if delay > 0:
+        label += f" — {delay:.0f}초 후 발동"
+
+    return {
+        "action": "trigger_capsize",
+        "direction": dir_value,
+        "delay_seconds": delay,
+        "label": label,
+    }
+
+
+def _tool_set_turn_scenario(arguments: dict) -> dict:
+    """Return turn-scenario start/stop action for the frontend."""
+    active = bool(arguments.get("active"))
+    direction = arguments.get("direction", "random")
+    # Sim coordinate convention: -1 visually rotates the ship to the right (starboard / 우현),
+    # +1 to the left (port / 좌현). LLM tool exposes nautical names; we map them here.
+    dir_map = {"port": 1, "starboard": -1, "random": 0}
+    dir_value = dir_map.get(direction, 0)
+
+    if active:
+        if direction == "port":
+            label = "선회 시나리오 시작 (좌현)"
+        elif direction == "starboard":
+            label = "선회 시나리오 시작 (우현)"
+        else:
+            label = "선회 시나리오 시작 (무작위 방향)"
+    else:
+        label = "선회 시나리오 중지"
+
+    return {
+        "action": "set_turn_scenario",
+        "active": active,
+        "direction": dir_value,
+        "label": label,
+    }
+
+
+def _tool_set_roll_scenario(arguments: dict) -> dict:
+    """Return roll-scenario override action for the frontend.
+
+    The frontend roll viewer applies the override only if it is currently open.
+    All parameters are optional — omitted ones retain their observed values.
+    """
+    if arguments.get("clear"):
+        return {
+            "action": "set_roll_scenario",
+            "clear": True,
+            "label": "횡요각 시나리오 초기화 (실제 관측값 복귀)",
+        }
+
+    # Accept both snake_case (canonical) and camelCase / shorthand aliases — small LLMs sometimes
+    # invent alternate names. Pick the first non-None value among aliases per key.
+    def _pick(*keys):
+        for k in keys:
+            v = arguments.get(k)
+            if v is not None:
+                return v
+        return None
+
+    params: dict = {}
+    if (v := _pick("wind_speed", "windSpeed", "wind")) is not None:
+        params["windSpeed"] = float(v)
+    if (v := _pick("wave_height", "waveHeight", "wave")) is not None:
+        params["waveHeight"] = float(v)
+    if (v := _pick("wave_period", "wavePeriod", "period")) is not None:
+        params["wavePeriod"] = float(v)
+    if (v := _pick("wave_direction", "waveDirection", "direction")) is not None:
+        params["waveDirection"] = float(v) % 360
+    if (v := _pick("time_scale", "timeScale", "speed_factor")) is not None:
+        params["timeScale"] = max(0.25, min(10.0, float(v)))
+    if (v := _pick("ship_speed", "shipSpeed", "speed", "sog")) is not None:
+        params["shipSpeed"] = max(0.0, min(35.0, float(v)))
+
+    if not params:
+        return {"error": "최소 한 개 이상의 시나리오 파라미터를 지정해야 합니다."}
+
+    label_parts = []
+    if "windSpeed" in params:    label_parts.append(f"풍속 {params['windSpeed']:.0f}kt")
+    if "waveHeight" in params:   label_parts.append(f"파고 {params['waveHeight']:.1f}m")
+    if "wavePeriod" in params:   label_parts.append(f"주기 {params['wavePeriod']:.0f}s")
+    if "waveDirection" in params: label_parts.append(f"파향 {params['waveDirection']:.0f}°")
+    if "timeScale" in params:    label_parts.append(f"시간 {params['timeScale']:.1f}×")
+    if "shipSpeed" in params:    label_parts.append(f"속력 {params['shipSpeed']:.1f}kt")
+
+    return {
+        "action": "set_roll_scenario",
+        "params": params,
+        "label": "횡요각 시나리오 적용: " + ", ".join(label_parts),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Tool dispatcher
 # ---------------------------------------------------------------------------
@@ -552,6 +889,11 @@ _TOOL_HANDLERS = {
     "fly_to":              _tool_fly_to,
     "filter_ships":        _tool_filter_ships,
     "get_ship_detail":     _tool_get_ship_detail,
+    "set_roll_scenario":   _tool_set_roll_scenario,
+    "set_turn_scenario":   _tool_set_turn_scenario,
+    "open_roll_viewer":    _tool_open_roll_viewer,
+    "trigger_capsize":     _tool_trigger_capsize,
+    "return_to_globe":     _tool_return_to_globe,
 }
 
 

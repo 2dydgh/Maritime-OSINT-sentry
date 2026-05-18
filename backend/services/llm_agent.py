@@ -23,18 +23,69 @@ from backend.services.llm_tools import TOOL_DEFINITIONS, execute_tool
 
 logger = logging.getLogger(__name__)
 
+# Module-level httpx client — reuses connection pool across all chat requests.
+# Lazy-initialized on first use; lives for process lifetime (acceptable for a long-running server).
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Return the shared httpx client, creating it on first call."""
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=OLLAMA_TIMEOUT)
+    return _http_client
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _build_initial_messages(user_message: str, history: list | None) -> list[dict]:
-    """Construct the messages list: system + trimmed history + new user turn."""
+def _build_context_message(context: dict | None) -> str | None:
+    """Render the frontend state snapshot as a short Korean system reminder.
+
+    Returns None when there's no useful context to inject. The frontend sends
+    this every turn so the LLM knows what '이 배' / '현재 선박' refers to —
+    without it, the model hallucinates ship names from chat history.
+    """
+    if not context:
+        return None
+    rv = context.get("roll_viewer")
+    if not rv:
+        return None
+    name = rv.get("name") or "UNKNOWN"
+    mmsi = rv.get("mmsi", "?")
+    parts = [
+        f"[현재 화면 상태] 횡요각 시뮬레이션 화면이 열려 있고, 표시 중인 선박은 "
+        f"'{name}' (MMSI {mmsi}) 입니다."
+    ]
+    if rv.get("is_capsizing"):
+        parts.append("현재 전복 시뮬레이션이 진행 중입니다.")
+    if rv.get("is_turning"):
+        parts.append("현재 선회 시나리오가 활성화되어 있습니다.")
+    parts.append(
+        "사용자가 '이 배', '현재 선박', '이 선박', '얘'처럼 지시 표현을 쓰면 "
+        "반드시 위 선박을 의미합니다 — 다른 선박 이름을 추측하지 마세요. "
+        "또한 화면이 이미 열려 있으므로 '횡요각 화면을 먼저 열어주세요' 같은 안내는 하지 마세요."
+    )
+    return " ".join(parts)
+
+
+def _build_initial_messages(
+    user_message: str,
+    history: list | None,
+    context: dict | None = None,
+) -> list[dict]:
+    """Construct the messages list: system + trimmed history + context + new user turn."""
     messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     if history:
         # Keep only the last 10 history entries to avoid context overflow
         trimmed = history[-10:]
         messages.extend(trimmed)
+
+    ctx_msg = _build_context_message(context)
+    if ctx_msg:
+        messages.append({"role": "system", "content": ctx_msg})
 
     messages.append({"role": "user", "content": user_message})
     return messages
@@ -52,6 +103,7 @@ async def _call_ollama(client: httpx.AsyncClient, messages: list[dict]) -> dict:
         "messages": messages,
         "tools": TOOL_DEFINITIONS,
         "stream": False,
+        "keep_alive": -1,  # keep model loaded indefinitely → no cold-start between calls
         "options": {
             "num_predict": MAX_RESPONSE_TOKENS,
         },
@@ -70,7 +122,7 @@ async def _call_ollama(client: httpx.AsyncClient, messages: list[dict]) -> dict:
 # Public interface
 # ---------------------------------------------------------------------------
 
-async def chat(user_message: str, history: list = None) -> dict:
+async def chat(user_message: str, history: list = None, context: dict = None) -> dict:
     """Run a single user turn through the Maritime OSINT agent.
 
     Iteratively resolves tool calls (up to MAX_TOOL_CALLS) before returning
@@ -88,12 +140,13 @@ async def chat(user_message: str, history: list = None) -> dict:
             "actions": list  — list of frontend action dicts (may be empty),
         }
     """
-    messages = _build_initial_messages(user_message, history)
+    messages = _build_initial_messages(user_message, history, context)
     actions: list[dict[str, Any]] = []
     tool_call_count = 0
 
     try:
-        async with httpx.AsyncClient() as client:
+        client = _get_client()
+        if True:  # preserved indentation level so the inner block stays untouched
             while True:
                 # --- Call Ollama ---
                 try:

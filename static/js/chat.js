@@ -69,10 +69,27 @@ var ChatUI = (function () {
         _sendBtn.disabled = true;
         _input.disabled = true;
 
+        // Build a snapshot of current frontend state so the LLM knows what
+        // "this ship" / "현재 선박" actually refers to.
+        var context = {};
+        if (window.RollViewer && window.RollViewer.isActive && window.RollViewer.isActive()) {
+            var rvMmsi = window.RollViewer.getCurrentMmsi && window.RollViewer.getCurrentMmsi();
+            if (rvMmsi && window.shipDataMap && window.shipDataMap[rvMmsi]) {
+                var rvShip = window.shipDataMap[rvMmsi];
+                context.roll_viewer = {
+                    mmsi: rvMmsi,
+                    name: rvShip.name || 'UNKNOWN',
+                    type: rvShip.type || 'unknown',
+                    is_capsizing: !!(window.RollViewer.isCapsizing && window.RollViewer.isCapsizing()),
+                    is_turning: !!(window.RollViewer.isTurnActive && window.RollViewer.isTurnActive())
+                };
+            }
+        }
+
         fetch('/api/v1/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, history: _history.slice(-10) })
+            body: JSON.stringify({ message: text, history: _history.slice(-10), context: context })
         })
         .then(function (res) {
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -108,13 +125,62 @@ var ChatUI = (function () {
             EventBus.emit('command:flyTo', { lat: action.lat, lon: action.lon });
         } else if (action.action === 'filter_ships') {
             EventBus.emit('command:filter', { shipType: action.ship_type || action.types });
+        } else if (action.action === 'set_roll_scenario') {
+            if (!window.RollViewer || !window.RollViewer.isActive || !window.RollViewer.isActive()) {
+                _appendMessage('assistant', '횡요각 화면이 열려있지 않아 시나리오를 적용하지 못했습니다. 선박을 클릭하고 횡요각 화면을 먼저 열어주세요.');
+                return;
+            }
+            if (action.clear) {
+                window.RollViewer.clearScenarioOverride();
+            } else if (action.params) {
+                window.RollViewer.setScenarioOverride(action.params);
+            }
+        } else if (action.action === 'set_turn_scenario') {
+            if (!window.RollViewer || !window.RollViewer.isActive || !window.RollViewer.isActive()) {
+                _appendMessage('assistant', '횡요각 화면이 열려있지 않아 선회 시나리오를 시작할 수 없습니다. 선박을 클릭하고 횡요각 화면을 먼저 열어주세요.');
+                return;
+            }
+            window.RollViewer.setTurnScenario(action.active, action.direction || 0);
+        } else if (action.action === 'open_roll_viewer') {
+            // Open the roll-viewer dedicated screen for the given MMSI.
+            // Mirrors what clicking the model card does in the UI.
+            if (!action.mmsi) return;
+            if (window.RollViewer && window.RollViewer.isActive && window.RollViewer.isActive()
+                && window.RollViewer.getCurrentMmsi && window.RollViewer.getCurrentMmsi() === action.mmsi) {
+                return;  // already open for this ship
+            }
+            if (window.ModelRegistry && window.LayoutManager) {
+                var rollModel = window.ModelRegistry.get && window.ModelRegistry.get('roll-prediction');
+                if (rollModel) {
+                    rollModel._selectedMmsi = action.mmsi;
+                    window.LayoutManager.handleIconClick('roll-prediction', 'dedicated-screen');
+                }
+            }
+        } else if (action.action === 'trigger_capsize') {
+            if (!window.RollViewer || !window.RollViewer.isActive || !window.RollViewer.isActive()) {
+                _appendMessage('assistant', '횡요각 화면이 열려있지 않아 전복 시뮬레이션을 시작할 수 없습니다. 선박을 클릭하고 횡요각 화면을 먼저 열어주세요.');
+                return;
+            }
+            if (action.clear) {
+                window.RollViewer.clearCapsize();
+            } else {
+                window.RollViewer.triggerCapsize(action.direction || 0, action.delay_seconds || 0);
+            }
+        } else if (action.action === 'return_to_globe') {
+            if (window.LayoutManager && typeof window.LayoutManager.closeDedicatedPanel === 'function') {
+                window.LayoutManager.closeDedicatedPanel();
+            }
         }
     }
 
     function _appendMessage(role, text) {
         var el = document.createElement('div');
         el.className = 'chat-msg chat-msg-' + role;
-        el.textContent = text;
+        if (role === 'assistant' && window.marked) {
+            el.innerHTML = window.marked.parse(text || '');
+        } else {
+            el.textContent = text;
+        }
         _messages.appendChild(el);
         _messages.scrollTop = _messages.scrollHeight;
     }
