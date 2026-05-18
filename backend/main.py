@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import database, config, websocket
 from .services import ais_stream, data_fetcher, history_writer, aircraft_tracker
-from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision, weather, route, aircraft, chat
+from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision, weather, route, aircraft, chat, hazard
 from .services import collision_analyzer, land_filter
 
 # Set up logging
@@ -190,6 +190,7 @@ app.include_router(weather.router, prefix="/api/v1")
 app.include_router(route.router, prefix="/api/v1")
 app.include_router(aircraft.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(hazard.router, prefix="/api/v1")
 
 # Static Files — resolve path for both normal and PyInstaller frozen mode
 import sys as _sys
