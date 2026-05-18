@@ -42,6 +42,13 @@ AIS 선박 추적, 위성 궤도 전파, 이상 징후 탐지, ML 기반 충돌 
 - 자동 페일오버 기반 TLE 수집 로직
 - SGP4 고정밀 전파를 통한 위치, 속도, 방위 계산
 
+### 항공기 추적 (ADS-B)
+
+- **OpenSky Network** REST API 폴링(10초 주기) 기반 실시간 항공기 위치 추적
+- ICAO24 군용 주소 블록(US/UK/FR/DE/RU/CN/KR/JP/IL/AU) 매핑을 통한 자동 분류 — **민간 / 군용 / 헬리콥터 / 기타**
+- ADS-B Emitter Category 코드 활용 — 회전익(rotorcraft) 자동 식별
+- 백그라운드 폴링 + 인메모리 캐시로 부하 분리, `/api/v1/aircraft` REST 엔드포인트 제공
+
 ### 실시간 이상 탐지 (라이브 피드)
 
 ![Live Feed](static/demos/live-feed.gif)
@@ -76,6 +83,13 @@ AIS 선박 추적, 위성 궤도 전파, 이상 징후 탐지, ML 기반 충돌 
   - CPA 위험 영역 원 (펄스 애니메이션) — DCPA 비례 반경
   - 위험도 색상 코딩: 위험(빨강), 경고(주황), 주의(노랑), 안전(초록)
 
+### 2D 해역 위험도 분석
+
+- **헥스 그리드 위험도 레이어** — 사고/충돌/혼잡 점수를 육각 셀로 시각화 (위험·경고·주의 단계별 색상 코딩)
+- **영역 분석 도구** — 드래그 사각형으로 선택한 해역의 평균/최대 위험도 및 위험 사유 자동 집계
+- **베이스맵 전환** — 위성 영상 / 해도(nautical chart) 모드 토글, 위험 셀 가독성을 위한 컨테이너 필터 적용
+- 2D ↔ 3D 모드 전환 시 마지막 뷰포트 자동 복원
+
 ### 횡요각 3D 시뮬레이션 (Roll Viewer)
 
 ![Roll Viewer](static/demos/roll-viewer.gif)
@@ -105,6 +119,14 @@ AIS 선박 추적, 위성 궤도 전파, 이상 징후 탐지, ML 기반 충돌 
 ### Sentinel-2 위성 영상
 - 우클릭 컨텍스트 메뉴를 통한 Microsoft Planetary Computer 고해상도 위성 영상 검색
 - 즉시 썸네일 미리보기 및 메타데이터 조회
+
+### LLM 어시스턴트 (Ollama Tool-Calling)
+
+- **자연어 채팅 인터페이스** — Ollama 모델 기반, 도구 호출을 통한 데이터 조회 및 화면 제어
+- **프론트엔드 상태 인식** — 현재 화면(횡요각 뷰어 등)과 표시 중인 선박을 매 턴 컨텍스트로 주입하여 "이 배", "현재 선박" 같은 지시 표현 처리
+- **시나리오 제어 도구** — 자연어로 횡요각 뷰어의 날씨/속도 오버라이드, 선회 시나리오, 전복 시뮬레이션 트리거
+- 지원 도구: `get_ships`, `get_collision_risks`, `get_area_status`, `get_ship_detail`, `fly_to`, `filter_ships`, `open_roll_viewer`, `return_to_globe`, `trigger_capsize`, `set_turn_scenario`, `set_roll_scenario`
+- 연결 풀링 + Ollama `keep_alive`로 모델 상시 로드, 응답 지연 최소화
 
 ### 비전 모드
 
