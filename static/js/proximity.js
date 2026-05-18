@@ -309,7 +309,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
                 (sel.lat + tgt.lat) / 2
             ),
             text: prefix + dist.toFixed(1) + ' nm',
-            font: isCollisionTarget ? 'bold 14px JetBrains Mono' : '12px JetBrains Mono',
+            font: isCollisionTarget ? 'bold 14px JetBrains Mono, Pretendard Variable' : '12px JetBrains Mono, Pretendard Variable',
             fillColor: color.cesium,
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 3,
@@ -368,7 +368,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
                 var cpaLabel = proximityCpaLabels.add({
                     position: Cesium.Cartesian3.fromDegrees(cpa.lng, cpa.lat),
                     text: 'CPA ' + cpa.dcpaNm.toFixed(2) + 'nm\n' + cpa.tcpaMin.toFixed(1) + 'min',
-                    font: 'bold 11px JetBrains Mono',
+                    font: 'bold 11px JetBrains Mono, Pretendard Variable',
                     fillColor: Cesium.Color.WHITE,
                     outlineColor: Cesium.Color.BLACK,
                     outlineWidth: 3,
@@ -547,6 +547,14 @@ function renderNearbyPanel(nearbyVessels) {
     }
 }
 window.renderNearbyPanel = renderNearbyPanel;
+
+function closeNearbyModal() {
+    if (_nearbyModal && _nearbyModal.parentNode) {
+        _nearbyModal.parentNode.removeChild(_nearbyModal);
+        _nearbyModal = null;
+    }
+}
+window.closeNearbyModal = closeNearbyModal;
 
 function clearProximity() {
     selectedProximityMmsi = null;

@@ -355,7 +355,7 @@ function _propagateSatPositions() {
                 },
                 label: {
                     text: sat.name,
-                    font: '11px JetBrains Mono, monospace',
+                    font: '11px JetBrains Mono, Pretendard Variable, monospace',
                     fillColor: Cesium.Color.fromCssColorString(color),
                     outlineColor: Cesium.Color.BLACK,
                     outlineWidth: 3,
@@ -428,7 +428,7 @@ function updateSatellitesForTime(sats, targetDate) {
                 },
                 label: {
                     text: sat.name,
-                    font: '11px JetBrains Mono, monospace',
+                    font: '11px JetBrains Mono, Pretendard Variable, monospace',
                     fillColor: Cesium.Color.fromCssColorString(color),
                     outlineColor: Cesium.Color.BLACK,
                     outlineWidth: 3,

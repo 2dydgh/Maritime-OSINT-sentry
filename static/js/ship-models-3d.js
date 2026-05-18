@@ -141,7 +141,7 @@
                     },
                     label: {
                         text: ship.name || '',
-                        font: '12px Inter, sans-serif',
+                        font: '12px Pretendard Variable, Inter, sans-serif',
                         fillColor: Cesium.Color.WHITE,
                         outlineColor: Cesium.Color.BLACK,
                         outlineWidth: 3,

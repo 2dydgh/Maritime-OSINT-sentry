@@ -869,7 +869,7 @@ document.body.insertAdjacentHTML('beforeend', '\
         background:rgba(10,14,27,0.96); border:1px solid rgba(0,40,120,0.4);\
         border-radius:8px; padding:6px 0; min-width:210px;\
         backdrop-filter:blur(12px); box-shadow:0 8px 32px rgba(0,0,0,0.6);\
-        font-family:\'JetBrains Mono\',monospace;">\
+        font-family:\'JetBrains Mono\',\'Pretendard Variable\',monospace;">\
         <div id="sentinelMenuBtn" style="\
             padding:10px 16px; cursor:pointer; color:#fafafa; font-size:0.78rem;\
             display:flex; align-items:center; gap:8px;"\
@@ -929,7 +929,7 @@ function _addSentinelMarker(lat, lng) {
         },
         label: {
             text: 'Sentinel-2',
-            font: '10px JetBrains Mono, monospace',
+            font: '10px JetBrains Mono, Pretendard Variable, monospace',
             fillColor: Cesium.Color.fromCssColorString('#3b82f6'),
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 3,
@@ -979,7 +979,7 @@ document.getElementById('sentinelMenuBtn').addEventListener('click', async funct
     card.style.right = 'auto';
 
     card.classList.add('visible');
-    body.innerHTML = '<div style="text-align:center;color:#6b7280;font-family:\'JetBrains Mono\',monospace;font-size:0.75rem;padding:30px 0;"><i class="fa-solid fa-circle-notch fa-spin"></i>&nbsp;Searching Sentinel-2...</div>';
+    body.innerHTML = '<div style="text-align:center;color:#6b7280;font-family:\'JetBrains Mono\',\'Pretendard Variable\',monospace;font-size:0.75rem;padding:30px 0;"><i class="fa-solid fa-circle-notch fa-spin"></i>&nbsp;Searching Sentinel-2...</div>';
 
     try {
         var res = await fetch('/api/v1/sentinel?lat=' + _sentinelLat + '&lng=' + _sentinelLng);
@@ -1005,7 +1005,7 @@ document.getElementById('sentinelMenuBtn').addEventListener('click', async funct
             '<tr><th>\ud50c\ub7ab\ud3fc</th><td>' + (data.platform || 'Sentinel-2') + '</td></tr>' +
             '<tr><th>\uc88c\ud45c</th><td>' + _sentinelLat + '\u00b0, ' + _sentinelLng + '\u00b0</td></tr>' +
             '</table>' +
-            (href ? '<a ' + href + ' style="display:block;margin-top:16px;text-align:center;color:var(--accent);font-family:\'Inter\',sans-serif;font-size:0.8rem;text-decoration:none;border:1px solid var(--panel-border);border-radius:6px;padding:10px;background:rgba(59,130,246,0.06);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(59,130,246,0.12)\'" onmouseout="this.style.background=\'rgba(59,130,246,0.06)\'"><i class="fa-solid fa-expand"></i> \uc804\uccb4 \ud654\uc9c8\ub85c \ubdf0\uc5b4 \uc5f4\uae30</a>' : '');
+            (href ? '<a ' + href + ' style="display:block;margin-top:16px;text-align:center;color:var(--accent);font-family:\'Pretendard Variable\',\'Inter\',sans-serif;font-size:0.8rem;text-decoration:none;border:1px solid var(--panel-border);border-radius:6px;padding:10px;background:rgba(59,130,246,0.06);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(59,130,246,0.12)\'" onmouseout="this.style.background=\'rgba(59,130,246,0.06)\'"><i class="fa-solid fa-expand"></i> \uc804\uccb4 \ud654\uc9c8\ub85c \ubdf0\uc5b4 \uc5f4\uae30</a>' : '');
     } catch (err) {
         body.innerHTML = '<div style="text-align:center;color:#ef4444;font-size:0.75rem;padding:20px;">Error: ' + err.message + '</div>';
     }
