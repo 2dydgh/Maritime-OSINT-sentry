@@ -11,6 +11,7 @@ import logging
 import math
 import time
 import re
+import threading
 from datetime import datetime
 from cachetools import TTLCache
 from .network_utils import fetch_with_curl
@@ -18,7 +19,53 @@ from .network_utils import fetch_with_curl
 logger = logging.getLogger(__name__)
 
 # Cache GP data — re-download from CelesTrak only every 30 minutes
-_sat_gp_cache = {"data": None, "last_fetch": 0}
+# last_fetch  = ts of last successful online refresh (drives 30min refresh interval)
+# last_attempt = ts of last refresh *attempt* (debounces failure retries to 60s+)
+_sat_gp_cache = {"data": None, "last_fetch": 0, "last_attempt": 0}
+_refresh_lock = threading.Lock()
+
+_GP_URLS = [
+    "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json",
+    "https://celestrak.com/NORAD/elements/gp.php?GROUP=active&FORMAT=json",
+]
+
+
+def _refresh_gp_from_network():
+    """Refresh GP data from CelesTrak. Intended to run in a background thread.
+    Skips silently if another refresh is already in flight."""
+    if not _refresh_lock.acquire(blocking=False):
+        return
+    try:
+        for url in _GP_URLS:
+            try:
+                response = fetch_with_curl(url, timeout=5)
+                if response.status_code == 200:
+                    gp_data = response.json()
+                    if isinstance(gp_data, list) and len(gp_data) > 100:
+                        _sat_gp_cache["data"] = gp_data
+                        _sat_gp_cache["last_fetch"] = time.time()
+                        _save_gp_cache(gp_data)
+                        # Invalidate processed-results cache so next request re-classifies
+                        _results_cache.clear()
+                        logger.info(
+                            f"Satellites: background refresh ok — {len(gp_data)} GP records from {url}"
+                        )
+                        return
+            except Exception as e:
+                logger.warning(f"Satellites: background refresh failed for {url}: {e}")
+
+        # All sources failed — try TLE fallback only if we have nothing usable yet
+        if _sat_gp_cache["data"] is None:
+            fallback_data = _fetch_satellites_from_tle_api()
+            if fallback_data and len(fallback_data) > 5:
+                _sat_gp_cache["data"] = fallback_data
+                _sat_gp_cache["last_fetch"] = time.time()
+                logger.info(f"Satellites: background TLE fallback ok — {len(fallback_data)} records")
+                return
+
+        logger.warning("Satellites: background refresh — all sources failed")
+    finally:
+        _refresh_lock.release()
 
 # Results cache — 30 min TTL
 _results_cache = TTLCache(maxsize=1, ttl=1800)
@@ -204,45 +251,31 @@ def fetch_intel_satellites():
     try:
         from sgp4.api import Satrec, WGS72, jday
 
-        # Fetch/refresh GP data from CelesTrak every 30 minutes
         now_ts = time.time()
-        if _sat_gp_cache["data"] is None or (now_ts - _sat_gp_cache["last_fetch"]) > 1800:
-            # 1) 디스크 캐시를 먼저 로드 — 즉시 사용 가능하게
-            if _sat_gp_cache["data"] is None:
-                disk_data = _load_gp_cache()
-                if disk_data:
-                    _sat_gp_cache["data"] = disk_data
-                    _sat_gp_cache["last_fetch"] = now_ts
-                    logger.info("Satellites: Using disk cache while attempting online refresh")
 
-            # 2) 온라인 갱신 시도 (짧은 타임아웃, 실패해도 캐시 데이터로 동작)
-            online_success = False
-            gp_urls = [
-                "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json",
-                "https://celestrak.com/NORAD/elements/gp.php?GROUP=active&FORMAT=json",
-            ]
-            for url in gp_urls:
-                try:
-                    response = fetch_with_curl(url, timeout=5)
-                    if response.status_code == 200:
-                        gp_data = response.json()
-                        if isinstance(gp_data, list) and len(gp_data) > 100:
-                            _sat_gp_cache["data"] = gp_data
-                            _sat_gp_cache["last_fetch"] = now_ts
-                            _save_gp_cache(gp_data)
-                            logger.info(f"Satellites: Downloaded {len(gp_data)} GP records from {url}")
-                            online_success = True
-                            break
-                except Exception as e:
-                    logger.warning(f"Satellites: Failed to fetch from {url}: {e}")
+        # 1) Bootstrap RAM cache from disk — never blocks on the network.
+        if _sat_gp_cache["data"] is None:
+            disk_data = _load_gp_cache()
+            if disk_data:
+                _sat_gp_cache["data"] = disk_data
+                # last_fetch stays 0 → triggers a background refresh below
 
-            # 3) CelesTrak 실패 + 캐시도 없을 때만 TLE fallback
-            if not online_success and _sat_gp_cache["data"] is None:
-                logger.info("Satellites: CelesTrak unreachable and no cache, trying TLE fallback API...")
-                fallback_data = _fetch_satellites_from_tle_api()
-                if fallback_data and len(fallback_data) > 5:
-                    _sat_gp_cache["data"] = fallback_data
-                    _sat_gp_cache["last_fetch"] = now_ts
+        # 2) If cached data is stale (>30min) and we haven't tried in the last 60s,
+        #    refresh in a background thread. The caller is NOT blocked.
+        cache_stale = (now_ts - _sat_gp_cache["last_fetch"]) > 1800
+        attempt_cooled = (now_ts - _sat_gp_cache["last_attempt"]) > 60
+        if cache_stale and attempt_cooled:
+            _sat_gp_cache["last_attempt"] = now_ts
+            threading.Thread(target=_refresh_gp_from_network, daemon=True).start()
+
+        # 3) Last resort — only when we have absolutely no data yet (no disk cache,
+        #    truly cold start). This is the only path that blocks on the network.
+        if _sat_gp_cache["data"] is None:
+            logger.info("Satellites: no cache available, falling back to synchronous TLE fetch")
+            fallback_data = _fetch_satellites_from_tle_api()
+            if fallback_data and len(fallback_data) > 5:
+                _sat_gp_cache["data"] = fallback_data
+                _sat_gp_cache["last_fetch"] = now_ts
 
         data = _sat_gp_cache["data"]
         if not data:
