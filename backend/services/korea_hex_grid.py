@@ -42,3 +42,27 @@ def _is_useful_cell(lat: float, lng: float) -> bool:
     if land_filter.is_land_point(lat, lng):
         return False
     return land_filter.has_land_near(lat, lng, _MAX_DIST_FROM_LAND_DEG)
+
+
+def _clip(x: float) -> float:
+    return max(0.0, min(1.0, x))
+
+
+def _normalize_wave(wave_m: float) -> float:
+    """1m → 0, 5m → 1, linear."""
+    return _clip((wave_m - 1.0) / 4.0)
+
+
+def _normalize_wind(wind_kts: float) -> float:
+    """10kt → 0, 50kt → 1, linear."""
+    return _clip((wind_kts - 10.0) / 40.0)
+
+
+def _normalize_visibility(vis_m: float) -> float:
+    """1km → 1, 10km → 0, linear (inverted)."""
+    return _clip(1.0 - (vis_m - 1000.0) / 9000.0)
+
+
+def _normalize_traffic(n_ships: int) -> float:
+    """0척 → 0, 15척+ → 1, linear."""
+    return _clip(n_ships / 15.0)
