@@ -152,6 +152,20 @@ app.add_middleware(
 @app.websocket("/api/v1/ws/ships")
 async def websocket_ships(ws: WebSocket):
     await websocket.manager.connect(ws)
+    # Immediate snapshot on connect — clients otherwise wait up to 1s for the
+    # next broadcast_ships() tick, which is the dominant "서버 연결 중" delay.
+    try:
+        vessels = ais_stream.get_ais_vessels()
+        if vessels:
+            await ws.send_json({
+                "type": "ships_update",
+                "ships": vessels,
+                "total_tracked": len(vessels),
+                "timestamp": int(asyncio.get_event_loop().time() * 1000),
+                "server_time_ms": int(__import__('time').time() * 1000),
+            })
+    except Exception as e:
+        logger.error(f"Initial ship snapshot failed: {e}")
     try:
         while True:
             await ws.receive_text()

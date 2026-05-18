@@ -5,6 +5,8 @@ var LayoutManager = (function() {
     var activePanel = null;     // currently active sidebar icon panel name
     var activeAction = null;    // 'right-panel' | 'layer-toggle' | 'dedicated-screen'
     var prevPanel = null;       // panel to return to from ship info
+    // Map mode saved when entering a dedicated-screen (so 2D users return to 2D after closing)
+    var _modeBeforeDedicated = null;
 
     function init() {
         // Sidebar icon click delegation
@@ -34,10 +36,21 @@ var LayoutManager = (function() {
         if (backBtn) {
             backBtn.addEventListener('click', function() {
                 if (prevPanel) {
-                    activePanel = prevPanel;
-                    activeAction = 'right-panel';
-                    highlightIcon(prevPanel);
-                    openRightPanel(prevPanel);
+                    // Only restore if a corresponding view element actually exists.
+                    // layer-toggle / globe-layer panels have no rightView-{name} element,
+                    // so attempting openRightPanel() would leave an empty black panel.
+                    var view = document.getElementById('rightView-' + prevPanel);
+                    if (view) {
+                        activePanel = prevPanel;
+                        activeAction = 'right-panel';
+                        highlightIcon(prevPanel);
+                        openRightPanel(prevPanel);
+                    } else {
+                        closeRightPanel();
+                        deactivateAllIcons();
+                        activePanel = null;
+                        activeAction = null;
+                    }
                     prevPanel = null;
                 } else {
                     closeRightPanel();
@@ -53,6 +66,14 @@ var LayoutManager = (function() {
 
     function handleIconClick(panel, action) {
         if (_transitioning) return;
+
+        // External link — open the model's URL in a new tab and return.
+        // No active-state bookkeeping; treat as a fire-and-forget action.
+        if (action === 'external-link') {
+            var m = window.ModelRegistry && ModelRegistry.get(panel);
+            if (m && m.url) window.open(m.url, '_blank', 'noopener,noreferrer');
+            return;
+        }
 
         // Same panel clicked again
         if (panel === activePanel) {
@@ -109,7 +130,7 @@ var LayoutManager = (function() {
         if (action === 'right-panel') {
             showDedicatedScreen(null);
             openRightPanel(panel);
-        } else if (action === 'layer-toggle') {
+        } else if (action === 'layer-toggle' || action === 'globe-layer') {
             toggleModelLayer(panel, true);
             // Notify registry
             if (window.ModelRegistry && ModelRegistry.isModel(panel)) {
@@ -117,6 +138,15 @@ var LayoutManager = (function() {
             }
         } else if (action === 'dedicated-screen') {
             closeRightPanel();
+            // Dedicated screens render on the Cesium globe — force 3D mode if currently in 2D
+            // (else Cesium stays display:none and the model's entities are invisible).
+            // Save prior mode so we can restore it on deactivate.
+            if (typeof currentMapMode !== 'undefined' && currentMapMode === '2d' && typeof setMapMode === 'function') {
+                _modeBeforeDedicated = '2d';
+                setMapMode('3d');
+            } else {
+                _modeBeforeDedicated = null;
+            }
             showDedicatedScreen(panel);
             // Notify registry
             if (window.ModelRegistry && ModelRegistry.isModel(panel)) {
@@ -130,7 +160,7 @@ var LayoutManager = (function() {
 
         if (action === 'right-panel') {
             closeRightPanel();
-        } else if (action === 'layer-toggle') {
+        } else if (action === 'layer-toggle' || action === 'globe-layer') {
             toggleModelLayer(panel, false);
             if (window.ModelRegistry && ModelRegistry.isModel(panel)) {
                 ModelRegistry.deactivateModel(panel);
@@ -140,6 +170,11 @@ var LayoutManager = (function() {
             if (window.ModelRegistry && ModelRegistry.isModel(panel)) {
                 ModelRegistry.deactivateModel(panel);
             }
+            // Restore prior 2D mode if the user was on the flat map before entering this dedicated view
+            if (_modeBeforeDedicated === '2d' && typeof setMapMode === 'function') {
+                setMapMode('2d');
+            }
+            _modeBeforeDedicated = null;
         }
     }
 

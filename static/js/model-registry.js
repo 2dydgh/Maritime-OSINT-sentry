@@ -29,7 +29,7 @@ var ModelRegistry = (function() {
                 return { label: '항로', status: '정상', level: 'safe', icon: 'fa-route' };
             }
         },
-        'accident-zones': {
+        'hazard-zones': {
             name: '사고다발 해역',
             icon: 'fa-solid fa-burst',
             label: '사고',
@@ -37,13 +37,13 @@ var ModelRegistry = (function() {
             title: '사고다발 해역',
             init: function() {},
             activate: function() {
-                // TODO: show accident heatmap/polygon entities
+                if (typeof window.activateHazardZones === 'function') window.activateHazardZones();
             },
             deactivate: function() {
-                // TODO: hide accident entities
+                if (typeof window.deactivateHazardZones === 'function') window.deactivateHazardZones();
             },
             getShipSummary: function(mmsi) {
-                return { label: '사고해역', status: '안전', level: 'safe', icon: 'fa-burst' };
+                return null;  // not per-ship; lives on the map
             }
         },
         'dark-ship': {
@@ -86,19 +86,14 @@ var ModelRegistry = (function() {
             name: '탄소 배출량',
             icon: 'fa-solid fa-leaf',
             label: '탄소',
-            type: 'dedicated-screen',
-            title: '탄소 배출',
-            init: function() {
-                // TODO: init ECharts dashboard
-            },
-            activate: function() {
-                // TODO: render/refresh charts
-            },
-            deactivate: function() {
-                // TODO: dispose ECharts instances
-            },
+            type: 'external-link',
+            url: 'https://carbon-monitoring-prototype.vercel.app/',
+            title: '탄소 배출 모니터링 (외부)',
+            init: function() {},
+            activate: function() {},
+            deactivate: function() {},
             getShipSummary: function(mmsi) {
-                return { label: '탄소', status: '8.1t/h', level: 'warning', icon: 'fa-leaf' };
+                return null;  // external link — no per-ship card
             }
         }
     };

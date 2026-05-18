@@ -17,31 +17,27 @@ function getShipIcon(colorHex, shipType) {
     if (_shipIconCache[key]) return _shipIconCache[key];
 
     var c = colorHex;
-    var s = '#000';
-    var glow = '<defs>\
-        <filter id=\'g\' x=\'-50%\' y=\'-50%\' width=\'200%\' height=\'200%\'>\
-            <feDropShadow dx=\'0\' dy=\'0\' stdDeviation=\'2\' flood-color=\'rgba(0,0,0,0.7)\'/>\
-        </filter>\
-    </defs>';
+    var s = 'rgba(0,0,0,0.5)';
+    var glow = '';
 
     var hull;
     switch (shipType) {
         case 'cargo':
-            hull = '<path d=\'M16,3 L24,10 L24,30 L22,34 L10,34 L8,30 L8,10 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#g)\'/>\
+            hull = '<path d=\'M16,3 L24,10 L24,30 L22,34 L10,34 L8,30 L8,10 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
                 <rect x=\'10\' y=\'12\' width=\'12\' height=\'3.5\' rx=\'0.5\' fill=\'white\' opacity=\'0.3\'/>\
                 <rect x=\'10\' y=\'17\' width=\'12\' height=\'3.5\' rx=\'0.5\' fill=\'white\' opacity=\'0.25\'/>\
                 <rect x=\'10\' y=\'22\' width=\'12\' height=\'3.5\' rx=\'0.5\' fill=\'white\' opacity=\'0.2\'/>\
                 <rect x=\'13\' y=\'6\' width=\'6\' height=\'4\' rx=\'0.8\' fill=\'white\' opacity=\'0.4\'/>';
             break;
         case 'tanker':
-            hull = '<ellipse cx=\'16\' cy=\'20\' rx=\'9\' ry=\'15\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#g)\'/>\
+            hull = '<ellipse cx=\'16\' cy=\'20\' rx=\'9\' ry=\'15\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
                 <ellipse cx=\'16\' cy=\'14\' rx=\'5\' ry=\'3\' fill=\'white\' opacity=\'0.2\'/>\
                 <ellipse cx=\'16\' cy=\'22\' rx=\'5\' ry=\'3\' fill=\'white\' opacity=\'0.15\'/>\
                 <ellipse cx=\'16\' cy=\'29\' rx=\'4\' ry=\'2.5\' fill=\'white\' opacity=\'0.12\'/>\
                 <rect x=\'13\' y=\'6\' width=\'6\' height=\'3\' rx=\'1.5\' fill=\'white\' opacity=\'0.4\'/>';
             break;
         case 'passenger':
-            hull = '<path d=\'M16,2 L26,12 L26,28 L23,34 L9,34 L6,28 L6,12 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#g)\'/>\
+            hull = '<path d=\'M16,2 L26,12 L26,28 L23,34 L9,34 L6,28 L6,12 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
                 <rect x=\'8\' y=\'12\' width=\'16\' height=\'2\' rx=\'0.5\' fill=\'white\' opacity=\'0.35\'/>\
                 <rect x=\'8\' y=\'15.5\' width=\'16\' height=\'2\' rx=\'0.5\' fill=\'white\' opacity=\'0.3\'/>\
                 <rect x=\'8\' y=\'19\' width=\'16\' height=\'2\' rx=\'0.5\' fill=\'white\' opacity=\'0.25\'/>\
@@ -50,7 +46,7 @@ function getShipIcon(colorHex, shipType) {
                 <circle cx=\'16\' cy=\'29\' r=\'2\' fill=\'white\' opacity=\'0.15\'/>';
             break;
         case 'fishing':
-            hull = '<path d=\'M16,6 L19,14 L19,28 L17,32 L15,32 L13,28 L13,14 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#g)\'/>\
+            hull = '<path d=\'M16,6 L19,14 L19,28 L17,32 L15,32 L13,28 L13,14 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
                 <line x1=\'16\' y1=\'6\' x2=\'16\' y2=\'16\' stroke=\'white\' stroke-width=\'1.2\' opacity=\'0.6\'/>\
                 <line x1=\'16\' y1=\'10\' x2=\'5\' y2=\'18\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.9\'/>\
                 <line x1=\'16\' y1=\'10\' x2=\'27\' y2=\'18\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.9\'/>\
@@ -60,20 +56,20 @@ function getShipIcon(colorHex, shipType) {
                 <circle cx=\'27\' cy=\'25\' r=\'1\' fill=\'' + c + '\' opacity=\'0.6\'/>';
             break;
         case 'military':
-            hull = '<path d=\'M16,0 L20,10 L21,18 L20,30 L18,36 L14,36 L12,30 L11,18 L12,10 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#g)\'/>\
+            hull = '<path d=\'M16,0 L20,10 L21,18 L20,30 L18,36 L14,36 L12,30 L11,18 L12,10 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
                 <path d=\'M14,7 L18,7 L19,11 L13,11 Z\' fill=\'white\' opacity=\'0.3\'/>\
                 <circle cx=\'16\' cy=\'15\' r=\'1.8\' fill=\'white\' opacity=\'0.3\'/>\
                 <rect x=\'14\' y=\'20\' width=\'4\' height=\'1.5\' rx=\'0.5\' fill=\'white\' opacity=\'0.25\'/>\
                 <line x1=\'16\' y1=\'0\' x2=\'16\' y2=\'6\' stroke=\'white\' stroke-width=\'0.8\' opacity=\'0.6\'/>';
             break;
         case 'tug':
-            hull = '<path d=\'M16,12 L22,16 L22,28 L20,32 L12,32 L10,28 L10,16 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#g)\'/>\
+            hull = '<path d=\'M16,12 L22,16 L22,28 L20,32 L12,32 L10,28 L10,16 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
                 <rect x=\'12\' y=\'15\' width=\'8\' height=\'6\' rx=\'1.5\' fill=\'white\' opacity=\'0.4\'/>\
                 <line x1=\'16\' y1=\'12\' x2=\'16\' y2=\'14\' stroke=\'white\' stroke-width=\'1\' opacity=\'0.5\'/>\
                 <rect x=\'13\' y=\'24\' width=\'6\' height=\'4\' rx=\'0.8\' fill=\'white\' opacity=\'0.2\'/>';
             break;
         default:
-            hull = '<path d=\'M16,4 L21,12 L21,28 L19,33 L13,33 L11,28 L11,12 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#g)\'/>\
+            hull = '<path d=\'M16,4 L21,12 L21,28 L19,33 L13,33 L11,28 L11,12 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
                 <rect x=\'13\' y=\'10\' width=\'6\' height=\'4\' rx=\'1\' fill=\'white\' opacity=\'0.35\'/>\
                 <line x1=\'16\' y1=\'4\' x2=\'16\' y2=\'9\' stroke=\'white\' stroke-width=\'0.7\' opacity=\'0.5\'/>';
     }
@@ -85,7 +81,7 @@ function getShipIcon(colorHex, shipType) {
         <circle cx=\'16\' cy=\'67\' r=\'1.8\' fill=\'' + c + '\' opacity=\'0.2\'/>\
         <circle cx=\'16\' cy=\'73\' r=\'1.4\' fill=\'' + c + '\' opacity=\'0.1\'/>';
 
-    var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 32 78\'>' + glow + hull + trail + '</svg>';
+    var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'32\' height=\'78\' viewBox=\'0 0 32 78\'>' + glow + hull + trail + '</svg>';
     var url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
     _shipIconCache[key] = url;
     return url;
@@ -125,7 +121,7 @@ function getAircraftIcon(colorHex, aircraftType) {
             body = '<path d=\'M16,4 L18,10 L26,18 L26,19 L18,16 L18,26 L21,30 L21,31 L16,29 L11,31 L11,30 L14,26 L14,16 L6,19 L6,18 L14,10 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'1.2\' filter=\'url(#ag)\'/>';
     }
 
-    var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 32 36\'>' + glow + body + '</svg>';
+    var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'32\' height=\'36\' viewBox=\'0 0 32 36\'>' + glow + body + '</svg>';
     var url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
     _aircraftIconCache[key] = url;
     return url;
@@ -364,7 +360,7 @@ function updateShipsLayer(ships) {
                 var lbl = labels.add({
                     position: position,
                     text: ship.name || '',
-                    font: '11px Inter, sans-serif',
+                    font: '11px Pretendard Variable, Inter, sans-serif',
                     fillColor: Cesium.Color.fromCssColorString(SHIP_COLORS[type] || '#6b7280'),
                     outlineColor: Cesium.Color.BLACK,
                     outlineWidth: 3,
@@ -610,7 +606,7 @@ function updateAircraftLayer(aircraft) {
                     var lbl = labels.add({
                         position: position,
                         text: ac.callsign || '',
-                        font: '10px Inter, sans-serif',
+                        font: '10px Pretendard Variable, Inter, sans-serif',
                         fillColor: Cesium.Color.fromCssColorString(AIRCRAFT_COLORS[type] || '#60a5fa'),
                         outlineColor: Cesium.Color.BLACK,
                         outlineWidth: 3,
@@ -737,6 +733,8 @@ function updateAircraftLayer(aircraft) {
 window.updateAircraftLayer = updateAircraftLayer;
 
 var ws;
+var _wsReconnectDelay = 300;          // ms — first retry is fast so cold-start is barely visible
+var _WS_RECONNECT_MAX = 5000;         // exponential backoff cap
 function initWebSocket() {
     var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     var wsUrl = protocol + '//' + window.location.host + '/api/v1/ws/ships';
@@ -746,6 +744,7 @@ function initWebSocket() {
 
     ws.onopen = function() {
         console.log("WebSocket connected!");
+        _wsReconnectDelay = 300;       // reset backoff on successful open
         EventBus.emit('ws:status', 'connected');
         var loadingText = document.getElementById('loading-text');
         if (loadingText) loadingText.textContent = 'AIS 데이터 수신 대기...';
@@ -795,7 +794,7 @@ function initWebSocket() {
     };
 
     ws.onclose = function() {
-        console.log("WebSocket closed. Reconnecting in 2 seconds...");
+        console.log("WebSocket closed. Reconnecting in " + _wsReconnectDelay + "ms...");
         EventBus.emit('ws:status', 'connecting');
         var loadingEl = document.getElementById('loading');
         if (loadingEl) {
@@ -806,7 +805,8 @@ function initWebSocket() {
         if (currentMapMode === '2d' && leafletMap) {
             Object.values(leafletShipMarkers).forEach(function(m) { m.setStyle({ opacity: 0.3, fillOpacity: 0.3 }); });
         }
-        setTimeout(initWebSocket, 2000);
+        setTimeout(initWebSocket, _wsReconnectDelay);
+        _wsReconnectDelay = Math.min(_wsReconnectDelay * 2, _WS_RECONNECT_MAX);
     };
 }
 window.initWebSocket = initWebSocket;
