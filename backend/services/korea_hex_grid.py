@@ -197,3 +197,20 @@ def compute_cells(weather: dict, vessels: list[dict], features: list[dict]) -> l
             },
         })
     return out
+
+
+_active = False
+
+
+def is_active() -> bool:
+    return _active
+
+
+def activate() -> None:
+    global _active
+    _active = True
+
+
+def deactivate() -> None:
+    global _active
+    _active = False
