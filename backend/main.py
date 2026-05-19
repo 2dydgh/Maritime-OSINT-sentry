@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import database, config, websocket
 from .services import ais_stream, data_fetcher, history_writer, aircraft_tracker
 from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision, weather, route, aircraft, chat, hazard
+from .routers.hazard import warm_cache as warm_hazard_cache
 from .services import collision_analyzer, land_filter
 
 # Set up logging
@@ -42,6 +43,11 @@ async def lifespan(app: FastAPI):
         os.path.dirname(__file__), "data", "land", "ne_10m_land.shp"
     )
     land_filter.start_land_index_loading(land_shapefile)
+
+    # Pre-compute /hazard/korea response so the first request is instant.
+    # Runs as a background task — it waits for the land filter to finish then
+    # offloads the spatial compute to a thread.
+    asyncio.create_task(warm_hazard_cache())
 
     # Pre-warm searoute graph (~2s first call)
     try:

@@ -8,6 +8,8 @@ around six fixed coastal hot-spots (Busan, Yeosu, Mokpo, Boryeong, Jeju
 strait, Dokdo) and run them through the normal compute_cells pipeline so the
 scoring, top-cause, and subscores are still consistent with the algorithm.
 """
+import asyncio
+import logging
 import math
 import random
 import time
@@ -16,6 +18,7 @@ from fastapi import APIRouter
 
 from backend.services import korea_hex_grid, static_hazards, land_filter
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["hazard"])
 
 # Synth data is deterministic — compute_cells output never changes once the
@@ -86,6 +89,31 @@ def _synth_vessels() -> list[dict]:
     return out
 
 
+def _compute_cells_sync() -> list[dict]:
+    """Synchronous compute used by both the warm-up task and cache-miss path."""
+    weather = _synth_weather()
+    vessels = _synth_vessels()
+    features = static_hazards.load()
+    return korea_hex_grid.compute_cells(weather, vessels, features)
+
+
+async def warm_cache() -> None:
+    """Pre-populate the response cache once the land filter has finished loading.
+
+    Called from main.py's lifespan as a background task. Polls for the land
+    filter to finish loading (it runs in a thread), then runs the heavy
+    compute off the event loop so the first /hazard/korea request is instant.
+    """
+    global _CACHED_CELLS, _CACHED_WITH_LAND
+    for _ in range(60):  # up to ~60s of polling
+        if land_filter.is_loaded():
+            break
+        await asyncio.sleep(1)
+    _CACHED_CELLS = await asyncio.to_thread(_compute_cells_sync)
+    _CACHED_WITH_LAND = land_filter.is_loaded()
+    logger.info("hazard cache warmed: %d cells", len(_CACHED_CELLS))
+
+
 @router.get("/hazard/korea")
 async def get_korea_hazard():
     """Demo hazard cells over Korean coastal waters.
@@ -98,10 +126,7 @@ async def get_korea_hazard():
     global _CACHED_CELLS, _CACHED_WITH_LAND
     land_ready = land_filter.is_loaded()
     if _CACHED_CELLS is None or (land_ready and not _CACHED_WITH_LAND):
-        weather = _synth_weather()
-        vessels = _synth_vessels()
-        features = static_hazards.load()
-        _CACHED_CELLS = korea_hex_grid.compute_cells(weather, vessels, features)
+        _CACHED_CELLS = await asyncio.to_thread(_compute_cells_sync)
         _CACHED_WITH_LAND = land_ready
     return {
         "cells": _CACHED_CELLS,
