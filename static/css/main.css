@@ -5854,7 +5854,7 @@ input[type="range"]#routeSpeedSlider {
 /* ── Hazard area-result: environmental summary ───────────── */
 .har-env-summary, .har-static {
     margin-top: 10px;
-    padding-top: 8px;
+    padding: 8px 12px 0;
     border-top: 1px solid rgba(255,255,255,0.08);
 }
 .har-env-title {
