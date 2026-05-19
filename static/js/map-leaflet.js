@@ -970,23 +970,7 @@ function _drawDemoHexCell(group, cell) {
     var weight = isHighDanger ? 2.0 : 1.2;
     var strokeColor = isHighDanger ? '#ff2a2a' : '#ff6a00';
 
-    var ringRadii = isHighDanger ? [0.62, 0.80, 1.00] : [0.62, 0.82];
-    var ringClasses = isHighDanger
-        ? ['hazard-ring ring-danger ring-1', 'hazard-ring ring-danger ring-2', 'hazard-ring ring-danger ring-3']
-        : ['hazard-ring ring-high ring-1', 'hazard-ring ring-high ring-2'];
-    ringRadii.forEach(function(rf, ri) {
-        L.circle([cell.lat, cell.lng], {
-            radius: CELL_DEG * rf * 111320,
-            color: strokeColor,
-            weight: isHighDanger ? 1.5 : 1.0,
-            opacity: 0,
-            fill: false,
-            interactive: false,
-            className: ringClasses[ri]
-        }).addTo(group);
-    });
-
-    var radius = CELL_DEG * 0.52;
+    var radius = CELL_DEG * 0.42;
     var hexPts = _hexPolygon(cell.lat, cell.lng, radius);
     var hex = L.polygon(hexPts, {
         color: strokeColor,
