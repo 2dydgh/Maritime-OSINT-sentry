@@ -14,9 +14,15 @@ import time
 
 from fastapi import APIRouter
 
-from backend.services import korea_hex_grid, static_hazards
+from backend.services import korea_hex_grid, static_hazards, land_filter
 
 router = APIRouter(tags=["hazard"])
+
+# Synth data is deterministic — compute_cells output never changes once the
+# land_filter has finished loading. Cache the response so repeated drags
+# (which fetch /hazard/korea each time) don't re-run the spatial pipeline.
+_CACHED_CELLS: list[dict] | None = None
+_CACHED_WITH_LAND: bool = False
 
 
 # (lat, lng) — coastal demo hot-spots picked to roughly match accident.png layout.
@@ -89,11 +95,15 @@ async def get_korea_hazard():
     feed data is calm or sparse. Computation goes through the standard
     compute_cells path so the scoring algorithm stays unified.
     """
-    weather = _synth_weather()
-    vessels = _synth_vessels()
-    features = static_hazards.load()
-    cells = korea_hex_grid.compute_cells(weather, vessels, features)
+    global _CACHED_CELLS, _CACHED_WITH_LAND
+    land_ready = land_filter.is_loaded()
+    if _CACHED_CELLS is None or (land_ready and not _CACHED_WITH_LAND):
+        weather = _synth_weather()
+        vessels = _synth_vessels()
+        features = static_hazards.load()
+        _CACHED_CELLS = korea_hex_grid.compute_cells(weather, vessels, features)
+        _CACHED_WITH_LAND = land_ready
     return {
-        "cells": cells,
-        "timestamp": weather["timestamp"],
+        "cells": _CACHED_CELLS,
+        "timestamp": int(time.time()),
     }

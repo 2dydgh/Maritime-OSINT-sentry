@@ -353,12 +353,17 @@ function _areaSelectMouseUp(e) {
     _exitAreaSelectMode();
 
     if (_demoActive) {
-        // Demo: fetch /hazard/korea once, then draw hex cells + mock markers
-        // inside the bounds, then fill the result panel from backend subscores.
-        _fetchKoreaHazard().then(function() {
+        // Cells are prefetched on 사고 mode activation; refetch only if the
+        // cache is empty (e.g. fetch failed at activate time).
+        var renderFromCache = function() {
             _renderDemoOverlaysInBounds(bounds);
             _renderAreaResult(bounds);
-        });
+        };
+        if (koreaHazardCells.length > 0) {
+            renderFromCache();
+        } else {
+            _fetchKoreaHazard().then(renderFromCache);
+        }
     } else {
         _renderAreaResult(bounds);
     }
