@@ -936,7 +936,7 @@ var RouteViewer = (function() {
             bar = document.createElement('div');
             bar.id = 'route-mode-bar';
             bar.className = 'route-mode-bar';
-            bar.innerHTML = '<i class="fa-solid fa-route"></i> 항로 추론 모드';
+            bar.innerHTML = '<span class="route-mode-bar-dot"></span><i class="fa-solid fa-route"></i> 항로 추론 모드';
             document.getElementById('dedicated-route-inference').appendChild(bar);
         }
         bar.classList.add('active');

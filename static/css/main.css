@@ -4387,10 +4387,10 @@ body {
     z-index: 101;
     padding: 6px 20px;
     background: rgba(9, 9, 11, 0.75);
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    border: 1px solid rgba(59, 130, 246, 0.55);
     pointer-events: auto;
     border-radius: 20px;
-    color: var(--secondary);
+    color: var(--text-main);
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
     font-size: 0.75rem;
     font-weight: 600;
@@ -4398,6 +4398,23 @@ body {
     backdrop-filter: blur(4px);
     opacity: 0;
     transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.route-mode-bar-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    margin-right: 8px;
+    vertical-align: middle;
+    box-shadow: 0 0 8px var(--primary);
+    animation: routeModeBarPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes routeModeBarPulse {
+    0%, 100% { opacity: 1;    box-shadow: 0 0 6px var(--primary); }
+    50%      { opacity: 0.6;  box-shadow: 0 0 12px var(--primary); }
 }
 
 .route-mode-bar.active {
