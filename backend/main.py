@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     # Load land shapefile in background (non-blocking)
     # 서버는 즉시 시작되고, 로딩 완료 전까지 육지 필터링은 비활성 (안전한 기본값)
     land_shapefile = os.path.join(
-        os.path.dirname(__file__), "data", "land", "GSHHS_i_L1.shp"
+        os.path.dirname(__file__), "data", "land", "ne_10m_land.shp"
     )
     land_filter.start_land_index_loading(land_shapefile)
 

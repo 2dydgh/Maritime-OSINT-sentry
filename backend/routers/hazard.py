@@ -23,10 +23,10 @@ router = APIRouter(tags=["hazard"])
 _HOT_SPOTS = [
     (35.05, 129.05),  # 부산 항만 입구
     (34.45, 127.75),  # 여수 / 한려수도
-    (34.55, 126.30),  # 목포 / 다도해
+    (34.55, 125.95),  # 신안 외해 (목포 서측)
     (36.65, 126.35),  # 보령 / 천수만
-    (33.40, 126.55),  # 제주 해협
-    (37.50, 130.90),  # 독도 인근
+    (33.85, 126.55),  # 제주 해협 (제주 북측)
+    (37.55, 131.10),  # 독도 북동 해상
 ]
 _HOTSPOT_RADIUS_DEG = 0.9   # falloff radius — beyond this no boost is applied
 _VESSELS_PER_HOTSPOT = 22   # fake vessel cluster density
