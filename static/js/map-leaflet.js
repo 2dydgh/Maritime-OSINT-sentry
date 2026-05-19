@@ -304,13 +304,14 @@ function _areaSelectMouseMove(e) {
     var bounds = L.latLngBounds(leafletAreaSelectStart, e.latlng);
     if (!leafletAreaSelectRect) {
         leafletAreaSelectRect = L.rectangle(bounds, {
-            color: '#60a5fa',
-            weight: 1.5,
-            opacity: 0.9,
-            fillColor: '#60a5fa',
-            fillOpacity: 0.08,
-            dashArray: '4, 4',
-            interactive: false
+            color: '#f59e0b',
+            weight: 2,
+            opacity: 1,
+            fillColor: '#f59e0b',
+            fillOpacity: 0.18,
+            dashArray: '6, 4',
+            interactive: false,
+            className: 'area-select-rect'
         }).addTo(leafletMap);
     } else {
         leafletAreaSelectRect.setBounds(bounds);
@@ -342,12 +343,13 @@ function _areaSelectMouseUp(e) {
         leafletAreaSelectRect = null;
     }
     leafletAreaResultRect = L.rectangle(bounds, {
-        color: '#60a5fa',
-        weight: 1.8,
-        opacity: 0.9,
-        fillColor: '#60a5fa',
-        fillOpacity: 0.05,
-        interactive: false
+        color: '#f59e0b',
+        weight: 2,
+        opacity: 1,
+        fillColor: '#f59e0b',
+        fillOpacity: 0.10,
+        interactive: false,
+        className: 'area-result-rect'
     }).addTo(leafletMap);
 
     _exitAreaSelectMode();

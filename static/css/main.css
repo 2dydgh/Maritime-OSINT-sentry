@@ -5672,6 +5672,22 @@ input[type="range"]#routeSpeedSlider {
     cursor: crosshair !important;
 }
 
+/* Area-select drag preview + persistent result rectangle — amber glow so
+   the selection stands out against the light-blue nautical chart basemap. */
+.area-select-rect {
+    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.55));
+    animation: areaSelectPulse 1.2s ease-in-out infinite;
+}
+
+.area-result-rect {
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.4));
+}
+
+@keyframes areaSelectPulse {
+    0%, 100% { filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.45)); }
+    50%      { filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.75)); }
+}
+
 /* Result panel — dark glassmorphism */
 .hazard-area-result {
     position: absolute;
