@@ -15,6 +15,7 @@ import random
 import time
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from backend.services import korea_hex_grid, static_hazards, land_filter
 
@@ -122,13 +123,20 @@ async def get_korea_hazard():
     frontend 사고 mode reliably renders a colored hex grid even when real
     feed data is calm or sparse. Computation goes through the standard
     compute_cells path so the scoring algorithm stays unified.
+
+    The synth payload is deterministic, so the response carries a 60s
+    Cache-Control directive — repeated drags within that window are served
+    from the browser cache and never touch the event loop.
     """
     global _CACHED_CELLS, _CACHED_WITH_LAND
     land_ready = land_filter.is_loaded()
     if _CACHED_CELLS is None or (land_ready and not _CACHED_WITH_LAND):
         _CACHED_CELLS = await asyncio.to_thread(_compute_cells_sync)
         _CACHED_WITH_LAND = land_ready
-    return {
-        "cells": _CACHED_CELLS,
-        "timestamp": int(time.time()),
-    }
+    return JSONResponse(
+        content={
+            "cells": _CACHED_CELLS,
+            "timestamp": int(time.time()),
+        },
+        headers={"Cache-Control": "public, max-age=60"},
+    )
