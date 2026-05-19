@@ -370,16 +370,9 @@ function _renderAreaResult(bounds) {
 
     var sourceCells = koreaHazardCells;
 
-    // Find cells whose bounding box intersects the selection rect.
-    // Using intersects() (not contains center) so a small rect drawn inside a single cell still hits it.
-    var CELL_DEG = 0.3;
-    var halfCell = CELL_DEG / 2;
+    // Only cells whose center sits inside the drag rectangle.
     var hits = sourceCells.filter(function(cell) {
-        var cellBounds = L.latLngBounds(
-            [cell.lat - halfCell, cell.lng - halfCell],
-            [cell.lat + halfCell, cell.lng + halfCell]
-        );
-        return bounds.intersects(cellBounds);
+        return bounds.contains([cell.lat, cell.lng]);
     });
 
     var avgEl     = document.getElementById('harAvgScore');
@@ -970,7 +963,7 @@ function _drawDemoHexCell(group, cell) {
     var weight = isHighDanger ? 2.0 : 1.2;
     var strokeColor = isHighDanger ? '#ff2a2a' : '#ff6a00';
 
-    var radius = CELL_DEG * 0.42;
+    var radius = CELL_DEG * 0.32;
     var hexPts = _hexPolygon(cell.lat, cell.lng, radius);
     var hex = L.polygon(hexPts, {
         color: strokeColor,
@@ -1018,15 +1011,9 @@ function _renderDemoOverlaysInBounds(bounds) {
     if (!leafletMap) return;
     _clearDemoLayers();
 
-    var CELL_DEG = 0.3;
-    var halfCell = CELL_DEG / 2;
     var hexHits = koreaHazardCells.filter(function(c) {
         if (c.lat == null || c.lng == null) return false;
-        var cellBounds = L.latLngBounds(
-            [c.lat - halfCell, c.lng - halfCell],
-            [c.lat + halfCell, c.lng + halfCell]
-        );
-        return bounds.intersects(cellBounds);
+        return bounds.contains([c.lat, c.lng]);
     });
 
     if (hexHits.length > 0) {

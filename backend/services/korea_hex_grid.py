@@ -20,6 +20,10 @@ _MAX_DIST_FROM_LAND_DEG = 2.0
 def korea_cells() -> list[tuple[float, float]]:
     """Cell center coordinates inside KOREA_BBOX, filtered to coastal sea.
 
+    Rows are arranged in a honeycomb (brick-offset) pattern — every other
+    row is shifted by CELL_DEG/2 in longitude — so neighboring hexes tile
+    naturally instead of stacking on a square grid.
+
     If land_filter is not yet loaded, all cells inside bbox are returned
     (graceful degradation — caller may re-request after land data loads).
     """
@@ -27,13 +31,16 @@ def korea_cells() -> list[tuple[float, float]]:
     out: list[tuple[float, float]] = []
     land_ready = land_filter.is_loaded()
     lat = min_lat + CELL_DEG / 2
+    row = 0
     while lat < max_lat:
-        lng = min_lng + CELL_DEG / 2
+        offset = CELL_DEG / 2 if row % 2 == 1 else 0.0
+        lng = min_lng + CELL_DEG / 2 + offset
         while lng < max_lng:
             if not land_ready or _is_useful_cell(lat, lng):
                 out.append((round(lat, 3), round(lng, 3)))
             lng += CELL_DEG
         lat += CELL_DEG
+        row += 1
     return out
 
 
