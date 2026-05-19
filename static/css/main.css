@@ -1329,7 +1329,7 @@
     white-space: nowrap;
 }
 
-.rv-scenario-btn i { color: #3b82f6; }
+.rv-scenario-btn i { color: var(--secondary); }
 
 .rv-scenario-btn:hover {
     background: rgba(15, 30, 60, 0.92);
@@ -1447,7 +1447,7 @@
 .rv-prediction-header {
     display: flex;
     align-items: center;
-    color: var(--primary, #3b82f6);
+    color: var(--secondary);
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.6px;
@@ -1489,7 +1489,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    color: var(--primary, #3b82f6);
+    color: var(--secondary);
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.6px;
@@ -4390,7 +4390,7 @@ body {
     border: 1px solid rgba(59, 130, 246, 0.3);
     pointer-events: auto;
     border-radius: 20px;
-    color: var(--primary);
+    color: var(--secondary);
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
     font-size: 0.75rem;
     font-weight: 600;
