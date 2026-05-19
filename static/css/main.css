@@ -1341,7 +1341,7 @@
 .rv-scenario-btn.active {
     background: rgba(59, 130, 246, 0.85);
     color: #fff;
-    border-color: #3b82f6;
+    border-color: var(--primary);
     box-shadow: 0 0 18px rgba(59, 130, 246, 0.5);
 }
 
@@ -4505,9 +4505,9 @@ body {
 }
 
 .route-click-btn.active {
-    color: #3b82f6;
-    border-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
+    color: var(--primary);
+    border-color: var(--primary);
+    background: var(--primary-muted);
 }
 
 .route-coord-display {
@@ -4704,9 +4704,9 @@ input[type="range"]#routeSpeedSlider {
 }
 
 .route-rate-btn.active {
-    color: #3b82f6;
-    border-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
+    color: var(--primary);
+    border-color: var(--primary);
+    background: var(--primary-muted);
 }
 
 /* ── Route Info Panel (right side) ── */
