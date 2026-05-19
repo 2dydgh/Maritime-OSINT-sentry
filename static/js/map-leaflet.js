@@ -73,15 +73,13 @@ var leafletAreaSelectRect = null;
 var leafletAreaSelectStart = null;
 var leafletAreaResultRect = null;
 
-// ── Korean demo-mode state (drag-only rendering) ──
-// When demo is active, drag-area selection fetches /hazard/korea once and renders
-// hex cells + mock vessel markers only inside the selected bounds. No polling, no
-// always-on hex layer.
+// ── 사고 mode state (drag-only hazard hex rendering) ──
+// While the 사고 rail icon is active, drag-area selection fetches
+// /hazard/korea once and renders weather-considered risk hex cells only
+// inside the selected bounds. No polling, no always-on hex layer, no mock data.
 var _demoActive = false;
 var koreaHazardCells = [];      // last-fetched /hazard/korea cells
-var koreaMockVessels = [];      // last-fetched mock vessels (AIS-shape with is_simulated)
 var leafletDemoHexLayer = null;  // hex cells inside last drag bounds
-var leafletDemoMockLayer = null; // mock vessel markers inside last drag bounds
 
 // Basemap layer references — swapped between satellite (default) and nautical chart (hazard mode)
 var _satBaseLayer = null;
@@ -91,6 +89,7 @@ var _chartLabelLayer = null;
 var _chartSeamarkLayer = null;
 // View saved before entering hazard mode (so we can restore on exit)
 var _savedViewBeforeHazard = null;
+var _shipsChipWasActive = false;  // restore the ships layer chip when 사고 mode exits
 
 // ── Korea hazard view bounds ──
 var KOREA_HAZARD_VIEW = {
@@ -369,13 +368,11 @@ function _renderAreaResult(bounds) {
     var panel = document.getElementById('hazardAreaResult');
     if (!panel) return;
 
-    // Demo branch sources backend cells (real subscores). Legacy branch uses
-    // the always-on ship-cluster cells from renderHazardHexGrid().
-    var sourceCells = _demoActive ? koreaHazardCells : leafletHazardCells;
+    var sourceCells = koreaHazardCells;
 
     // Find cells whose bounding box intersects the selection rect.
     // Using intersects() (not contains center) so a small rect drawn inside a single cell still hits it.
-    var CELL_DEG = 1.2;
+    var CELL_DEG = 0.3;
     var halfCell = CELL_DEG / 2;
     var hits = sourceCells.filter(function(cell) {
         var cellBounds = L.latLngBounds(
@@ -532,10 +529,6 @@ function setMapMode(mode) {
                 if (typeof syncShipsToLeaflet === 'function') syncShipsToLeaflet();
                 if (typeof syncProximityToLeaflet === 'function') syncProximityToLeaflet();
                 if (typeof syncSatellitesToLeaflet === 'function') syncSatellitesToLeaflet();
-                // Re-render hazard layer if it's currently active
-                if (typeof window.isHazardZonesActive === 'function' && window.isHazardZonesActive()) {
-                    renderHazardHexGrid();
-                }
                 if (loadingEl) loadingEl.style.display = 'none';
             }, 0);
         });
@@ -937,7 +930,6 @@ function setDemoActive(active) {
     if (!_demoActive) {
         _clearDemoLayers();
         koreaHazardCells = [];
-        koreaMockVessels = [];
     }
 }
 window.setDemoActive = setDemoActive;
@@ -952,12 +944,10 @@ async function _fetchKoreaHazard() {
         var resp = await fetch('/api/v1/hazard/korea');
         var data = await resp.json();
         koreaHazardCells = (data && data.cells) || [];
-        koreaMockVessels = (data && data.mock_vessels) || [];
         return data;
     } catch (e) {
         console.warn('[korea-hazard] fetch failed:', e);
         koreaHazardCells = [];
-        koreaMockVessels = [];
         return null;
     }
 }
@@ -967,25 +957,12 @@ function _clearDemoLayers() {
         leafletMap.removeLayer(leafletDemoHexLayer);
     }
     leafletDemoHexLayer = null;
-    if (leafletDemoMockLayer && leafletMap) {
-        leafletMap.removeLayer(leafletDemoMockLayer);
-    }
-    leafletDemoMockLayer = null;
-    // Mock vessels were temporarily registered into shipDataMap so showShipInfo
-    // can render them — pull them out on clear so they don't ghost the panel.
-    if (window.shipDataMap) {
-        koreaMockVessels.forEach(function(v) {
-            if (window.shipDataMap[v.mmsi] && window.shipDataMap[v.mmsi].is_simulated) {
-                delete window.shipDataMap[v.mmsi];
-            }
-        });
-    }
 }
 
 // Draw a single hex cell from the backend /hazard/korea response.
 // Cell shape: { lat, lng, score, cause, subscores: { wave_raw, wind_raw, vis_raw, traffic_n, static_names } }
 function _drawDemoHexCell(group, cell) {
-    var CELL_DEG = 1.2;
+    var CELL_DEG = 0.3;
     var score = cell.score;
     var isHighDanger = score >= 90;
     var fillColor = isHighDanger ? '#ef4444' : '#f97316';
@@ -1051,13 +1028,13 @@ function _drawDemoHexCell(group, cell) {
     dot.addTo(group);
 }
 
-// Render hex cells + mock vessel markers within the drag bounds.
-// Called by the area-select mouseup handler when _demoActive is true.
+// Render risk-colored hex cells within the drag bounds.
+// Called by the area-select mouseup handler when 사고 mode is active.
 function _renderDemoOverlaysInBounds(bounds) {
     if (!leafletMap) return;
     _clearDemoLayers();
 
-    var CELL_DEG = 1.2;
+    var CELL_DEG = 0.3;
     var halfCell = CELL_DEG / 2;
     var hexHits = koreaHazardCells.filter(function(c) {
         if (c.lat == null || c.lng == null) return false;
@@ -1074,39 +1051,6 @@ function _renderDemoOverlaysInBounds(bounds) {
         hexGroup.addTo(leafletMap);
         leafletDemoHexLayer = hexGroup;
     }
-
-    // Mock vessel markers — drop into shipDataMap so showShipInfo can render them
-    // and the simulation badge (Task 17) finds is_simulated. Pulled back out on
-    // _clearDemoLayers so they don't ghost the panel after demo OFF.
-    var mockHits = koreaMockVessels.filter(function(v) {
-        return v.lat != null && v.lng != null && bounds.contains([v.lat, v.lng]);
-    });
-    if (mockHits.length > 0) {
-        var mockGroup = L.layerGroup();
-        mockHits.forEach(function(v) {
-            if (window.shipDataMap) window.shipDataMap[v.mmsi] = v;
-            var marker = L.circleMarker([v.lat, v.lng], {
-                radius: 5,
-                fillColor: '#fbbf24',
-                fillOpacity: 0.9,
-                color: '#f59e0b',
-                weight: 1.5,
-                opacity: 0.95,
-                className: 'mock-vessel-marker'
-            });
-            marker.bindTooltip((v.name || 'mock') + ' · 시뮬레이션', {
-                className: 'ship-tooltip-2d',
-                direction: 'top',
-                offset: [0, -6]
-            });
-            marker.on('click', function() {
-                if (typeof showShipInfo === 'function') showShipInfo(v.mmsi);
-            });
-            mockGroup.addLayer(marker);
-        });
-        mockGroup.addTo(leafletMap);
-        leafletDemoMockLayer = mockGroup;
-    }
 }
 
 // ── Main: build hazard hex grid from collision + ship data ──
@@ -1120,7 +1064,7 @@ function renderHazardHexGrid() {
     }
 
     // Grid cell size (degrees)
-    var CELL_DEG = 1.2;
+    var CELL_DEG = 0.3;
     var cellMap = {};  // key: "lat_lng" → { lat, lng, ships, collisions, maxRisk }
 
     // ── Cluster ships into cells ──
@@ -1325,10 +1269,20 @@ function _finishHazardActivate() {
     // Swap to nautical chart basemap
     _useChartBasemap();
 
-    // Apply hazard styling + render hex grid
+    // Apply hazard styling; drag selection drives the hex render path.
     _applyHazardActiveClass(true);
-    renderHazardHexGrid();
+    setDemoActive(true);
+    _fetchKoreaHazard();
     _injectHazardHUD();
+
+    // Hide AIS while 사고 mode is active by toggling the ships layer chip off.
+    var shipsChip = document.querySelector('.layer-chip[data-layer="ships"]');
+    if (shipsChip && shipsChip.classList.contains('active')) {
+        _shipsChipWasActive = true;
+        shipsChip.click();
+    } else {
+        _shipsChipWasActive = false;
+    }
 
     // Lock the view to Korean waters
     leafletMap.setMaxBounds(KOREA_HAZARD_VIEW.bounds);
@@ -1361,8 +1315,17 @@ function deactivateHazardZones() {
     }
     leafletHazardCells = [];
 
-    // Clear demo-mode layers (drag-only hex cells + mock vessel markers)
-    _clearDemoLayers();
+    // Clear drag-render state and 사고 mode hex layer
+    setDemoActive(false);
+
+    // Restore the ships layer chip if 사고 mode flipped it off on entry.
+    if (_shipsChipWasActive) {
+        var shipsChip = document.querySelector('.layer-chip[data-layer="ships"]');
+        if (shipsChip && !shipsChip.classList.contains('active')) {
+            shipsChip.click();
+        }
+        _shipsChipWasActive = false;
+    }
 
     // Exit area-select mode + clear any drawn rectangle/result
     if (leafletAreaSelectActive) _exitAreaSelectMode();
