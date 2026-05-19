@@ -227,7 +227,7 @@
     padding: 10px 14px;
     font-size: 0.78rem;
     font-weight: 700;
-    color: var(--primary);
+    color: var(--secondary);
     letter-spacing: 1px;
     border-bottom: 1px solid var(--panel-border);
     background: var(--bg-color);
@@ -1796,7 +1796,7 @@ body {
 }
 
 .brand-name {
-    color: var(--text-main);
+    color: var(--primary);
     font-size: 14px;
     font-weight: 700;
     letter-spacing: 1.2px;
@@ -4439,7 +4439,7 @@ body {
 .route-panel-title {
     font-weight: 600;
     font-size: 14px;
-    color: #3b82f6;
+    color: var(--secondary);
 }
 
 .route-panel-toggle {
@@ -5092,7 +5092,7 @@ input[type="range"]#routeSpeedSlider {
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
     font-size: 0.82rem;
     font-weight: 600;
-    color: var(--text-main, #f4f4f5);
+    color: var(--secondary);
 }
 
 .chat-close-btn {
