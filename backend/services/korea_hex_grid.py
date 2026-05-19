@@ -10,7 +10,7 @@ from backend.services import land_filter
 logger = logging.getLogger(__name__)
 
 KOREA_BBOX = (33.0, 39.5, 124.0, 132.0)  # min_lat, max_lat, min_lng, max_lng
-CELL_DEG = 1.2
+CELL_DEG = 0.3
 
 # Cells whose center has no land within this many degrees are considered
 # deep open ocean and excluded.
@@ -199,18 +199,3 @@ def compute_cells(weather: dict, vessels: list[dict], features: list[dict]) -> l
     return out
 
 
-_active = False
-
-
-def is_active() -> bool:
-    return _active
-
-
-def activate() -> None:
-    global _active
-    _active = True
-
-
-def deactivate() -> None:
-    global _active
-    _active = False

@@ -103,15 +103,3 @@ def test_top_cause_static_takes_name():
     raw_values = {"wave_raw": 0, "wind_raw": 0, "vis_raw": 10, "traffic_n": 0,
                   "static_names": ["울돌목 협수로"]}
     assert korea_hex_grid._top_cause(subscores, raw_values) == "울돌목 협수로"
-
-
-def test_active_state_starts_false():
-    korea_hex_grid.deactivate()
-    assert korea_hex_grid.is_active() is False
-
-
-def test_activate_then_deactivate():
-    korea_hex_grid.activate()
-    assert korea_hex_grid.is_active() is True
-    korea_hex_grid.deactivate()
-    assert korea_hex_grid.is_active() is False

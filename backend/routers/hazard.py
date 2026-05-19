@@ -1,38 +1,99 @@
-"""Hazard endpoints — per-cell area risk for Korean coastal waters."""
+"""Hazard endpoints — per-cell area risk for Korean coastal waters.
+
+The /hazard/korea endpoint exists solely to feed the 사고 (hazard) rail mode
+on the frontend, which is a demo experience. Real Korean coastal weather is
+generally calm and live AIS coverage of the bbox is sparse, so neither would
+produce visible risk cells. Instead we synthesize weather + vessel traffic
+around six fixed coastal hot-spots (Busan, Yeosu, Mokpo, Boryeong, Jeju
+strait, Dokdo) and run them through the normal compute_cells pipeline so the
+scoring, top-cause, and subscores are still consistent with the algorithm.
+"""
+import math
+import random
 import time
 
 from fastapi import APIRouter
 
-from backend.services import korea_hex_grid, static_hazards, ais_stream, mock_vessel_service
-from backend.routers.weather import get_korea_grid_weather
+from backend.services import korea_hex_grid, static_hazards
 
 router = APIRouter(tags=["hazard"])
 
 
+# (lat, lng) — coastal demo hot-spots picked to roughly match accident.png layout.
+_HOT_SPOTS = [
+    (35.05, 129.05),  # 부산 항만 입구
+    (34.45, 127.75),  # 여수 / 한려수도
+    (34.55, 126.30),  # 목포 / 다도해
+    (36.65, 126.35),  # 보령 / 천수만
+    (33.40, 126.55),  # 제주 해협
+    (37.50, 130.90),  # 독도 인근
+]
+_HOTSPOT_RADIUS_DEG = 0.9   # falloff radius — beyond this no boost is applied
+_VESSELS_PER_HOTSPOT = 22   # fake vessel cluster density
+
+
+def _hotspot_boost(lat: float, lng: float) -> float:
+    """0~1 falloff intensity from the nearest hot-spot."""
+    nearest = 0.0
+    for hs_lat, hs_lng in _HOT_SPOTS:
+        d = math.hypot(lat - hs_lat, lng - hs_lng)
+        if d < _HOTSPOT_RADIUS_DEG:
+            nearest = max(nearest, (_HOTSPOT_RADIUS_DEG - d) / _HOTSPOT_RADIUS_DEG)
+    return nearest
+
+
+def _synth_weather() -> dict:
+    """Synthetic weather aligned to korea_hex_grid cells with hot-spot peaks."""
+    rng = random.Random(20260519)
+    cells = []
+    for lat, lng in korea_hex_grid.korea_cells():
+        boost = _hotspot_boost(lat, lng)
+        jitter = rng.uniform(-0.15, 0.15)
+        wave = 0.4 + 6.5 * boost + jitter * boost
+        wind = 7.0 + 50.0 * boost + jitter * 5
+        vis = 20000 - 19000 * boost - jitter * 800
+        cells.append({
+            "lat": lat,
+            "lng": lng,
+            "wave_height": round(max(0.0, wave), 2),
+            "wave_direction": 180,
+            "wave_period": 5.0 + 2.0 * boost,
+            "wind_speed": round(max(0.0, wind), 1),
+            "wind_direction": 180,
+            "visibility": round(max(500.0, vis), 0),
+        })
+    return {"cells": cells, "timestamp": int(time.time())}
+
+
+def _synth_vessels() -> list[dict]:
+    """Fake vessel positions clustered around hot-spots (traffic component)."""
+    rng = random.Random(20260520)
+    out: list[dict] = []
+    for hs_lat, hs_lng in _HOT_SPOTS:
+        for _ in range(_VESSELS_PER_HOTSPOT):
+            r = rng.uniform(0.05, 0.45)
+            theta = rng.uniform(0.0, 2 * math.pi)
+            out.append({
+                "lat": hs_lat + r * math.cos(theta),
+                "lng": hs_lng + r * math.sin(theta),
+            })
+    return out
+
+
 @router.get("/hazard/korea")
 async def get_korea_hazard():
-    """Korean coastal hex cells with score, cause, and subscores.
+    """Demo hazard cells over Korean coastal waters.
 
-    Returns empty cells if demo mode (korea_hex_grid) is not active.
-    Also returns mock_vessels so the frontend can render them only inside
-    the drag-selected bounds (not on the persistent map layer).
+    Uses synthetic weather + vessel density around fixed hot-spots so the
+    frontend 사고 mode reliably renders a colored hex grid even when real
+    feed data is calm or sparse. Computation goes through the standard
+    compute_cells path so the scoring algorithm stays unified.
     """
-    if not korea_hex_grid.is_active():
-        return {
-            "cells": [], "mock_vessels": [],
-            "active": False, "timestamp": int(time.time()),
-        }
-
-    weather = await get_korea_grid_weather()
-    real_vessels = ais_stream.get_ais_vessels()
-    mock_vessels = mock_vessel_service.snapshot()
-    # Combine for traffic density scoring; real and mock are interchangeable here.
-    all_vessels = real_vessels + mock_vessels
+    weather = _synth_weather()
+    vessels = _synth_vessels()
     features = static_hazards.load()
-    cells = korea_hex_grid.compute_cells(weather, all_vessels, features)
+    cells = korea_hex_grid.compute_cells(weather, vessels, features)
     return {
         "cells": cells,
-        "mock_vessels": mock_vessels,
-        "active": True,
-        "timestamp": int(time.time()),
+        "timestamp": weather["timestamp"],
     }
