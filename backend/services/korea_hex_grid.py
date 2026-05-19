@@ -5,12 +5,20 @@ normalize functions, top_cause) lives in this module but is added in
 subsequent tasks.
 """
 import logging
+import math
 from backend.services import land_filter
 
 logger = logging.getLogger(__name__)
 
 KOREA_BBOX = (33.0, 39.5, 124.0, 132.0)  # min_lat, max_lat, min_lng, max_lng
 CELL_DEG = 0.3
+# Pointy-top hex tiling: rows are spaced 1.5×radius and every other row is
+# offset by sqrt(3)/2×radius. With radius = CELL_DEG / sqrt(3) the in-row lng
+# spacing comes out to CELL_DEG exactly, so the grid behaves like a regular
+# 0.3° column grid while still tiling without gaps or overlaps.
+_HEX_RADIUS_DEG = CELL_DEG / math.sqrt(3)
+_ROW_SPACING_DEG = 1.5 * _HEX_RADIUS_DEG       # ≈ 0.26°
+_ROW_OFFSET_DEG = CELL_DEG / 2                 # ≈ 0.15°
 
 # Cells whose center has no land within this many degrees are considered
 # deep open ocean and excluded.
@@ -30,16 +38,16 @@ def korea_cells() -> list[tuple[float, float]]:
     min_lat, max_lat, min_lng, max_lng = KOREA_BBOX
     out: list[tuple[float, float]] = []
     land_ready = land_filter.is_loaded()
-    lat = min_lat + CELL_DEG / 2
+    lat = min_lat + _ROW_SPACING_DEG / 2
     row = 0
     while lat < max_lat:
-        offset = CELL_DEG / 2 if row % 2 == 1 else 0.0
+        offset = _ROW_OFFSET_DEG if row % 2 == 1 else 0.0
         lng = min_lng + CELL_DEG / 2 + offset
         while lng < max_lng:
             if not land_ready or _is_useful_cell(lat, lng):
                 out.append((round(lat, 3), round(lng, 3)))
             lng += CELL_DEG
-        lat += CELL_DEG
+        lat += _ROW_SPACING_DEG
         row += 1
     return out
 

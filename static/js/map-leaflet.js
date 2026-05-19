@@ -963,7 +963,10 @@ function _drawDemoHexCell(group, cell) {
     var weight = isHighDanger ? 2.0 : 1.2;
     var strokeColor = isHighDanger ? '#ff2a2a' : '#ff6a00';
 
-    var radius = CELL_DEG * 0.32;
+    // Honeycomb tiling: radius = CELL_DEG / sqrt(3) (≈ 0.577 × CELL_DEG)
+    // produces pointy-top hexes that share edges with neighbors when the grid
+    // uses sqrt(3)/2 × CELL_DEG row spacing — matches accident.png look.
+    var radius = CELL_DEG / Math.sqrt(3);
     var hexPts = _hexPolygon(cell.lat, cell.lng, radius);
     var hex = L.polygon(hexPts, {
         color: strokeColor,

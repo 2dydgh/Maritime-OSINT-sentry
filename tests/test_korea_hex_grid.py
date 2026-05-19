@@ -13,13 +13,13 @@ def test_korea_cells_within_bbox():
 
 
 def test_korea_cells_grid_spacing():
-    """모든 인접 위도 차이는 CELL_DEG 정수배."""
+    """인접 행 위도 차이는 honeycomb 행 간격(_ROW_SPACING_DEG)의 정수배."""
     cells = korea_hex_grid.korea_cells()
     lats = sorted({lat for lat, _ in cells})
     if len(lats) >= 2:
         for i in range(len(lats) - 1):
-            d = round(lats[i+1] - lats[i], 2)
-            ratio = d / korea_hex_grid.CELL_DEG
+            d = lats[i+1] - lats[i]
+            ratio = d / korea_hex_grid._ROW_SPACING_DEG
             assert abs(ratio - round(ratio)) < 0.01
 
 
