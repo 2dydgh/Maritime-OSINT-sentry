@@ -5253,7 +5253,7 @@ input[type="range"]#routeSpeedSlider {
     color: var(--text-sub, #a1a1aa);
 }
 .chat-msg-assistant a {
-    color: #60a5fa;
+    color: var(--secondary);
     text-decoration: underline;
     text-decoration-color: rgba(96, 165, 250, 0.4);
 }
@@ -5440,7 +5440,7 @@ input[type="range"]#routeSpeedSlider {
 .hlp-title {
     font-weight: 700;
     font-size: 0.80rem;
-    color: #60a5fa;
+    color: var(--secondary);
     margin-bottom: 10px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -5646,7 +5646,7 @@ input[type="range"]#routeSpeedSlider {
     white-space: nowrap;
 }
 
-.map-area-select-btn i { color: #60a5fa; }
+.map-area-select-btn i { color: var(--secondary); }
 
 .map-area-select-btn:hover {
     background: rgba(15, 30, 60, 0.92);
@@ -5660,7 +5660,7 @@ input[type="range"]#routeSpeedSlider {
 .map-area-select-btn.active {
     background: rgba(96, 165, 250, 0.85);
     color: #fff;
-    border-color: #60a5fa;
+    border-color: var(--secondary);
     box-shadow: 0 0 18px rgba(96, 165, 250, 0.5);
 }
 
@@ -5734,7 +5734,7 @@ input[type="range"]#routeSpeedSlider {
 .har-title {
     font-size: 0.80rem;
     font-weight: 700;
-    color: #60a5fa;
+    color: var(--secondary);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -5742,7 +5742,7 @@ input[type="range"]#routeSpeedSlider {
     letter-spacing: 0.05em;
 }
 
-.har-title i { color: #60a5fa; }
+.har-title i { color: var(--secondary); }
 
 .har-close {
     background: none;
@@ -5898,18 +5898,5 @@ input[type="range"]#routeSpeedSlider {
 .har-static-list .har-static-item::before {
     content: "• ";
     color: #ef4444;
-}
-
-/* ── Ship info simulated badge ───────────────────────────── */
-.sim-badge {
-    display: inline-block;
-    background: rgba(59, 130, 246, 0.15);
-    color: #60a5fa;
-    font: 500 9px/1 "Pretendard Variable","Inter",sans-serif;
-    padding: 2px 6px;
-    border-radius: 3px;
-    margin-left: 6px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
 }
 
