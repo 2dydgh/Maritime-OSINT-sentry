@@ -5,7 +5,11 @@ function getShipSize(lengthM, beamM) {
     var len = lengthM || 50;
     var bm = beamM || 10;
     var h = Math.max(10, Math.min(30, 10 + (len / 400) * 20));
-    var w = h * (bm / len) * 2.5;
+    // AIS dimension reports are often garbage (beam ≥ length, tiny length).
+    // Real-world beam/length stays under ~0.35 — clamp so icons never
+    // stretch into horizontal bars.
+    var ratio = Math.max(0.08, Math.min(0.35, bm / len));
+    var w = h * ratio * 2.5;
     return { width: Math.max(8, Math.round(w)), height: Math.round(h) };
 }
 window.getShipSize = getShipSize;
@@ -760,8 +764,14 @@ function initWebSocket() {
                 if (data.server_time_ms) {
                     var latency = Date.now() - data.server_time_ms;
                     if (latency >= 0 && latency < 10000) {
+                        _lastLatencyMs = latency;
                         if (typeof BottomBar !== 'undefined') {
                             BottomBar.updateValue('headerLatency', latency);
+                        }
+                        var latEl = document.getElementById('headerLatency');
+                        if (latEl) {
+                            latEl.classList.toggle('latency-warn', latency >= 300 && latency < 1000);
+                            latEl.classList.toggle('latency-bad', latency >= 1000);
                         }
                     }
                 }
@@ -812,13 +822,22 @@ function initWebSocket() {
 window.initWebSocket = initWebSocket;
 
 // ── WS connection status LED ──
+// Freshness first (stale link = amber/red), then latency thresholds:
+// <300ms green, <1s amber, >=1s red — matches the latency text color.
 var _lastWsReceived = 0;
+var _lastLatencyMs = -1;
 
 setInterval(function() {
     var ago = _lastWsReceived ? Math.round((Date.now() - _lastWsReceived) / 1000) : 999;
     var led = document.getElementById('headerWsLed');
     if (led) {
-        led.className = 'ws-led ' + (ago <= 5 ? 'connected' : ago <= 15 ? 'connecting' : 'disconnected');
+        var cls;
+        if (ago > 15) cls = 'disconnected';
+        else if (ago > 5) cls = 'connecting';
+        else if (_lastLatencyMs >= 1000) cls = 'connected latency-bad';
+        else if (_lastLatencyMs >= 300) cls = 'connected latency-warn';
+        else cls = 'connected';
+        led.className = 'ws-led ' + cls;
     }
 }, 1000);
 
