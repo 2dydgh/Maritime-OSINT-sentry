@@ -47,6 +47,24 @@ def classify_vessel(ais_type: int, mmsi: int) -> str:
     return "unknown"            # Not yet classified — will update when ShipStaticData arrives
 
 
+# Korean labels for vessel categories — used in user-facing alert messages
+VESSEL_TYPE_KO = {
+    "cargo": "화물선",
+    "tanker": "탱커",
+    "passenger": "여객선",
+    "fishing": "어선",
+    "military_vessel": "군함",
+    "yacht": "요트",
+    "tug": "예인선",
+    "other": "기타",
+    "unknown": "미상",
+}
+
+
+def vessel_type_ko(v_type: str) -> str:
+    return VESSEL_TYPE_KO.get(v_type, v_type or "미상")
+
+
 # AIS Navigational Status codes → human-readable
 _NAV_STATUS_MAP = {
     0: "기관 항해 중",
@@ -454,7 +472,7 @@ def _ais_stream_loop():
                             "sog": round(sog, 1),
                             "vessel_type": v_type,
                             "country": get_country_from_mmsi(mmsi),
-                            "message": f"속도 신호 없음 (SOG=102.3, 유형: {v_type})",
+                            "message": f"속도 신호 없음 (SOG 측정 한계 초과, 유형: {vessel_type_ko(v_type)})",
                             "severity": "medium",
                         })
                     # --- Anomaly: Speeding vessel ---
@@ -466,7 +484,7 @@ def _ais_stream_loop():
                             "sog": round(sog, 1),
                             "vessel_type": v_type,
                             "country": get_country_from_mmsi(mmsi),
-                            "message": f"과속 감지 ({sog:.1f} kts, 유형: {v_type})",
+                            "message": f"과속 감지 ({sog:.1f} kts, 유형: {vessel_type_ko(v_type)})",
                             "severity": "high" if sog > 35 else "medium",
                         })
                 
