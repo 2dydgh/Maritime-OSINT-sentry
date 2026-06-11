@@ -17,6 +17,28 @@ from .services import collision_analyzer, land_filter
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _build_ships_payload() -> str | None:
+    """Snapshot all vessels and serialize ONCE, off the event loop.
+
+    With a global AIS feed (~30k vessels, multi-MB payload) doing this on the
+    event loop every tick starved every other request (hazard API, WS
+    handshakes). Always call via asyncio.to_thread().
+    """
+    import json as _json
+    import time as _time
+    vessels = ais_stream.get_ais_vessels()
+    if not vessels:
+        return None
+    now_ms = int(_time.time() * 1000)
+    return _json.dumps({
+        "type": "ships_update",
+        "ships": vessels,
+        "total_tracked": len(vessels),
+        "timestamp": now_ms,
+        "server_time_ms": now_ms,
+    })
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
@@ -66,22 +88,16 @@ async def lifespan(app: FastAPI):
     # Start Aircraft Tracker (OpenSky Network)
     aircraft_tracker.start_aircraft_tracker()
     
-    # Background loop to broadcast ship updates
+    # Background loop to broadcast ship updates.
     async def broadcast_ships():
         while True:
             try:
-                vessels = ais_stream.get_ais_vessels()
-                if vessels:
-                    await websocket.manager.broadcast({
-                        "type": "ships_update",
-                        "ships": vessels,
-                        "total_tracked": len(vessels),
-                        "timestamp": int(asyncio.get_event_loop().time() * 1000),
-                        "server_time_ms": int(__import__('time').time() * 1000)
-                    })
+                text = await asyncio.to_thread(_build_ships_payload)
+                if text:
+                    await websocket.manager.broadcast_text(text)
             except Exception as e:
                 logger.error(f"Error in ship broadcast loop: {e}")
-            await asyncio.sleep(1) # Broadcast every 1s
+            await asyncio.sleep(3)  # 3s — frontend LED turns "connecting" only past 5s
 
     broadcast_task = asyncio.create_task(broadcast_ships())
 
@@ -108,7 +124,7 @@ async def lifespan(app: FastAPI):
         while True:
             await asyncio.sleep(300)  # every 5 minutes
             try:
-                ais_stream.check_signal_loss()
+                await asyncio.to_thread(ais_stream.check_signal_loss)
             except Exception as e:
                 logger.error(f"Signal loss scan error: {e}")
 
@@ -117,7 +133,8 @@ async def lifespan(app: FastAPI):
         while True:
             await asyncio.sleep(10)
             try:
-                vessels = ais_stream.get_ais_vessels()
+                # Off-loop: global snapshot is ~30k vessels under a contended lock
+                vessels = await asyncio.to_thread(ais_stream.get_ais_vessels)
                 await collision_analyzer.update_collision_cache(vessels)
             except Exception as e:
                 logger.error(f"Collision analysis error: {e}")
@@ -161,15 +178,9 @@ async def websocket_ships(ws: WebSocket):
     # Immediate snapshot on connect — clients otherwise wait up to 1s for the
     # next broadcast_ships() tick, which is the dominant "서버 연결 중" delay.
     try:
-        vessels = ais_stream.get_ais_vessels()
-        if vessels:
-            await ws.send_json({
-                "type": "ships_update",
-                "ships": vessels,
-                "total_tracked": len(vessels),
-                "timestamp": int(asyncio.get_event_loop().time() * 1000),
-                "server_time_ms": int(__import__('time').time() * 1000),
-            })
+        text = await asyncio.to_thread(_build_ships_payload)
+        if text:
+            await ws.send_text(text)
     except Exception as e:
         logger.error(f"Initial ship snapshot failed: {e}")
     try:

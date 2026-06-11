@@ -30,7 +30,20 @@ class ConnectionManager:
             except Exception as e:
                 logger.error(f"Error broadcasting to client: {e}")
                 disconnected.append(connection)
-        
+
+        for conn in disconnected:
+            self.disconnect(conn)
+
+    async def broadcast_text(self, text: str):
+        """Broadcast a pre-serialized JSON string — serialize once, not per client."""
+        disconnected = []
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(text)
+            except Exception as e:
+                logger.error(f"Error broadcasting to client: {e}")
+                disconnected.append(connection)
+
         for conn in disconnected:
             self.disconnect(conn)
 

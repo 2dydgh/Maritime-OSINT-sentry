@@ -533,11 +533,11 @@ async def update_collision_cache(vessels: list[dict]):
     global _cached_distance_risks, _cached_ml_risks, _cache_updated
     start = time.monotonic()
 
-    # 공통 근접 쌍 필터링
-    proximity_pairs = _build_proximity_pairs(vessels)
+    # 공통 근접 쌍 필터링 — CPU-bound over the full global fleet, keep off the event loop
+    proximity_pairs = await asyncio.to_thread(_build_proximity_pairs, vessels)
 
-    # 거리 기반 분석 (동기)
-    distance_risks = analyze_distance_risks(proximity_pairs)
+    # 거리 기반 분석 (동기 → 워커 스레드)
+    distance_risks = await asyncio.to_thread(analyze_distance_risks, proximity_pairs)
 
     # ML 모델 분석 (비동기)
     ml_risks = await analyze_ml_risks(proximity_pairs)
