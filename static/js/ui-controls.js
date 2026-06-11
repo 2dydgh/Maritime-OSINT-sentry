@@ -77,11 +77,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 var ddId = expandBtn.dataset.dropdown;
                 var dd = document.getElementById(ddId);
                 if (!dd) return;
-                // Close all other dropdowns
-                document.querySelectorAll('.layer-dropdown.open').forEach(function(d) {
-                    if (d.id !== ddId) d.classList.remove('open');
-                });
-                dd.classList.toggle('open');
+                var willOpen = !dd.classList.contains('open');
+                // Close all dropdowns + reset all chevrons
+                document.querySelectorAll('.layer-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+                document.querySelectorAll('.chip-expand.expanded').forEach(function(b) { b.classList.remove('expanded'); });
+                if (willOpen) {
+                    dd.classList.add('open');
+                    expandBtn.classList.add('expanded');
+                }
                 // Position dropdown below its parent chip
                 if (dd.classList.contains('open')) {
                     var chip = expandBtn.closest('.layer-chip');
@@ -141,6 +144,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('click', function(e) {
         if (!e.target.closest('.layer-dropdown') && !e.target.closest('.chip-expand')) {
             document.querySelectorAll('.layer-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+            document.querySelectorAll('.chip-expand.expanded').forEach(function(b) { b.classList.remove('expanded'); });
         }
     });
 });
@@ -151,9 +155,15 @@ function _updateSlimBadge() {
     var count = (window._feedAlerts || []).length;
     if (count > 0) {
         badge.style.display = '';
+        if (count > (parseInt(badge.textContent, 10) || 0)) {
+            badge.classList.remove('pulse');
+            void badge.offsetWidth;  // restart animation
+            badge.classList.add('pulse');
+        }
         badge.textContent = count > 99 ? '99+' : count;
     } else {
         badge.style.display = 'none';
+        badge.classList.remove('pulse');
     }
 }
 window._updateSlimBadge = _updateSlimBadge;
@@ -1745,4 +1755,14 @@ EventBus.on('command:filter', function(data) {
         }
     });
     if (typeof applyShipFilters === 'function') applyShipFilters();
+});
+
+// ── Layer chip counts: hide "0" (e.g. 항공기 0) — counts are set from
+// several modules, so observe the spans instead of patching every setter ──
+document.querySelectorAll('#layerChips .chip-count').forEach(function(span) {
+    var sync = function() {
+        span.style.display = span.textContent.trim() === '0' ? 'none' : '';
+    };
+    new MutationObserver(sync).observe(span, { childList: true, characterData: true, subtree: true });
+    sync();
 });

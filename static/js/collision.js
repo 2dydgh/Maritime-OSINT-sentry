@@ -57,7 +57,12 @@ function getSeaAreaName(lat, lng) {
             return a.name;
         }
     }
-    // 폴백: 위도/경도 기반 일반 표기
+    // 폴백 1: 광역 해양명 (예: 북태평양) — 좌표 표기보다 읽기 쉬움
+    if (typeof _oceanRegionName === 'function') {
+        var ocean = _oceanRegionName(lat, lng);
+        if (ocean) return ocean;
+    }
+    // 폴백 2: 위도/경도 기반 일반 표기
     var ns = lat >= 0 ? 'N' : 'S';
     var ew = lng >= 0 ? 'E' : 'W';
     return Math.abs(lat).toFixed(0) + '\u00b0' + ns + ' ' + Math.abs(lng).toFixed(0) + '\u00b0' + ew + ' 해역';
@@ -172,14 +177,20 @@ function renderCollisionList() {
     // ML serious risks (level >= 2) — used for both badge and HUD
     var mlSerious = (collisionData.ml?.risks || []).filter(function(r) { return r.risk_level >= 2; }).length;
 
-    // Update icon rail badge
+    // Update icon rail badge — pulse briefly only when the count rises
     var badge = document.getElementById('collisionBadge');
     if (badge) {
         if (mlSerious > 0) {
             badge.style.display = '';
+            if (mlSerious > (parseInt(badge.textContent, 10) || 0)) {
+                badge.classList.remove('pulse');
+                void badge.offsetWidth;  // restart animation
+                badge.classList.add('pulse');
+            }
             badge.textContent = mlSerious;
         } else {
             badge.style.display = 'none';
+            badge.classList.remove('pulse');
         }
     }
     // HUD
@@ -266,7 +277,7 @@ function renderCollisionList() {
                      data-mmsi-a="' + r.ship_a.mmsi + '" data-mmsi-b="' + r.ship_b.mmsi + '"\
                      data-lat-a="' + r.ship_a.lat + '" data-lng-a="' + r.ship_a.lng + '" data-lat-b="' + r.ship_b.lat + '" data-lng-b="' + r.ship_b.lng + '">\
                     <span class="col-severity">' + collisionSeverityBadge(r.severity) + '</span>\
-                    <span class="col-pairs">' + r.ship_a.name + ' <small>\u2192</small> ' + r.ship_b.name + '</span>\
+                    <span class="col-pairs" title="' + r.ship_a.name + ' \u2192 ' + r.ship_b.name + '">' + r.ship_a.name + ' <small>\u2192</small> ' + r.ship_b.name + '</span>\
                     <span class="col-area">' + _seaAreaShort(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '</span>\
                 </div>';
             }).join('');
@@ -329,7 +340,7 @@ function renderCollisionList() {
                      data-sog-a="' + r.ship_a.sog + '" data-cog-a="' + r.ship_a.cog + '" data-name-a="' + r.ship_a.name + '"\
                      data-risk-level="' + r.risk_level + '">\
                     <span class="col-severity">' + mlRiskBadge(r.risk_level, r.risk_label) + '</span>\
-                    <span class="col-pairs">' + r.ship_a.name + ' <small>\u2192</small> ' + r.ship_b.name + '</span>\
+                    <span class="col-pairs" title="' + r.ship_a.name + ' \u2192 ' + r.ship_b.name + '">' + r.ship_a.name + ' <small>\u2192</small> ' + r.ship_b.name + '</span>\
                     <span class="col-area">' + _seaAreaShort(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '</span>\
                 </div>';
             }).join('');

@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Maritime OSINT Sentry | Strategic Dashboard</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="icon" type="image/png" href="favicon.png">
@@ -19,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@700;900&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@700;900&family=Rajdhani:wght@600;700&display=swap"
         rel="stylesheet">
     <!-- Pretendard Variable — provides Korean glyphs for the font-family fallback chain. -->
     <link rel="stylesheet" as="style" crossorigin
@@ -29,7 +30,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
 
     <!-- Application Styles -->
-    <link rel="stylesheet" href="css/main.css?v=37">
+    <link rel="stylesheet" href="css/main.css?v=40">
     <!-- ECharts for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <!-- Three.js for 3D visualization -->
@@ -276,14 +277,10 @@
 
 
         <div id="mapNavControls">
-            <button class="map-nav-btn" id="navUp" title="Pan Up (↑)"><i class="fa-solid fa-chevron-up"></i></button>
-            <button class="map-nav-btn" id="navLeft" title="Pan Left (←)"><i class="fa-solid fa-chevron-left"></i></button>
             <div class="nav-zoom-group">
                 <button class="map-nav-btn" id="navZoomIn" title="Zoom In (+)"><i class="fa-solid fa-plus"></i></button>
                 <button class="map-nav-btn" id="navZoomOut" title="Zoom Out (-)"><i class="fa-solid fa-minus"></i></button>
             </div>
-            <button class="map-nav-btn" id="navRight" title="Pan Right (→)"><i class="fa-solid fa-chevron-right"></i></button>
-            <button class="map-nav-btn" id="navDown" title="Pan Down (↓)"><i class="fa-solid fa-chevron-down"></i></button>
         </div>
 
         <!-- 영역 분석 토글 (2D 해역 모드 전용, 상단 중앙 floating) -->
@@ -540,12 +537,12 @@
     <script src="js/app.js?v=2"></script>
     <script src="js/map-cesium.js?v=2"></script>
     <script src="js/ship-models-3d.js?v=2"></script>
-    <script src="js/map-leaflet.js?v=13"></script>
+    <script src="js/map-leaflet.js?v=23"></script>
     <script src="js/weather-overlay.js?v=1"></script>
     <script src="js/satellite.js?v=5"></script>
     <script src="js/proximity.js?v=4"></script>
     <script src="js/collision.js?v=7"></script>
-    <script src="js/websocket.js?v=7"></script>
+    <script src="js/websocket.js?v=8"></script>
     <script src="js/ui-controls.js?v=8"></script>
     <script src="js/charts.js?v=5"></script>
     <script src="js/chat.js?v=4"></script>

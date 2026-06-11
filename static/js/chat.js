@@ -13,6 +13,13 @@ var ChatUI = (function () {
     var _history = [];
     var _typing = null;
 
+    var WELCOME_TEXT = '안녕하세요. 해양 상황 AI 어시스턴트입니다.\n선박, 위험 해역, 기상 상황 등 무엇이든 물어보세요.';
+    var SUGGESTIONS = [
+        '말라카해협 위험도 요약해줘',
+        '부산 앞바다로 이동해줘',
+        'Cargo 선박만 보여줘'
+    ];
+
     function init() {
         _bubble = document.getElementById('chat-bubble');
         _panel = document.getElementById('chat-panel');
@@ -37,6 +44,32 @@ var ChatUI = (function () {
                 send();
             }
         });
+
+        _renderWelcome();
+    }
+
+    function _renderWelcome() {
+        if (_messages.children.length) return;
+
+        var hello = document.createElement('div');
+        hello.className = 'chat-msg chat-msg-assistant chat-msg-welcome';
+        hello.textContent = WELCOME_TEXT;
+        _messages.appendChild(hello);
+
+        var chips = document.createElement('div');
+        chips.className = 'chat-suggestions';
+        SUGGESTIONS.forEach(function (q) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'chat-suggestion-btn';
+            btn.textContent = q;
+            btn.addEventListener('click', function () {
+                _input.value = q;
+                send();
+            });
+            chips.appendChild(btn);
+        });
+        _messages.appendChild(chips);
     }
 
     function open() {
@@ -60,6 +93,9 @@ var ChatUI = (function () {
     function send() {
         var text = _input.value.trim();
         if (!text) return;
+
+        var chips = _messages.querySelector('.chat-suggestions');
+        if (chips) chips.parentNode.removeChild(chips);
 
         _input.value = '';
         _appendMessage('user', text);

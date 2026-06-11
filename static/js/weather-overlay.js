@@ -9,19 +9,25 @@ function _oceanRegionName(lat, lon) {
     if (lat >= 33 && lat <= 43 && lon >= 124 && lon <= 132) return '동해/서해';
     if (lat >= 25 && lat <= 35 && lon >= 120 && lon <= 132) return '동중국해';
     if (lat >= 33 && lat <= 46 && lon >= 127 && lon <= 142) return '동해';
-    // Major oceans by lat/lon
-    if (lat >= 0 && lat <= 30 && lon >= 100 && lon <= 150) return '서태평양';
-    if (lat >= 30 && lat <= 60 && lon >= 100 && lon <= 180) return '북태평양';
-    if (lat >= -60 && lat < 0 && lon >= 100 && lon <= 180) return '남태평양';
-    if (lat >= 0 && lat <= 30 && lon >= -80 && lon <= 0) return '대서양';
-    if (lat >= 30 && lat <= 70 && lon >= -80 && lon <= 0) return '북대서양';
-    if (lat >= -60 && lat < 0 && lon >= -70 && lon <= 20) return '남대서양';
-    if (lat >= -40 && lat <= 30 && lon >= 20 && lon <= 100) return '인도양';
-    if (lat >= 0 && lat <= 35 && lon >= -180 && lon <= -100) return '동태평양';
     if (lat >= 50 && lon >= -10 && lon <= 30) return '북해/발트해';
     if (lat >= 30 && lat <= 46 && lon >= -6 && lon <= 36) return '지중해';
-    // No region match
-    return '';
+    // Polar
+    if (lat >= 66) return '북극해';
+    if (lat <= -60) return '남극해';
+    // Major oceans — full longitude coverage so no point falls through to raw coords
+    if (lon >= 20 && lon < 100) {
+        if (lat <= 30) return '인도양';
+        return '';  // inland Asia — no ocean label
+    }
+    if (lon >= 100 || lon < -70) {  // Pacific basin (incl. east Pacific negative lons)
+        if (lat >= 30) return '북태평양';
+        if (lat >= 0) return (lon >= 100 && lon <= 150) ? '서태평양' : '동태평양';
+        return '남태평양';
+    }
+    // Atlantic basin: lon -70..20
+    if (lat >= 30) return '북대서양';
+    if (lat >= 0) return '대서양';
+    return '남대서양';
 }
 
 // Cesium imagery layers
@@ -65,13 +71,15 @@ async function fetchWeatherData() {
                 var wr = _oceanRegionName(maxWind.lat, maxWind.lon);
                 var wc = Math.abs(maxWind.lat).toFixed(1) + '°' + (maxWind.lat >= 0 ? 'N' : 'S') +
                     ' ' + Math.abs(maxWind.lon).toFixed(1) + '°' + (maxWind.lon >= 0 ? 'E' : 'W');
-                windLocEl.textContent = wr ? wr + ' ' + wc : wc;
+                windLocEl.textContent = wr || wc;
+                windLocEl.title = wc;
             }
             if (waveLocEl && maxWave.val > 0) {
                 var mr = _oceanRegionName(maxWave.lat, maxWave.lon);
                 var mc = Math.abs(maxWave.lat).toFixed(1) + '°' + (maxWave.lat >= 0 ? 'N' : 'S') +
                     ' ' + Math.abs(maxWave.lon).toFixed(1) + '°' + (maxWave.lon >= 0 ? 'E' : 'W');
-                waveLocEl.textContent = mr ? mr + ' ' + mc : mc;
+                waveLocEl.textContent = mr || mc;
+                waveLocEl.title = mc;
             }
         }
 

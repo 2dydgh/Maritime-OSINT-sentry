@@ -49,7 +49,7 @@ var ModelRegistry = (function() {
         'dark-ship': {
             name: 'Dark Ship 탐지',
             icon: 'fa-solid fa-ghost',
-            label: 'Dark',
+            label: '다크쉽',
             type: 'globe-layer',
             title: 'Dark Ship 탐지',
             init: function() {},
@@ -60,7 +60,7 @@ var ModelRegistry = (function() {
                 // TODO: hide dark ship entities
             },
             getShipSummary: function(mmsi) {
-                return { label: 'Dark', status: '정상', level: 'safe', icon: 'fa-ghost' };
+                return { label: '다크쉽', status: '정상', level: 'safe', icon: 'fa-ghost' };
             }
         },
         'roll-prediction': {

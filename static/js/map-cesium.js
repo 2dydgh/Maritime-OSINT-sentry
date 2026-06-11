@@ -256,13 +256,9 @@ function navPan(dx, dy) {
     cam.position = Cesium.Cartesian3.add(camPos, diff, new Cesium.Cartesian3());
 }
 
-// Button handlers
+// Button handlers (pan D-pad removed — drag panning covers it; keyboard arrows below)
 document.getElementById('navZoomIn').addEventListener('click', function() { navZoom(1); });
 document.getElementById('navZoomOut').addEventListener('click', function() { navZoom(-1); });
-document.getElementById('navUp').addEventListener('click', function() { navPan(0, NAV_PAN_PIXELS); });
-document.getElementById('navDown').addEventListener('click', function() { navPan(0, -NAV_PAN_PIXELS); });
-document.getElementById('navLeft').addEventListener('click', function() { navPan(NAV_PAN_PIXELS, 0); });
-document.getElementById('navRight').addEventListener('click', function() { navPan(-NAV_PAN_PIXELS, 0); });
 
 // Camera orbit rotation
 var NAV_ROTATE_DEG = 5;
@@ -520,9 +516,9 @@ document.querySelectorAll('.region-item').forEach(function(item) {
     });
 });
 
-// Default view
+// Default view — Korea waters / East Asia
 viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(53.0, 24.0, 3000000.0),
+    destination: Cesium.Cartesian3.fromDegrees(127.5, 34.0, 2600000.0),
     duration: 2.0,
     easingFunction: Cesium.EasingFunction.QUADRATIC_IN_OUT
 });

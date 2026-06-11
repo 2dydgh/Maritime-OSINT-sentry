@@ -179,14 +179,16 @@ var BottomBar = (function() {
             areaCounts[name] = (areaCounts[name] || 0) + 1;
         });
 
-        // Sort by count desc, show all
+        // Sort by count desc, show top 5 — full list lives in the detail popup
         var sorted = Object.keys(areaCounts).sort(function(a, b) { return areaCounts[b] - areaCounts[a]; });
+        var top = sorted.slice(0, 5);
+        var rest = sorted.length - top.length;
 
-        el.innerHTML = sorted.map(function(name) {
+        el.innerHTML = top.map(function(name) {
             var count = areaCounts[name];
             var changed = _prevAreaCounts[name] !== count;
             return '<span class="risk-area-tag">' + name + ' <b class="' + (changed ? 'updated' : '') + '">' + count + '</b></span>';
-        }).join('');
+        }).join('') + (rest > 0 ? '<span class="risk-area-tag risk-area-more" title="외 ' + rest + '개 해역 — 클릭하여 전체 보기">+' + rest + '</span>' : '');
 
         // Re-trigger animation on changed counts
         if (el.querySelectorAll) {

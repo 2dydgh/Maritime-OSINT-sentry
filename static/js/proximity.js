@@ -482,7 +482,7 @@ function renderNearbyPanel(nearbyVessels) {
     _nearbyModal.innerHTML =
         '<div class="nearby-modal-header">'
             + '<span class="nearby-modal-title">NEARBY VESSELS'
-            + (hasMlMatches ? ' <span style="font-size:0.55rem;color:var(--accent);font-weight:400;">AI</span>' : '')
+            + (hasMlMatches ? ' <span style="font-size:0.625rem;color:var(--accent);font-weight:400;">AI</span>' : '')
             + '</span>'
             + '<span class="nearby-modal-count">' + nearbyVessels.length + '</span>'
             + '<button class="nearby-modal-close">&times;</button>'
