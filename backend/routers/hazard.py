@@ -9,8 +9,10 @@ strait, Dokdo) and run them through the normal compute_cells pipeline so the
 scoring, top-cause, and subscores are still consistent with the algorithm.
 """
 import asyncio
+import json
 import logging
 import math
+import os
 import random
 import time
 
@@ -98,6 +100,35 @@ def _compute_cells_sync() -> list[dict]:
     return korea_hex_grid.compute_cells(weather, vessels, features)
 
 
+# Synth cells are deterministic, so the result survives restarts. Persisting
+# them removes the ~40s cold-compute window right after every server restart
+# (the compute itself is slow because the global AIS ingest thread hogs the GIL).
+_CELLS_DISK_CACHE = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "services", "hazard_cells_cache.json"
+)
+
+
+def _load_cells_from_disk() -> list[dict] | None:
+    try:
+        with open(_CELLS_DISK_CACHE) as f:
+            data = json.load(f)
+        if data.get("with_land") and data.get("cells"):
+            return data["cells"]
+    except Exception:
+        pass
+    return None
+
+
+def _save_cells_to_disk(cells: list[dict], with_land: bool) -> None:
+    if not with_land or not cells:
+        return  # only persist the final (land-filtered) version
+    try:
+        with open(_CELLS_DISK_CACHE, "w") as f:
+            json.dump({"with_land": True, "cells": cells}, f)
+    except Exception as e:
+        logger.warning("hazard disk cache save failed: %s", e)
+
+
 async def warm_cache() -> None:
     """Pre-populate the response cache once the land filter has finished loading.
 
@@ -106,12 +137,19 @@ async def warm_cache() -> None:
     compute off the event loop so the first /hazard/korea request is instant.
     """
     global _CACHED_CELLS, _CACHED_WITH_LAND
+    cells = _load_cells_from_disk()
+    if cells is not None:
+        _CACHED_CELLS = cells
+        _CACHED_WITH_LAND = True
+        logger.info("hazard cache loaded from disk: %d cells", len(cells))
+        return
     for _ in range(60):  # up to ~60s of polling
         if land_filter.is_loaded():
             break
         await asyncio.sleep(1)
     _CACHED_CELLS = await asyncio.to_thread(_compute_cells_sync)
     _CACHED_WITH_LAND = land_filter.is_loaded()
+    _save_cells_to_disk(_CACHED_CELLS, _CACHED_WITH_LAND)
     logger.info("hazard cache warmed: %d cells", len(_CACHED_CELLS))
 
 
@@ -133,6 +171,7 @@ async def get_korea_hazard():
     if _CACHED_CELLS is None or (land_ready and not _CACHED_WITH_LAND):
         _CACHED_CELLS = await asyncio.to_thread(_compute_cells_sync)
         _CACHED_WITH_LAND = land_ready
+        _save_cells_to_disk(_CACHED_CELLS, _CACHED_WITH_LAND)
     return JSONResponse(
         content={
             "cells": _CACHED_CELLS,
