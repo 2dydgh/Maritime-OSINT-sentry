@@ -4452,6 +4452,8 @@ var RollViewer = (function () {
         predPitchHistory = [];
         smoothPredRoll = 0;
         smoothPredPitch = 0;
+        predRoll = 0;
+        predPitch = 0;
 
         // Clear container DOM
         var container = getContainer();
