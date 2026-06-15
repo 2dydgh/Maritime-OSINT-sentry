@@ -4271,39 +4271,44 @@ var RollViewer = (function () {
     }
 
     // 좌(실제)/우(예측) 2분할 렌더. 각 패스마다 반대편 선박을 숨긴다.
+    // 두 반쪽 모두 동일한 프레이밍(선박 중앙)을 보여줘야 하므로 setViewOffset은
+    // 쓰지 않고 camera.aspect + setViewport/setScissor 만으로 분할한다.
+    // 주의: 분할 모드는 composer(블룸/갓레이) 경로를 우회한다 — spec 4절의 의도적 트레이드오프.
     function renderSplit() {
         var THREE = window.THREE;
         if (!renderer || !scene || !camera || !THREE) return;
         var size = renderer.getSize(new THREE.Vector2());
         var w = size.x, h = size.y;
-        var halfW = Math.floor(w / 2);
+        var leftW = Math.floor(w / 2);
+        var rightW = w - leftW;
 
+        // 패널 오프셋 등 이전 프레임의 viewOffset 잔재 제거 (분할은 전체 폭 사용)
+        camera.clearViewOffset();
         renderer.setScissorTest(true);
 
         // 좌: 실제
         if (shipGroupPred) shipGroupPred.visible = false;
         if (shipGroup) shipGroup.visible = true;
-        camera.aspect = halfW / h;
-        camera.setViewOffset(w, h, 0, 0, halfW, h);
+        camera.aspect = leftW / h;
         camera.updateProjectionMatrix();
-        renderer.setViewport(0, 0, halfW, h);
-        renderer.setScissor(0, 0, halfW, h);
+        renderer.setViewport(0, 0, leftW, h);
+        renderer.setScissor(0, 0, leftW, h);
         renderer.render(scene, camera);
 
         // 우: 예측
         if (shipGroup) shipGroup.visible = false;
         if (shipGroupPred) shipGroupPred.visible = true;
-        camera.setViewOffset(w, h, 0, 0, w - halfW, h);
+        camera.aspect = rightW / h;
         camera.updateProjectionMatrix();
-        renderer.setViewport(halfW, 0, w - halfW, h);
-        renderer.setScissor(halfW, 0, w - halfW, h);
+        renderer.setViewport(leftW, 0, rightW, h);
+        renderer.setScissor(leftW, 0, rightW, h);
         renderer.render(scene, camera);
 
-        // 원복
+        // 원복: 스시저 끄고, 전체 뷰포트/aspect 복원, 두 선박 모두 보이게
         renderer.setScissorTest(false);
+        renderer.setViewport(0, 0, w, h);
         if (shipGroup) shipGroup.visible = true;
         if (shipGroupPred) shipGroupPred.visible = true;
-        camera.clearViewOffset();
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
     }
