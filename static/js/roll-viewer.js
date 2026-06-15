@@ -1505,6 +1505,14 @@ var RollViewer = (function () {
             collapseBtn.addEventListener('click', function (e) {
                 e.preventDefault();
                 scenarioOverlay.classList.toggle('collapsed');
+                var icon = collapseBtn.querySelector('i');
+                if (icon) {
+                    if (scenarioOverlay.classList.contains('collapsed')) {
+                        icon.className = 'fa-solid fa-chevron-down';
+                    } else {
+                        icon.className = 'fa-solid fa-xmark';
+                    }
+                }
             });
         }
 
@@ -1585,19 +1593,16 @@ var RollViewer = (function () {
             '</div>';
         canvasWrap.appendChild(split);
 
-        var compare = document.createElement('div');
-        compare.className = 'rv-compare';
-        // 좌하단 미니 HUD: 예측 오차 지표 + 미니 스트리밍 차트 (조작 버튼은 우상단 시뮬레이션 패널로 이동)
-        compare.innerHTML =
-            '<div class="rv-compare-metrics">' +
-            '<div class="rv-metric"><span class="rv-metric-label">RMSE</span><span class="rv-metric-val" id="rv-rmse">0.0°</span></div>' +
-            '<div class="rv-metric"><span class="rv-metric-label">Δ Roll</span><span class="rv-metric-val" id="rv-d-roll">0.0°</span></div>' +
-            '<div class="rv-metric"><span class="rv-metric-label">Δ Pitch</span><span class="rv-metric-val" id="rv-d-pitch">0.0°</span></div>' +
-            '</div>' +
-            '<div class="rv-compare-chart" id="rv-roll-chart"></div>';
-        canvasWrap.appendChild(compare);
-
-        // (Removed) Top-right SAFE/CAUTION badge — ROLL HUD value color already conveys the same level.
+        // Real-time Prediction HUD (Error metrics)
+        var errorHud = document.createElement('div');
+        errorHud.className = 'rv-prediction-hud';
+        errorHud.innerHTML =
+            '<div class="rv-pred-hud-title">실시간 예측 오차 ERROR METRICS</div>' +
+            '<div class="rv-pred-metro-wrap">' + _metroSvg('rv-hud-metro') + '</div>' +
+            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">오차 (RMSE)</span><span class="rv-pred-hud-val" id="rv-rmse">0.0°</span></div>' +
+            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">횡요 오차 (Δ Roll)</span><span class="rv-pred-hud-val" id="rv-d-roll">0.0°</span></div>' +
+            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">종요 오차 (Δ Pitch)</span><span class="rv-pred-hud-val" id="rv-d-pitch">0.0°</span></div>';
+        canvasWrap.appendChild(errorHud);
 
         // Camera preset buttons (bottom-right)
         var camGroup = document.createElement('div');
@@ -2593,7 +2598,7 @@ var RollViewer = (function () {
         var canvas = document.createElement('canvas');
         canvas.width = 128; canvas.height = 32;
         var ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = '#3b82f6';
         ctx.font = "700 20px 'Wanted Sans Variable', 'Pretendard Variable', 'Inter', sans-serif";
         ctx.textAlign = 'center';
         ctx.fillText('WAVE ' + Math.round(weather.waveDirection) + '°', 64, 22);
@@ -3936,7 +3941,7 @@ var RollViewer = (function () {
                 var rmseEl = document.getElementById('rv-rmse');
                 if (dRollEl) {
                     dRollEl.textContent = Math.abs(_d.dRoll).toFixed(1) + '°';
-                    dRollEl.className = 'rv-metric-val ' + (Math.abs(_d.dRoll) < 2 ? 'rv-ok' : Math.abs(_d.dRoll) < 5 ? 'rv-warn' : 'rv-bad');
+                    dRollEl.className = 'rv-pred-hud-val ' + (Math.abs(_d.dRoll) < 2 ? 'rv-ok' : Math.abs(_d.dRoll) < 5 ? 'rv-warn' : 'rv-bad');
                 }
                 if (dPitchEl) dPitchEl.textContent = Math.abs(_d.dPitch).toFixed(1) + '°';
                 if (rmseEl) rmseEl.textContent = RollPrediction.computeRMSE(rollHistory, predRollHistory).toFixed(1) + '°';
@@ -4214,10 +4219,11 @@ var RollViewer = (function () {
         }
     }
 
-    // 양쪽(좌=실측선박 위, 우=예측선박 위) 메트로놈을 동일 데이터로 갱신
+    // 양쪽(좌=실측선박 위, 우=예측선박 위) 메트로놈과 HUD 메트로놈을 동일 데이터로 갱신
     function updateMetronomes(realDeg, predDeg) {
         _setMetro('rv-metroL', realDeg, predDeg);
         _setMetro('rv-metroR', realDeg, predDeg);
+        _setMetro('rv-hud-metro', realDeg, predDeg);
     }
 
     // 분할 라벨 아래 수치값 갱신 (색상 코딩)
@@ -4342,8 +4348,8 @@ var RollViewer = (function () {
                 {
                     name: '실제', type: 'line', smooth: true, symbol: 'none',
                     data: rollHistory.slice(),
-                    lineStyle: { color: '#38bdf8', width: 1.8 },
-                    areaStyle: { color: 'rgba(56,189,248,0.18)' }
+                    lineStyle: { color: '#3b82f6', width: 1.8 },
+                    areaStyle: { color: 'rgba(59,130,246,0.18)' }
                 },
                 {
                     name: '예측', type: 'line', smooth: true, symbol: 'none',
