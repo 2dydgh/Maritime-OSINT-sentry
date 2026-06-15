@@ -3850,6 +3850,11 @@ var RollViewer = (function () {
                 predPitch = _pred.pitch;
                 smoothPredRoll += (predRoll - smoothPredRoll) * motionLerp;
                 smoothPredPitch += (predPitch - smoothPredPitch) * motionLerp;
+                // 예측 이력은 예측이 실제로 산출될 때만 쌓는다 (모듈 부재 시 0-시리즈 방지)
+                predRollHistory.push(Math.abs(smoothPredRoll));
+                if (predRollHistory.length > 60) predRollHistory.shift();
+                predPitchHistory.push(Math.abs(smoothPredPitch));
+                if (predPitchHistory.length > 60) predPitchHistory.shift();
             }
             var absRoll = Math.abs(smoothRoll);
             var absPitch = Math.abs(smoothPitch);
@@ -3869,10 +3874,6 @@ var RollViewer = (function () {
             if (rollHistory.length > 60) rollHistory.shift();
             pitchHistory.push(absPitch);
             if (pitchHistory.length > 60) pitchHistory.shift();
-            predRollHistory.push(Math.abs(smoothPredRoll));
-            if (predRollHistory.length > 60) predRollHistory.shift();
-            predPitchHistory.push(Math.abs(smoothPredPitch));
-            if (predPitchHistory.length > 60) predPitchHistory.shift();
 
             // ── Camera roll sync — tilt camera with ship roll ──
             var camRollRad = smoothRoll * (Math.PI / 180) * 0.3;  // 30% of ship roll
