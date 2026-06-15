@@ -1648,6 +1648,8 @@ var RollViewer = (function () {
                 turnBtnEl.innerHTML = '<i class="fa-solid fa-stop"></i> 시나리오 정지';
                 turnBtnEl.classList.add('active');
             }
+            var actTurnOn = document.getElementById('rv-act-turn');
+            if (actTurnOn) { actTurnOn.textContent = '선회 정지'; actTurnOn.classList.add('active'); }
         } else {
             if (controls) {
                 controls.target.set(shipWorldPos.x, 2, shipWorldPos.z);
@@ -1657,6 +1659,8 @@ var RollViewer = (function () {
                 turnBtnEl.innerHTML = '<i class="fa-solid fa-ship"></i> 선회 시나리오';
                 turnBtnEl.classList.remove('active');
             }
+            var actTurnOff = document.getElementById('rv-act-turn');
+            if (actTurnOff) { actTurnOff.textContent = '선회 시나리오'; actTurnOff.classList.remove('active'); }
             turnHeading = 0;
             camFollowHeading = 0;
         }
