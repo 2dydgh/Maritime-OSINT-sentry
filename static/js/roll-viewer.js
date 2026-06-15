@@ -1575,13 +1575,13 @@ var RollViewer = (function () {
             '<div class="rv-split-divider"></div>' +
             '<div class="rv-split-side rv-split-left">' +
             '<div class="rv-split-label">실제 REAL</div>' +
+            _metroSvg('rv-metroL') +
             '<div class="rv-split-roll" id="rv-real-roll">0.0°</div>' +
-            '<div class="roll-gauge roll-gauge-safe" id="rv-real-gauge"><div class="roll-gauge-track"><div class="roll-gauge-fill" id="rv-real-fill"></div></div></div>' +
             '</div>' +
             '<div class="rv-split-side rv-split-right">' +
             '<div class="rv-split-label">예측 PRED</div>' +
+            _metroSvg('rv-metroR') +
             '<div class="rv-split-roll" id="rv-pred-roll">0.0°</div>' +
-            '<div class="roll-gauge roll-gauge-safe" id="rv-pred-gauge"><div class="roll-gauge-track"><div class="roll-gauge-fill" id="rv-pred-fill"></div></div></div>' +
             '</div>';
         canvasWrap.appendChild(split);
 
@@ -3922,8 +3922,9 @@ var RollViewer = (function () {
             }
             var absRoll = Math.abs(smoothRoll);
             var absPitch = Math.abs(smoothPitch);
-            updateRollGaugeBy('rv-real-gauge', 'rv-real-fill', 'rv-real-roll', absRoll);
-            updateRollGaugeBy('rv-pred-gauge', 'rv-pred-fill', 'rv-pred-roll', Math.abs(smoothPredRoll));
+            updateMetronomes(smoothRoll, smoothPredRoll);
+            _setRollValue('rv-real-roll', absRoll);
+            _setRollValue('rv-pred-roll', Math.abs(smoothPredRoll));
             if (window.RollPrediction) {
                 var _d = RollPrediction.computeDelta(
                     { roll: smoothRoll, pitch: smoothPitch },
@@ -4158,6 +4159,68 @@ var RollViewer = (function () {
             '</div>';
 
         return panel;
+    }
+
+    // ── 메트로놈(가위바늘) 게이지 ──
+    // 부채꼴 눈금 위에 실측(파란 굵은 바늘)·예측(노랑 점선 바늘)을 띄우고,
+    // 두 바늘 사이를 빨간 부채꼴로 채워 오차를 한눈에 보여준다. ±35° 범위.
+    var _METRO = { cx: 60, cy: 66, R: 54, L: 50, range: 35 };
+
+    function _metroPt(deg, r) {
+        var a = deg * Math.PI / 180;
+        return [(_METRO.cx + r * Math.sin(a)), (_METRO.cy - r * Math.cos(a))];
+    }
+
+    // 정적 SVG(눈금 아크 + 눈금선) + 동적 요소(바늘 2 + 빨간 부채꼴) 생성
+    function _metroSvg(prefix) {
+        var s = _metroPt(-_METRO.range, _METRO.R), e = _metroPt(_METRO.range, _METRO.R);
+        var ticks = '';
+        [-35, -25, -15, 0, 15, 25, 35].forEach(function (d) {
+            var a = _metroPt(d, _METRO.R - 4), b = _metroPt(d, _METRO.R + 1);
+            ticks += '<line x1="' + a[0].toFixed(2) + '" y1="' + a[1].toFixed(2) +
+                '" x2="' + b[0].toFixed(2) + '" y2="' + b[1].toFixed(2) + '" class="rv-metro-tick"/>';
+        });
+        var cx = _METRO.cx, cy = _METRO.cy, topY = (_METRO.cy - _METRO.L);
+        return '<svg class="rv-metro" viewBox="0 0 120 74" preserveAspectRatio="xMidYMid meet">' +
+            '<path class="rv-metro-arc" d="M ' + s[0].toFixed(2) + ' ' + s[1].toFixed(2) +
+            ' A ' + _METRO.R + ' ' + _METRO.R + ' 0 0 1 ' + e[0].toFixed(2) + ' ' + e[1].toFixed(2) + '"/>' +
+            ticks +
+            '<polygon class="rv-metro-wedge" id="' + prefix + '-wedge" points="' + cx + ',' + cy + '"/>' +
+            '<line class="rv-metro-pred" id="' + prefix + '-pred" x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + topY + '"/>' +
+            '<line class="rv-metro-real" id="' + prefix + '-real" x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + topY + '"/>' +
+            '<circle class="rv-metro-pivot" cx="' + cx + '" cy="' + cy + '" r="3"/>' +
+            '</svg>';
+    }
+
+    function _setMetro(prefix, realDeg, predDeg) {
+        var clamp = function (d) { return Math.max(-_METRO.range, Math.min(_METRO.range, d)); };
+        var r = _metroPt(clamp(realDeg), _METRO.L), p = _metroPt(clamp(predDeg), _METRO.L);
+        var realEl = document.getElementById(prefix + '-real');
+        var predEl = document.getElementById(prefix + '-pred');
+        var wedgeEl = document.getElementById(prefix + '-wedge');
+        if (realEl) { realEl.setAttribute('x2', r[0].toFixed(2)); realEl.setAttribute('y2', r[1].toFixed(2)); }
+        if (predEl) { predEl.setAttribute('x2', p[0].toFixed(2)); predEl.setAttribute('y2', p[1].toFixed(2)); }
+        if (wedgeEl) {
+            wedgeEl.setAttribute('points', _METRO.cx + ',' + _METRO.cy + ' ' +
+                r[0].toFixed(2) + ',' + r[1].toFixed(2) + ' ' + p[0].toFixed(2) + ',' + p[1].toFixed(2));
+            var err = Math.min(Math.abs(realDeg - predDeg) / 8, 1);   // 8° 이상이면 최대 강도
+            wedgeEl.setAttribute('fill', 'rgba(244,63,94,' + (0.1 + 0.55 * err).toFixed(3) + ')');
+        }
+    }
+
+    // 양쪽(좌=실측선박 위, 우=예측선박 위) 메트로놈을 동일 데이터로 갱신
+    function updateMetronomes(realDeg, predDeg) {
+        _setMetro('rv-metroL', realDeg, predDeg);
+        _setMetro('rv-metroR', realDeg, predDeg);
+    }
+
+    // 분할 라벨 아래 수치값 갱신 (색상 코딩)
+    function _setRollValue(id, absRoll) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = absRoll.toFixed(1) + '°';
+        var level = absRoll < 5 ? 'safe' : absRoll < 10 ? 'caution' : absRoll < 15 ? 'warning' : 'danger';
+        el.className = 'rv-split-roll rv-roll-' + level;
     }
 
     // 임의의 게이지 세트를 갱신. (gaugeId, fillId, valueId, absRoll)

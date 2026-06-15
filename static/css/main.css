@@ -7106,8 +7106,22 @@ button, .btn, [class*="-btn"] {
 .rv-split-left { left: 0; }
 .rv-split-right { right: 0; }
 .rv-split-label { font-size: 12px; letter-spacing: 1px; color: #94a3b8; font-weight: 600; }
-.rv-split-roll { font-size: 22px; font-weight: 700; color: #e2e8f0; }
+.rv-split-roll { font-size: 20px; font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; }
 .rv-split-side .roll-gauge { width: 120px; }
+.rv-roll-safe { color: #10b981; }
+.rv-roll-caution { color: #eab308; }
+.rv-roll-warning { color: #f97316; }
+.rv-roll-danger { color: #f43f5e; }
+
+/* ── 메트로놈(가위바늘) 게이지 ── */
+.rv-metro { width: 150px; height: 92px; overflow: visible;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4)); }
+.rv-metro-arc { fill: none; stroke: rgba(148,163,184,0.35); stroke-width: 1.5; }
+.rv-metro-tick { stroke: rgba(148,163,184,0.45); stroke-width: 1; }
+.rv-metro-pivot { fill: #cbd5e1; }
+.rv-metro-wedge { fill: rgba(244,63,94,0.2); stroke: none; }
+.rv-metro-pred { stroke: #fbbf24; stroke-width: 1.6; stroke-dasharray: 3 2.5; stroke-linecap: round; }
+.rv-metro-real { stroke: #38bdf8; stroke-width: 3; stroke-linecap: round; }
 
 
 /* ── Roll Viewer 좌측 정보 인스펙터 (떠 있는 글래스 카드) ── */
