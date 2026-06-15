@@ -7108,22 +7108,32 @@ button, .btn, [class*="-btn"] {
 .rv-split-side .roll-gauge { width: 120px; }
 
 
-/* ── Roll Viewer 우측 드로우 ── */
-.rv-drawer { position: absolute; top: 0; right: 0; height: 100%;
-  width: var(--rv-panel-w, 320px); transform: translateX(100%);
-  transition: transform 0.25s ease; z-index: 20; overflow-y: auto;
-  padding-top: 60px;  /* 토글 버튼(우상단)이 첫 섹션을 가리지 않도록 */
-  background: rgba(15,23,42,0.92); backdrop-filter: blur(8px);
-  border-left: 1px solid rgba(148,163,184,0.15); }
+/* ── Roll Viewer 우측 정보 인스펙터 (떠 있는 글래스 카드) ── */
+.rv-drawer { position: absolute; top: 64px; right: 14px; bottom: 16px;
+  width: var(--rv-panel-w, 320px); transform: translateX(calc(100% + 20px));
+  transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); z-index: 20; overflow-y: auto;
+  border-radius: 14px;
+  background: rgba(15,23,42,0.62); backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid rgba(148,163,184,0.18);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45); }
 .rv-drawer.rv-drawer-open { transform: translateX(0); }
-/* 드로우 안에 들어간 패널은 자체 배경/블러/테두리/절대배치를 끈다 (이중 적용 방지) */
+/* 카드 안에 들어간 패널은 자체 배경/블러/테두리/절대배치를 끈다 (이중 적용 방지) */
 .rv-drawer .roll-viewer-panel { position: static; width: 100%;
   background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
   border-left: none; }
-.rv-drawer-toggle { position: absolute; top: 12px; right: 12px; z-index: 21;
-  width: 38px; height: 38px; border-radius: 8px; cursor: pointer;
-  background: rgba(15,23,42,0.8); color: #cbd5e1;
-  border: 1px solid rgba(148,163,184,0.2); }
+/* 햄버거 대신 용도가 분명한 텍스트 토글 (정보) */
+.rv-drawer-toggle { position: absolute; top: 14px; right: 14px; z-index: 21;
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 36px; padding: 0 14px; border-radius: 18px; cursor: pointer;
+  font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  background: rgba(15,23,42,0.78); color: #cbd5e1;
+  border: 1px solid rgba(148,163,184,0.25);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s, color 0.15s; }
+.rv-drawer-toggle:hover { background: rgba(30,41,59,0.92); color: #fff; }
+.rv-drawer-toggle.active { background: rgba(59,130,246,0.85); color: #fff;
+  border-color: rgba(59,130,246,0.85); }
 
 /* ── Roll Viewer 하단 비교 영역 ── */
 .rv-compare { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;

@@ -397,9 +397,10 @@ var RollViewer = (function () {
         var drawerToggle = document.createElement('button');
         drawerToggle.className = 'rv-drawer-toggle';
         drawerToggle.id = 'rv-drawer-toggle';
-        drawerToggle.innerHTML = '<i class="fa-solid fa-bars"></i>';
+        drawerToggle.innerHTML = '<i class="fa-solid fa-circle-info"></i> <span>상세 정보</span>';
         drawerToggle.addEventListener('click', function () {
-            drawer.classList.toggle('rv-drawer-open');
+            var open = drawer.classList.toggle('rv-drawer-open');
+            drawerToggle.classList.toggle('active', open);
         });
 
         layout.appendChild(canvasWrap);
