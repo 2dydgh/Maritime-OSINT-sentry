@@ -1598,7 +1598,6 @@ var RollViewer = (function () {
         errorHud.className = 'rv-prediction-hud';
         errorHud.innerHTML =
             '<div class="rv-pred-hud-title">실시간 예측 오차 ERROR METRICS</div>' +
-            '<div class="rv-pred-metro-wrap">' + _metroSvg('rv-hud-metro') + '</div>' +
             '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">오차 (RMSE)</span><span class="rv-pred-hud-val" id="rv-rmse">0.0°</span></div>' +
             '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">횡요 오차 (Δ Roll)</span><span class="rv-pred-hud-val" id="rv-d-roll">0.0°</span></div>' +
             '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">종요 오차 (Δ Pitch)</span><span class="rv-pred-hud-val" id="rv-d-pitch">0.0°</span></div>';
@@ -4203,27 +4202,40 @@ var RollViewer = (function () {
             '</svg>';
     }
 
-    function _setMetro(prefix, realDeg, predDeg) {
+    // mode: 'real' = 실측 바늘만, 'pred' = 예측 바늘만, 'both' = 둘 다 + 빨간 오차 부채꼴
+    function _setMetro(prefix, realDeg, predDeg, mode) {
+        mode = mode || 'both';
         var clamp = function (d) { return Math.max(-_METRO.range, Math.min(_METRO.range, d)); };
         var r = _metroPt(clamp(realDeg), _METRO.L), p = _metroPt(clamp(predDeg), _METRO.L);
         var realEl = document.getElementById(prefix + '-real');
         var predEl = document.getElementById(prefix + '-pred');
         var wedgeEl = document.getElementById(prefix + '-wedge');
-        if (realEl) { realEl.setAttribute('x2', r[0].toFixed(2)); realEl.setAttribute('y2', r[1].toFixed(2)); }
-        if (predEl) { predEl.setAttribute('x2', p[0].toFixed(2)); predEl.setAttribute('y2', p[1].toFixed(2)); }
+        var showReal = mode === 'both' || mode === 'real';
+        var showPred = mode === 'both' || mode === 'pred';
+        var showWedge = mode === 'both';
+        if (realEl) {
+            realEl.style.display = showReal ? '' : 'none';
+            if (showReal) { realEl.setAttribute('x2', r[0].toFixed(2)); realEl.setAttribute('y2', r[1].toFixed(2)); }
+        }
+        if (predEl) {
+            predEl.style.display = showPred ? '' : 'none';
+            if (showPred) { predEl.setAttribute('x2', p[0].toFixed(2)); predEl.setAttribute('y2', p[1].toFixed(2)); }
+        }
         if (wedgeEl) {
-            wedgeEl.setAttribute('points', _METRO.cx + ',' + _METRO.cy + ' ' +
-                r[0].toFixed(2) + ',' + r[1].toFixed(2) + ' ' + p[0].toFixed(2) + ',' + p[1].toFixed(2));
-            var err = Math.min(Math.abs(realDeg - predDeg) / 8, 1);   // 8° 이상이면 최대 강도
-            wedgeEl.setAttribute('fill', 'rgba(244,63,94,' + (0.1 + 0.55 * err).toFixed(3) + ')');
+            wedgeEl.style.display = showWedge ? '' : 'none';
+            if (showWedge) {
+                wedgeEl.setAttribute('points', _METRO.cx + ',' + _METRO.cy + ' ' +
+                    r[0].toFixed(2) + ',' + r[1].toFixed(2) + ' ' + p[0].toFixed(2) + ',' + p[1].toFixed(2));
+                var err = Math.min(Math.abs(realDeg - predDeg) / 8, 1);   // 8° 이상이면 최대 강도
+                wedgeEl.setAttribute('fill', 'rgba(244,63,94,' + (0.1 + 0.55 * err).toFixed(3) + ')');
+            }
         }
     }
 
-    // 양쪽(좌=실측선박 위, 우=예측선박 위) 메트로놈과 HUD 메트로놈을 동일 데이터로 갱신
+    // 좌=실측 선박(실측 바늘만), 우=예측 선박(예측 바늘만)
     function updateMetronomes(realDeg, predDeg) {
-        _setMetro('rv-metroL', realDeg, predDeg);
-        _setMetro('rv-metroR', realDeg, predDeg);
-        _setMetro('rv-hud-metro', realDeg, predDeg);
+        _setMetro('rv-metroL', realDeg, predDeg, 'real');
+        _setMetro('rv-metroR', realDeg, predDeg, 'pred');
     }
 
     // 분할 라벨 아래 수치값 갱신 (색상 코딩)
