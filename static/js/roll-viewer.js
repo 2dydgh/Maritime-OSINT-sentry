@@ -1776,7 +1776,8 @@ var RollViewer = (function () {
             dir = (cycleIndex % 2 === 0) ? 1 : -1;
         }
 
-        turnHeading += headingRate * dir * dt;
+        // 우현(dir=+1) 타각 → 우회전. Three.js rotation.y 증가는 반시계(좌)라 부호를 뒤집는다.
+        turnHeading -= headingRate * dir * dt;
         // Normalize heading 0-360
         turnHeading = ((turnHeading % 360) + 360) % 360;
 
@@ -1795,7 +1796,7 @@ var RollViewer = (function () {
         if (progressFill) progressFill.style.width = ((cycleTime / TURN_TOTAL) * 100) + '%';
 
         return {
-            headingDelta: headingRate * dir * dt,
+            headingDelta: -headingRate * dir * dt,
             rollMultiplier: rollMult,
             rudderAngle: rudder * dir,
             phaseName: phaseName
@@ -3790,10 +3791,10 @@ var RollViewer = (function () {
             var tertiaryRoll = rollParams.amp * 0.12 * waveScale * Math.sin(w1 * 3.1 + 2.7);
             var waveRoll = primaryRoll + secondaryRoll + tertiaryRoll;
 
-            // Turn-induced heel: steady inward lean during turn
+            // Turn-induced heel: 선회 방향으로 기울임 (좌선회→좌로 기울고 메트로놈도 좌로)
             var turnHeel = 0;
             if (turnScenarioActive && turnState.rudderAngle !== 0) {
-                turnHeel = -turnState.rudderAngle * 0.22;
+                turnHeel = turnState.rudderAngle * 0.22;
             }
 
             // Combined roll — cap to realistic max ~18°
@@ -4174,6 +4175,10 @@ var RollViewer = (function () {
     // 정적 SVG(눈금 아크 + 눈금선) + 동적 요소(바늘 2 + 빨간 부채꼴) 생성
     function _metroSvg(prefix) {
         var s = _metroPt(-_METRO.range, _METRO.R), e = _metroPt(_METRO.range, _METRO.R);
+        var midArcRadius = _METRO.R - 10;
+        var sm = _metroPt(-_METRO.range, midArcRadius), em = _metroPt(_METRO.range, midArcRadius);
+        var subArc = '<path class="rv-metro-subarc" d="M ' + sm[0].toFixed(2) + ' ' + sm[1].toFixed(2) +
+            ' A ' + midArcRadius + ' ' + midArcRadius + ' 0 0 1 ' + em[0].toFixed(2) + ' ' + em[1].toFixed(2) + '"/>';
         var ticks = '';
         [-35, -25, -15, 0, 15, 25, 35].forEach(function (d) {
             var a = _metroPt(d, _METRO.R - 4), b = _metroPt(d, _METRO.R + 1);
@@ -4184,6 +4189,7 @@ var RollViewer = (function () {
         return '<svg class="rv-metro" viewBox="0 0 120 74" preserveAspectRatio="xMidYMid meet">' +
             '<path class="rv-metro-arc" d="M ' + s[0].toFixed(2) + ' ' + s[1].toFixed(2) +
             ' A ' + _METRO.R + ' ' + _METRO.R + ' 0 0 1 ' + e[0].toFixed(2) + ' ' + e[1].toFixed(2) + '"/>' +
+            subArc +
             ticks +
             '<polygon class="rv-metro-wedge" id="' + prefix + '-wedge" points="' + cx + ',' + cy + '"/>' +
             '<line class="rv-metro-pred" id="' + prefix + '-pred" x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + topY + '"/>' +

@@ -14,6 +14,14 @@
     --primary-muted: rgba(59, 130, 246, 0.12);
     --primary-glow: rgba(59, 130, 246, 0.3);
     --secondary: #94a3b8;
+    
+    /* ── Tactical Marine Color Tokens ── */
+    --ocean-depth: #03070d;
+    --sonar-phosphor: #00e5c9;
+    --survival-orange: #ff5d22;
+    --nautical-brass: #cf9d53;
+    --sea-foam: #94aab5;
+    --hull-steel: #111926;
     /* Single brand blue: --accent now equals --primary so the two blues that
        used to coexist (#1d4ed8 vs #3b82f6) are unified. --accent-glow is the
        sky-blue previously hardcoded as rgba(56,189,248) for hover/glow halos. */
@@ -1284,19 +1292,19 @@
 }
 
 .roll-gauge-safe .roll-gauge-fill {
-    background: linear-gradient(90deg, var(--primary), rgba(59, 130, 246, 0.6));
+    background: linear-gradient(90deg, var(--sonar-phosphor, #00e5c9), rgba(0, 229, 201, 0.5));
 }
 
 .roll-gauge-caution .roll-gauge-fill {
-    background: linear-gradient(90deg, var(--primary), #fbbf24);
+    background: linear-gradient(90deg, var(--sonar-phosphor, #00e5c9), var(--nautical-brass, #cf9d53));
 }
 
 .roll-gauge-warning .roll-gauge-fill {
-    background: linear-gradient(90deg, #f59e0b, var(--accent-amber));
+    background: linear-gradient(90deg, var(--nautical-brass, #cf9d53), var(--survival-orange, #ff5d22));
 }
 
 .roll-gauge-danger .roll-gauge-fill {
-    background: linear-gradient(90deg, #f97316, var(--accent-red));
+    background: linear-gradient(90deg, var(--survival-orange, #ff5d22), #ff3a00);
 }
 
 /* ── Tilt Indicator ── */
@@ -1325,23 +1333,23 @@
 }
 
 .rv-tilt-indicator[data-level="safe"] .rv-tilt-ring {
-    border-color: rgba(59, 130, 246, 0.6);
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.18);
+    border-color: rgba(0, 229, 201, 0.6);
+    box-shadow: 0 0 8px rgba(0, 229, 201, 0.18);
 }
 
 .rv-tilt-indicator[data-level="caution"] .rv-tilt-ring {
-    border-color: rgba(251, 191, 36, 0.65);
-    box-shadow: 0 0 8px rgba(251, 191, 36, 0.18);
+    border-color: rgba(207, 157, 83, 0.65);
+    box-shadow: 0 0 8px rgba(207, 157, 83, 0.18);
 }
 
 .rv-tilt-indicator[data-level="warning"] .rv-tilt-ring {
-    border-color: var(--accent-amber);
-    box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+    border-color: var(--nautical-brass, #cf9d53);
+    box-shadow: 0 0 8px rgba(207, 157, 83, 0.2);
 }
 
 .rv-tilt-indicator[data-level="danger"] .rv-tilt-ring {
-    border-color: var(--accent-red);
-    box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
+    border-color: var(--survival-orange, #ff5d22);
+    box-shadow: 0 0 12px rgba(255, 93, 34, 0.3);
 }
 
 .rv-tilt-horizon {
@@ -1366,35 +1374,35 @@
 }
 
 .rv-tilt-indicator[data-level="safe"] .rv-tilt-horizon {
-    border-color: rgba(59, 130, 246, 0.85);
+    border-color: rgba(0, 229, 201, 0.85);
 }
 
 .rv-tilt-indicator[data-level="safe"] .rv-tilt-horizon::before {
-    background: rgba(59, 130, 246, 0.16);
+    background: rgba(0, 229, 201, 0.16);
 }
 
 .rv-tilt-indicator[data-level="caution"] .rv-tilt-horizon {
-    border-color: rgba(251, 191, 36, 0.85);
+    border-color: rgba(207, 157, 83, 0.85);
 }
 
 .rv-tilt-indicator[data-level="caution"] .rv-tilt-horizon::before {
-    background: rgba(251, 191, 36, 0.14);
+    background: rgba(207, 157, 83, 0.14);
 }
 
 .rv-tilt-indicator[data-level="warning"] .rv-tilt-horizon {
-    border-color: var(--accent-amber);
+    border-color: var(--nautical-brass, #cf9d53);
 }
 
 .rv-tilt-indicator[data-level="warning"] .rv-tilt-horizon::before {
-    background: rgba(245, 158, 11, 0.12);
+    background: rgba(207, 157, 83, 0.12);
 }
 
 .rv-tilt-indicator[data-level="danger"] .rv-tilt-horizon {
-    border-color: var(--accent-red);
+    border-color: var(--survival-orange, #ff5d22);
 }
 
 .rv-tilt-indicator[data-level="danger"] .rv-tilt-horizon::before {
-    background: rgba(239, 68, 68, 0.12);
+    background: rgba(255, 93, 34, 0.12);
 }
 
 .rv-tilt-center {
@@ -7100,18 +7108,18 @@ button, .btn, [class*="-btn"] {
 /* ── Roll Viewer 2분할 오버레이 ── */
 .rv-split-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .rv-split-divider { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
-  background: linear-gradient(180deg, transparent, rgba(148,163,184,0.5), transparent); }
+  background: linear-gradient(180deg, transparent, rgba(0, 229, 201, 0.35), transparent); }
 .rv-split-side { position: absolute; top: 16px; width: 50%; display: flex;
   flex-direction: column; align-items: center; gap: 6px; }
 .rv-split-left { left: 0; }
 .rv-split-right { right: 0; }
-.rv-split-label { font-size: 12px; letter-spacing: 1px; color: #94a3b8; font-weight: 600; }
+.rv-split-label { font-size: 12px; letter-spacing: 1px; color: var(--sea-foam, #94aab5); font-weight: 600; }
 .rv-split-roll { font-size: 20px; font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; }
 .rv-split-side .roll-gauge { width: 120px; }
-.rv-roll-safe { color: #10b981; }
-.rv-roll-caution { color: #eab308; }
-.rv-roll-warning { color: #f97316; }
-.rv-roll-danger { color: #f43f5e; }
+.rv-roll-safe { color: var(--sonar-phosphor, #00e5c9); }
+.rv-roll-caution { color: var(--nautical-brass, #cf9d53); }
+.rv-roll-warning { color: var(--survival-orange, #ff5d22); }
+.rv-roll-danger { color: #ff3a00; }
 
 /* ── 메트로놈(가위바늘) 게이지 ── */
 .rv-metro { width: 150px; height: 92px; overflow: visible;
@@ -7119,44 +7127,45 @@ button, .btn, [class*="-btn"] {
 .rv-metro-arc { fill: none; stroke: rgba(148,163,184,0.35); stroke-width: 1.5; }
 .rv-metro-tick { stroke: rgba(148,163,184,0.45); stroke-width: 1; }
 .rv-metro-pivot { fill: #cbd5e1; }
-.rv-metro-wedge { fill: rgba(244,63,94,0.2); stroke: none; }
-.rv-metro-pred { stroke: #fbbf24; stroke-width: 1.6; stroke-dasharray: 3 2.5; stroke-linecap: round; }
-.rv-metro-real { stroke: #38bdf8; stroke-width: 3; stroke-linecap: round; }
+.rv-metro-wedge { fill: rgba(255, 93, 34, 0.25); stroke: none; }
+.rv-metro-pred { stroke: var(--nautical-brass, #cf9d53); stroke-width: 1.6; stroke-dasharray: 3 2.5; stroke-linecap: round; }
+.rv-metro-real { stroke: var(--sonar-phosphor, #00e5c9); stroke-width: 3; stroke-linecap: round; }
+.rv-metro-subarc { fill: none; stroke: rgba(0, 229, 201, 0.15); stroke-dasharray: 2 3; stroke-width: 1; }
 
 
-/* ── Roll Viewer 좌측 정보 인스펙터 (떠 있는 글래스 카드) ── */
-.rv-drawer { position: absolute; top: 94px; left: 14px; bottom: 16px;
-  width: var(--rv-panel-w, 320px); transform: translateX(calc(-100% - 20px));
+/* ── Roll Viewer 우측 정보 인스펙터 (떠 있는 글래스 카드) ── */
+.rv-drawer { position: absolute; top: 94px; right: 14px; bottom: 16px; left: auto;
+  width: var(--rv-panel-w, 320px); transform: translateX(calc(100% + 20px));
   transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); z-index: 20; overflow-y: auto;
   border-radius: 14px;
-  background: rgba(15,23,42,0.62); backdrop-filter: blur(16px) saturate(1.1);
+  background: rgba(3, 7, 13, 0.75); backdrop-filter: blur(16px) saturate(1.1);
   -webkit-backdrop-filter: blur(16px) saturate(1.1);
-  border: 1px solid rgba(148,163,184,0.18);
+  border: 1px solid rgba(0, 229, 201, 0.15);
   box-shadow: 0 12px 40px rgba(0,0,0,0.45); }
 .rv-drawer.rv-drawer-open { transform: translateX(0); }
 /* 카드 안에 들어간 패널은 자체 배경/블러/테두리/절대배치를 끈다 (이중 적용 방지) */
 .rv-drawer .roll-viewer-panel { position: static; width: 100%;
   background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
   border-left: none; }
-/* 햄버거 대신 용도가 분명한 텍스트 토글 (정보) — 좌측, 뒤로가기 버튼 아래 */
-.rv-drawer-toggle { position: absolute; top: 52px; left: 12px; z-index: 21;
+/* 햄버거 대신 용도가 분명한 텍스트 토글 (정보) — 우측, 뒤로가기 버튼 아래 */
+.rv-drawer-toggle { position: absolute; top: 52px; right: 12px; left: auto; z-index: 21;
   display: inline-flex; align-items: center; gap: 7px;
   height: 36px; padding: 0 14px; border-radius: 18px; cursor: pointer;
   font-size: 12.5px; font-weight: 600; white-space: nowrap;
-  background: rgba(15,23,42,0.78); color: #cbd5e1;
-  border: 1px solid rgba(148,163,184,0.25);
+  background: rgba(3, 7, 13, 0.75); color: #cbd5e1;
+  border: 1px solid rgba(0, 229, 201, 0.2);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   transition: background 0.15s, color 0.15s; }
-.rv-drawer-toggle:hover { background: rgba(30,41,59,0.92); color: #fff; }
-.rv-drawer-toggle.active { background: rgba(59,130,246,0.85); color: #fff;
-  border-color: rgba(59,130,246,0.85); }
+.rv-drawer-toggle:hover { background: rgba(17, 25, 38, 0.92); color: #fff; }
+.rv-drawer-toggle.active { background: var(--sonar-phosphor, #00e5c9); color: #03070d;
+  border-color: var(--sonar-phosphor, #00e5c9); }
 
 /* ── Roll Viewer 좌하단 미니 HUD (오차 지표 + 미니 스파크라인) ── */
 .rv-compare { position: absolute; left: 14px; bottom: 16px; z-index: 6;
   display: flex; align-items: center; gap: 16px;
-  background: rgba(15,23,42,0.62); backdrop-filter: blur(16px) saturate(1.1);
+  background: rgba(3, 7, 13, 0.75); backdrop-filter: blur(16px) saturate(1.1);
   -webkit-backdrop-filter: blur(16px) saturate(1.1);
-  border: 1px solid rgba(148,163,184,0.18); border-radius: 12px;
+  border: 1px solid rgba(0, 229, 201, 0.15); border-radius: 12px;
   box-shadow: 0 8px 28px rgba(0,0,0,0.4);
   padding: 8px 14px; pointer-events: none; }
 .rv-compare-metrics { display: flex; gap: 16px; align-items: baseline; margin: 0; }
