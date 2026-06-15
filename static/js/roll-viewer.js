@@ -511,6 +511,7 @@ var RollViewer = (function () {
             camera.updateProjectionMatrix();
             renderer.setSize(ww, hh);
             if (composer) composer.setSize(ww, hh);
+            if (rollChart) rollChart.resize();
         };
         window.addEventListener('resize', _resizeHandler);
         renderer._rollViewerResizeHandler = _resizeHandler;
@@ -4444,6 +4445,13 @@ var RollViewer = (function () {
         simWaveTime = 0;
         rollHistory = [];
         pitchHistory = [];
+
+        // 예측 선박/이력 정리
+        shipGroupPred = null;
+        predRollHistory = [];
+        predPitchHistory = [];
+        smoothPredRoll = 0;
+        smoothPredPitch = 0;
 
         // Clear container DOM
         var container = getContainer();
