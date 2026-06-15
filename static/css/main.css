@@ -1703,7 +1703,7 @@
 .rv-scenario-btn {
     position: absolute;
     top: 12px;
-    left: calc((100% - var(--rv-panel-w)) / 2); /* centered over the visible scene, not the full canvas */
+    left: 50%; /* 드로우는 평소 숨김 → 전체 폭 기준 중앙 */
     transform: translateX(-50%);
     z-index: 5;
     background: rgba(8, 18, 38, 0.82);
@@ -1983,7 +1983,7 @@
 .rv-canvas-hud-scenario {
     position: absolute;
     top: 60px;       /* aligned with prediction modal */
-    right: calc(var(--rv-panel-w) + 12px); /* clear the glass info panel */
+    right: 12px; /* 드로우는 평소 숨김 → 전체 폭 사용 */
     z-index: 6;
     display: flex;
     flex-direction: column;
@@ -2174,7 +2174,7 @@
 .rv-cam-presets {
     position: absolute;
     bottom: 12px;
-    right: calc(var(--rv-panel-w) + 12px); /* clear the glass info panel */
+    right: 12px; /* 드로우는 평소 숨김 → 전체 폭 사용 */
     z-index: 5;
     display: flex;
     flex-direction: column;
@@ -2975,6 +2975,18 @@ body {
 
 .layer-master:checked::after {
     transform: translateX(16px);
+    background: #fff;
+}
+
+/* Partial (some sub-filters off) → semi-blue track + knob parked in the middle
+   so it reads as "on, but filtered" rather than fully on. */
+.layer-master:indeterminate {
+    background: rgba(59, 130, 246, 0.4);
+    border-color: rgba(59, 130, 246, 0.55);
+}
+
+.layer-master:indeterminate::after {
+    transform: translateX(8px);
     background: #fff;
 }
 
@@ -3961,27 +3973,73 @@ body {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
-/* Vertical list: [master toggle] [icon] [label]. Master toggle = on/off,
-   clicking the rest opens the panel. Count is hidden (shown in the panel). */
+/* Two hit-zones per chip: [ left = open panel ] | [ right = toggle ].
+   Each zone lights on hover so the split is obvious without clicking. */
 #layerChips .layer-chip {
-    justify-content: flex-start;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;       /* clip the per-zone hover to the chip's rounded corners */
 }
 #layerChips .chip-count {
     display: none;
 }
-/* Master toggle sits on the RIGHT edge of the chip */
-#layerChips .layer-master {
-    order: 2;
-    margin-left: auto;
+
+/* Left zone — opens the detail panel */
+#layerChips .chip-open {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 6px 5px 9px;
+    cursor: pointer;
+    transition: background 0.15s;
 }
-/* Toggle shows on/off state → the chip itself stays neutral (no solid fill) */
+#layerChips .chip-open:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Right zone — toggle on/off, separated by a faint divider */
+#layerChips .chip-toggle-zone {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 9px;
+    cursor: pointer;
+}
+/* Short, faint divider (centred, not full height) */
+#layerChips .chip-toggle-zone::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.1);
+}
+/* Hover feedback on the toggle itself (subtle ring), not the zone background */
+#layerChips .chip-toggle-zone:hover .layer-master {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+}
+
+/* Toggle shows on/off state → the chip itself stays neutral (no whole-chip
+   hover, no solid active fill). */
+#layerChips .layer-chip:hover {
+    background: transparent;
+}
 #layerChips .layer-chip.active {
     background: transparent;
     border-color: transparent;
     box-shadow: none;
     color: var(--text-main);
 }
-#layerChips .layer-chip.active > i {
+#layerChips .chip-open > i {
+    color: var(--text-sub);
+    transition: color 0.18s;
+}
+#layerChips .layer-chip.active .chip-open > i {
     color: var(--text-main);
 }
 
@@ -7046,13 +7104,17 @@ button, .btn, [class*="-btn"] {
 
 
 /* ── Roll Viewer 우측 드로우 ── */
-.roll-viewer-layout { position: relative; }
 .rv-drawer { position: absolute; top: 0; right: 0; height: 100%;
   width: var(--rv-panel-w, 320px); transform: translateX(100%);
   transition: transform 0.25s ease; z-index: 20; overflow-y: auto;
+  padding-top: 60px;  /* 토글 버튼(우상단)이 첫 섹션을 가리지 않도록 */
   background: rgba(15,23,42,0.92); backdrop-filter: blur(8px);
   border-left: 1px solid rgba(148,163,184,0.15); }
 .rv-drawer.rv-drawer-open { transform: translateX(0); }
+/* 드로우 안에 들어간 패널은 자체 배경/블러/테두리/절대배치를 끈다 (이중 적용 방지) */
+.rv-drawer .roll-viewer-panel { position: static; width: 100%;
+  background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  border-left: none; }
 .rv-drawer-toggle { position: absolute; top: 12px; right: 12px; z-index: 21;
   width: 38px; height: 38px; border-radius: 8px; cursor: pointer;
   background: rgba(15,23,42,0.8); color: #cbd5e1;
