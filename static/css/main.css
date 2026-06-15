@@ -1988,8 +1988,10 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    min-width: 240px;
+    min-width: 264px;
     max-width: 300px;
+    max-height: calc(100% - 76px);
+    overflow-y: auto;
     padding: 14px 16px;
     background: rgba(15, 15, 20, 0.78);
     border: 1px solid rgba(59, 130, 246, 0.5);
@@ -7108,9 +7110,9 @@ button, .btn, [class*="-btn"] {
 .rv-split-side .roll-gauge { width: 120px; }
 
 
-/* ── Roll Viewer 우측 정보 인스펙터 (떠 있는 글래스 카드) ── */
-.rv-drawer { position: absolute; top: 64px; right: 14px; bottom: 16px;
-  width: var(--rv-panel-w, 320px); transform: translateX(calc(100% + 20px));
+/* ── Roll Viewer 좌측 정보 인스펙터 (떠 있는 글래스 카드) ── */
+.rv-drawer { position: absolute; top: 94px; left: 14px; bottom: 16px;
+  width: var(--rv-panel-w, 320px); transform: translateX(calc(-100% - 20px));
   transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); z-index: 20; overflow-y: auto;
   border-radius: 14px;
   background: rgba(15,23,42,0.62); backdrop-filter: blur(16px) saturate(1.1);
@@ -7122,8 +7124,8 @@ button, .btn, [class*="-btn"] {
 .rv-drawer .roll-viewer-panel { position: static; width: 100%;
   background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
   border-left: none; }
-/* 햄버거 대신 용도가 분명한 텍스트 토글 (정보) */
-.rv-drawer-toggle { position: absolute; top: 14px; right: 14px; z-index: 21;
+/* 햄버거 대신 용도가 분명한 텍스트 토글 (정보) — 좌측, 뒤로가기 버튼 아래 */
+.rv-drawer-toggle { position: absolute; top: 52px; left: 12px; z-index: 21;
   display: inline-flex; align-items: center; gap: 7px;
   height: 36px; padding: 0 14px; border-radius: 18px; cursor: pointer;
   font-size: 12.5px; font-weight: 600; white-space: nowrap;
@@ -7171,3 +7173,24 @@ button, .btn, [class*="-btn"] {
 .rv-drawer::-webkit-scrollbar { width: 4px; }
 .rv-drawer::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 2px; }
 .rv-drawer::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+/* ── 시뮬레이션 패널 조절 컨트롤 (슬라이더 + 선회 방향) ── */
+.rv-sim-row { display: flex; align-items: center; gap: 10px; }
+.rv-sim-row > label { flex: 0 0 42px; font-size: 11px; color: #94a3b8; }
+.rv-sim-row input[type="range"] { flex: 1 1 auto; min-width: 0; height: 4px; cursor: pointer;
+  -webkit-appearance: none; appearance: none; border-radius: 2px;
+  background: rgba(148,163,184,0.25); }
+.rv-sim-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+  width: 13px; height: 13px; border-radius: 50%; background: #38bdf8; cursor: pointer;
+  border: 2px solid rgba(15,23,42,0.9); }
+.rv-sim-row input[type="range"]::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%;
+  background: #38bdf8; cursor: pointer; border: 2px solid rgba(15,23,42,0.9); }
+.rv-sim-val { flex: 0 0 50px; text-align: right; font-size: 12px; font-weight: 600;
+  color: #e2e8f0; font-variant-numeric: tabular-nums; }
+.rv-sim-dir { flex: 1 1 auto; display: flex; gap: 6px; }
+.rv-sim-dir-btn { flex: 1 1 auto; padding: 4px 0; border-radius: 6px; cursor: pointer;
+  font-size: 11.5px; background: rgba(30,41,59,0.9); color: #cbd5e1;
+  border: 1px solid rgba(148,163,184,0.25); }
+.rv-sim-dir-btn:hover { background: rgba(51,65,85,0.95); }
+.rv-sim-dir-btn.active { background: rgba(59,130,246,0.9); color: #fff;
+  border-color: rgba(59,130,246,0.9); }

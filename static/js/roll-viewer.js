@@ -59,6 +59,7 @@ var RollViewer = (function () {
     var turnElapsed = 0;
     var turnHeading = 0;          // current heading in degrees
     var turnDirection = 1;        // 1 = starboard, -1 = port
+    var _turnMaxRudder = 35;      // 최대 타각(도) — 시뮬레이션 패널 슬라이더로 조절
     var turnHudEl = null;
     var turnBtnEl = null;
     var shipSpeed = 12;           // knots — set from actual SOG, capped
@@ -1468,34 +1469,30 @@ var RollViewer = (function () {
         var scenarioOverlay = document.createElement('div');
         scenarioOverlay.className = 'rv-canvas-hud-scenario';
         scenarioOverlay.id = 'rv-canvas-hud-scenario';
+        var _wv = (weather && weather.waveHeight != null) ? weather.waveHeight : 2.5;
+        var _wp = (weather && weather.wavePeriod != null) ? weather.wavePeriod : 8;
+        var _sp = (shipSpeed != null) ? shipSpeed : 10;
         scenarioOverlay.innerHTML =
             '<div class="rv-scenario-header">' +
             '<span>시뮬레이션</span>' +
             '<button type="button" class="rv-scenario-collapse" id="rv-scenario-collapse" title="접기/펼치기"><i class="fa-solid fa-xmark"></i></button>' +
             '</div>' +
             '<div class="rv-scenario-body" id="rv-scenario-body">' +
-            '<div class="rv-scenario-overrides" id="rv-scenario-overrides"></div>' +
+            '<div class="rv-sim-row"><label>파고</label><input type="range" id="rv-sim-wave" min="0.5" max="8" step="0.1" value="' + _wv + '"><span class="rv-sim-val" id="rv-sim-wave-val">' + _wv.toFixed(1) + ' m</span></div>' +
+            '<div class="rv-sim-row"><label>파주기</label><input type="range" id="rv-sim-period" min="4" max="16" step="0.5" value="' + _wp + '"><span class="rv-sim-val" id="rv-sim-period-val">' + _wp.toFixed(1) + ' s</span></div>' +
+            '<div class="rv-sim-row"><label>속도</label><input type="range" id="rv-sim-speed" min="0" max="25" step="0.5" value="' + _sp + '"><span class="rv-sim-val" id="rv-sim-speed-val">' + _sp.toFixed(1) + ' kt</span></div>' +
+            '<div class="rv-sim-row"><label>선회</label><div class="rv-sim-dir"><button type="button" class="rv-sim-dir-btn" id="rv-sim-dir-port">좌현</button><button type="button" class="rv-sim-dir-btn" id="rv-sim-dir-stbd">우현</button></div></div>' +
+            '<div class="rv-sim-row"><label>타각</label><input type="range" id="rv-sim-rudder" min="5" max="35" step="1" value="35"><span class="rv-sim-val" id="rv-sim-rudder-val">35°</span></div>' +
             '<div class="rv-scenario-turn" id="rv-hud-turn-section" hidden>' +
             '<div class="rv-scenario-turn-row">' +
-            '<div class="rv-scenario-turn-item">' +
-            '<span class="rv-scenario-turn-label">상태</span>' +
-            '<span class="rv-scenario-turn-val" id="rv-turn-phase">직진</span>' +
+            '<div class="rv-scenario-turn-item"><span class="rv-scenario-turn-label">상태</span><span class="rv-scenario-turn-val" id="rv-turn-phase">직진</span></div>' +
+            '<div class="rv-scenario-turn-item"><span class="rv-scenario-turn-label">침로</span><span class="rv-scenario-turn-val" id="rv-turn-heading">000°</span></div>' +
+            '<div class="rv-scenario-turn-item"><span class="rv-scenario-turn-label">타각</span><span class="rv-scenario-turn-val" id="rv-turn-rudder">0°</span></div>' +
             '</div>' +
-            '<div class="rv-scenario-turn-item">' +
-            '<span class="rv-scenario-turn-label">침로</span>' +
-            '<span class="rv-scenario-turn-val" id="rv-turn-heading">000°</span>' +
-            '</div>' +
-            '<div class="rv-scenario-turn-item">' +
-            '<span class="rv-scenario-turn-label">타각</span>' +
-            '<span class="rv-scenario-turn-val" id="rv-turn-rudder">0°</span>' +
-            '</div>' +
-            '</div>' +
-            '<div class="rv-turn-progress">' +
-            '<div class="rv-turn-progress-fill" id="rv-turn-progress-fill"></div>' +
-            '</div>' +
+            '<div class="rv-turn-progress"><div class="rv-turn-progress-fill" id="rv-turn-progress-fill"></div></div>' +
             '</div>' +
             '<div class="rv-scenario-actions">' +
-            '<button type="button" class="rv-action-btn" id="rv-act-turn">선회 시나리오</button>' +
+            '<button type="button" class="rv-action-btn" id="rv-act-turn">선회 시작</button>' +
             '<button type="button" class="rv-action-btn" id="rv-act-capsize">전복</button>' +
             '<button type="button" class="rv-action-btn" id="rv-act-clear">초기화</button>' +
             '</div>' +
@@ -1511,17 +1508,59 @@ var RollViewer = (function () {
             });
         }
 
-        // 시나리오 조작 버튼 (선회 / 전복 / 초기화)
+        // 슬라이더 바인딩 — 입력 시 라벨 갱신 + 시뮬레이션 오버라이드 적용
+        function _bindSimSlider(id, valId, fmt, apply) {
+            var el = document.getElementById(id);
+            var vEl = document.getElementById(valId);
+            if (!el) return;
+            el.addEventListener('input', function () {
+                var v = parseFloat(el.value);
+                if (vEl) vEl.textContent = fmt(v);
+                apply(v);
+            });
+        }
+        _bindSimSlider('rv-sim-wave', 'rv-sim-wave-val', function (v) { return v.toFixed(1) + ' m'; }, function (v) { setScenarioOverride({ waveHeight: v }); });
+        _bindSimSlider('rv-sim-period', 'rv-sim-period-val', function (v) { return v.toFixed(1) + ' s'; }, function (v) { setScenarioOverride({ wavePeriod: v }); });
+        _bindSimSlider('rv-sim-speed', 'rv-sim-speed-val', function (v) { return v.toFixed(1) + ' kt'; }, function (v) { setScenarioOverride({ shipSpeed: v }); });
+        _bindSimSlider('rv-sim-rudder', 'rv-sim-rudder-val', function (v) { return v.toFixed(0) + '°'; }, function (v) { _turnMaxRudder = v; });
+
+        // 선회 방향 토글 (전역 turnDirection 직접 설정 → 진행 중 선회에도 반영)
+        var dirPort = document.getElementById('rv-sim-dir-port');
+        var dirStbd = document.getElementById('rv-sim-dir-stbd');
+        function _setSimDir(d) {
+            turnDirection = d;
+            if (dirPort) dirPort.classList.toggle('active', d === -1);
+            if (dirStbd) dirStbd.classList.toggle('active', d === 1);
+        }
+        if (dirPort) dirPort.addEventListener('click', function () { _setSimDir(-1); });
+        if (dirStbd) dirStbd.addEventListener('click', function () { _setSimDir(1); });
+        _setSimDir(1);
+
+        // 슬라이더 값 복원 헬퍼
+        function _resetSim(id, valId, val, fmt) {
+            var el = document.getElementById(id);
+            var vEl = document.getElementById(valId);
+            if (el) el.value = val;
+            if (vEl) vEl.textContent = fmt(val);
+        }
+
+        // 액션 버튼 (선회 시작/정지 · 전복 · 초기화)
         var actTurn = document.getElementById('rv-act-turn');
         var actCapsize = document.getElementById('rv-act-capsize');
         var actClear = document.getElementById('rv-act-clear');
-        if (actTurn) actTurn.addEventListener('click', function () { toggleTurnScenario(); });
-        if (actCapsize) actCapsize.addEventListener('click', function () { triggerCapsize(1, 0); });
-        // 초기화 = 완전 복귀: 선회 정지 + 전복 취소 + 날씨/속도 오버라이드 해제
+        if (actTurn) actTurn.addEventListener('click', function () { setTurnScenario(!turnScenarioActive, turnDirection); });
+        if (actCapsize) actCapsize.addEventListener('click', function () { triggerCapsize(turnDirection, 0); });
+        // 초기화 = 완전 복귀: 선회 정지 + 전복 취소 + 날씨/속도 해제 + 슬라이더 원복
         if (actClear) actClear.addEventListener('click', function () {
             setTurnScenario(false);
             clearCapsize();
             clearScenarioOverride();
+            var bw = _baseWeather || {};
+            _resetSim('rv-sim-wave', 'rv-sim-wave-val', bw.waveHeight != null ? bw.waveHeight : 2.5, function (v) { return parseFloat(v).toFixed(1) + ' m'; });
+            _resetSim('rv-sim-period', 'rv-sim-period-val', bw.wavePeriod != null ? bw.wavePeriod : 8, function (v) { return parseFloat(v).toFixed(1) + ' s'; });
+            _resetSim('rv-sim-speed', 'rv-sim-speed-val', _baseShipSpeed != null ? _baseShipSpeed : 10, function (v) { return parseFloat(v).toFixed(1) + ' kt'; });
+            _resetSim('rv-sim-rudder', 'rv-sim-rudder-val', 35, function (v) { return parseFloat(v).toFixed(0) + '°'; });
+            _turnMaxRudder = 35;
         });
 
         // Keep turnHudEl reference for toggle logic (still uses id="rv-hud-turn-section")
@@ -1665,7 +1704,7 @@ var RollViewer = (function () {
                 turnBtnEl.classList.remove('active');
             }
             var actTurnOff = document.getElementById('rv-act-turn');
-            if (actTurnOff) { actTurnOff.textContent = '선회 시나리오'; actTurnOff.classList.remove('active'); }
+            if (actTurnOff) { actTurnOff.textContent = '선회 시작'; actTurnOff.classList.remove('active'); }
             turnHeading = 0;
             camFollowHeading = 0;
         }
@@ -1692,7 +1731,7 @@ var RollViewer = (function () {
         var rollMult = 1;
         var rudder = 0;
         var phaseName = '직진';
-        var maxTurnRate = 5;   // degrees per second at max turn
+        var maxTurnRate = 5 * (_turnMaxRudder / 35);   // 타각에 비례한 선회율 (deg/s)
 
         if (cycleTime < TURN_TIMING.straight) {
             // Straight ahead
@@ -1708,14 +1747,14 @@ var RollViewer = (function () {
             var t = (cycleTime - TURN_TIMING.straight) / TURN_TIMING.entering;
             var ease = t * t; // ease-in
             headingRate = maxTurnRate * ease;
-            rudder = 35 * ease;
+            rudder = _turnMaxRudder * ease;
             rollMult = 1 + (TURN_ROLL_MULT[shipType] - 1) * ease;
         } else if (cycleTime < TURN_TIMING.straight + TURN_TIMING.entering + TURN_TIMING.turning) {
             // Full turn — max roll
             turnPhase = 'turning';
             phaseName = '선회 중';
             headingRate = maxTurnRate;
-            rudder = 35;
+            rudder = _turnMaxRudder;
             rollMult = TURN_ROLL_MULT[shipType];
         } else {
             // Exiting turn — rudder decreasing, roll settling
@@ -1724,7 +1763,7 @@ var RollViewer = (function () {
             var tExit = (cycleTime - TURN_TIMING.straight - TURN_TIMING.entering - TURN_TIMING.turning) / TURN_TIMING.exiting;
             var easeOut = 1 - tExit * tExit; // ease-out
             headingRate = maxTurnRate * easeOut;
-            rudder = 35 * easeOut;
+            rudder = _turnMaxRudder * easeOut;
             rollMult = 1 + (TURN_ROLL_MULT[shipType] - 1) * easeOut;
         }
 
