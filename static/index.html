@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
 
     <!-- Application Styles -->
-    <link rel="stylesheet" href="css/main.css?v=88">
+    <link rel="stylesheet" href="css/main.css?v=90">
     <!-- ECharts for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <!-- Three.js for 3D visualization -->
@@ -150,7 +150,7 @@
                 <button class="chip-expand" data-dropdown="weatherFilter" title="상세 필터"><i class="fa-solid fa-chevron-left"></i></button>
             </div>
             <div class="layer-chip" data-layer="aircraft" title="항공기">
-                <i class="fa-solid fa-plane"></i><span class="chip-label">항공기</span>
+                <i class="fa-solid fa-plane"></i><span class="chip-label">항공</span>
                 <span class="chip-count" id="chipAircraftCount">0</span>
                 <button class="chip-expand" data-dropdown="aircraftFilter" title="상세 필터"><i class="fa-solid fa-chevron-left"></i></button>
             </div>
@@ -160,6 +160,9 @@
         <div class="layer-dropdown" id="weatherFilter">
             <div class="layer-dropdown-header">
                 <span>기상 레이어</span>
+            </div>
+            <div class="filter-item filter-item-master">
+                <label><input type="checkbox" class="layer-master" data-layer="weather"> 전체 표시</label>
             </div>
             <div class="filter-item">
                 <label><input type="checkbox" id="wx-precipitation"><span class="color-dot color-precip"></span> 강수 레이더</label>
@@ -177,6 +180,9 @@
             <div class="layer-dropdown-header">
                 <span>선박 필터</span>
                 <span class="lg-badge" id="total-ships">0</span>
+            </div>
+            <div class="filter-item filter-item-master">
+                <label><input type="checkbox" class="layer-master" data-layer="ships" checked> 전체 표시</label>
             </div>
             <div class="filter-item">
                 <label><input type="checkbox" id="filter-cargo" checked><span class="color-dot color-cargo"></span> Cargo</label>
@@ -259,6 +265,9 @@
             <div class="layer-dropdown-header">
                 <span>항공기 필터</span>
                 <span class="lg-badge" id="total-aircraft">0</span>
+            </div>
+            <div class="filter-item filter-item-master">
+                <label><input type="checkbox" class="layer-master" data-layer="aircraft"> 전체 표시</label>
             </div>
             <div class="filter-item">
                 <label><input type="checkbox" id="filter-ac-civilian"><span class="color-dot color-ac-civilian"></span> Civilian</label>
@@ -536,7 +545,7 @@
     <script src="js/ship-builders.js?v=2"></script>
     <script src="js/ship-preview-3d.js?v=2"></script>
     <script src="js/roll-prediction.js?v=1"></script>
-    <script src="js/roll-viewer.js?v=33"></script>
+    <script src="js/roll-viewer.js?v=34"></script>
     <script src="js/route-viewer.js?v=16"></script>
     <script src="js/app.js?v=4"></script>
     <script src="js/map-cesium.js?v=6"></script>
@@ -547,7 +556,7 @@
     <script src="js/proximity.js?v=4"></script>
     <script src="js/collision.js?v=7"></script>
     <script src="js/websocket.js?v=19"></script>
-    <script src="js/ui-controls.js?v=18"></script>
+    <script src="js/ui-controls.js?v=19"></script>
     <script src="js/charts.js?v=5"></script>
     <script src="js/chat.js?v=4"></script>
     <script>

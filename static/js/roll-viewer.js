@@ -11,6 +11,8 @@ var RollViewer = (function () {
     var controls = null;
 
     var shipGroup = null;
+    var shipGroupPred = null;              // 예측 선박 (실제 선박의 클론)
+    var splitView = true;                  // 좌우 2분할 on/off
     var waterMesh = null;
     var gltfModelCache = {};   // { type: THREE.Group }
     var gltfLoader = null;
@@ -403,6 +405,10 @@ var RollViewer = (function () {
         buildWater();
         buildCompass();
         buildShip(shipType);
+        if (shipGroup) {
+            shipGroupPred = shipGroup.clone(true);
+            scene.add(shipGroupPred);
+        }
 
         buildSeaMarkers();
         buildRadarIndicator();
@@ -3790,6 +3796,12 @@ var RollViewer = (function () {
                 shipGroup.rotation.y = headingRad;
                 shipGroup.rotation.x = smoothRoll * (Math.PI / 180);
                 shipGroup.rotation.z = smoothPitch * (Math.PI / 180);
+                if (shipGroupPred) {
+                    shipGroupPred.position.copy(shipGroup.position);
+                    shipGroupPred.rotation.y = headingRad;
+                    shipGroupPred.rotation.x = smoothPredRoll * (Math.PI / 180);
+                    shipGroupPred.rotation.z = smoothPredPitch * (Math.PI / 180);
+                }
             }
 
             // ── Compass follows ship ──
@@ -3892,7 +3904,9 @@ var RollViewer = (function () {
                 );
             }
 
-            if (composer) {
+            if (splitView) {
+                renderSplit();
+            } else if (composer) {
                 composer.render();
             } else if (renderer && scene && camera) {
                 renderer.render(scene, camera);
@@ -4254,6 +4268,44 @@ var RollViewer = (function () {
                 ]
             });
         }, 1000);
+    }
+
+    // 좌(실제)/우(예측) 2분할 렌더. 각 패스마다 반대편 선박을 숨긴다.
+    function renderSplit() {
+        var THREE = window.THREE;
+        if (!renderer || !scene || !camera || !THREE) return;
+        var size = renderer.getSize(new THREE.Vector2());
+        var w = size.x, h = size.y;
+        var halfW = Math.floor(w / 2);
+
+        renderer.setScissorTest(true);
+
+        // 좌: 실제
+        if (shipGroupPred) shipGroupPred.visible = false;
+        if (shipGroup) shipGroup.visible = true;
+        camera.aspect = halfW / h;
+        camera.setViewOffset(w, h, 0, 0, halfW, h);
+        camera.updateProjectionMatrix();
+        renderer.setViewport(0, 0, halfW, h);
+        renderer.setScissor(0, 0, halfW, h);
+        renderer.render(scene, camera);
+
+        // 우: 예측
+        if (shipGroup) shipGroup.visible = false;
+        if (shipGroupPred) shipGroupPred.visible = true;
+        camera.setViewOffset(w, h, 0, 0, w - halfW, h);
+        camera.updateProjectionMatrix();
+        renderer.setViewport(halfW, 0, w - halfW, h);
+        renderer.setScissor(halfW, 0, w - halfW, h);
+        renderer.render(scene, camera);
+
+        // 원복
+        renderer.setScissorTest(false);
+        if (shipGroup) shipGroup.visible = true;
+        if (shipGroupPred) shipGroupPred.visible = true;
+        camera.clearViewOffset();
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
     }
 
     // ── dispose() ──
