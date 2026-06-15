@@ -14,7 +14,11 @@
     --primary-muted: rgba(59, 130, 246, 0.12);
     --primary-glow: rgba(59, 130, 246, 0.3);
     --secondary: #94a3b8;
-    --accent: #1d4ed8;
+    /* Single brand blue: --accent now equals --primary so the two blues that
+       used to coexist (#1d4ed8 vs #3b82f6) are unified. --accent-glow is the
+       sky-blue previously hardcoded as rgba(56,189,248) for hover/glow halos. */
+    --accent: #3b82f6;
+    --accent-glow: #38bdf8;
     --accent-red: #ef4444;
     --accent-green: #22c55e;
     --accent-amber: #f59e0b;
@@ -23,7 +27,7 @@
     --text-sub: #a1a1aa;
     --text-dim: #52525b;
     --text-muted: #3f3f46;
-    --gradient-accent: linear-gradient(90deg, var(--accent), var(--primary));
+    --gradient-accent: linear-gradient(90deg, #60a5fa, var(--primary));
     --accent-line: linear-gradient(90deg, #3b82f6 0%, #60a5fa 50%, transparent 100%);
     --shadow-panel: 0 4px 20px rgba(0, 0, 0, 0.3);
     --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -48,9 +52,11 @@
     /* Overlay buttons floating over map/3D imagery need dark contrast + blue glow */
     --btn-overlay-bg:        rgba(8, 18, 38, 0.82);
     --btn-overlay-bg-hover:  rgba(15, 30, 60, 0.92);
-    --btn-overlay-border:       rgba(59, 130, 246, 0.5);
+    /* Resting state is neutral (no blue at rest); blue appears only on hover/active
+       so the accent reads as "interaction", not a random standing colour. */
+    --btn-overlay-border:       rgba(255, 255, 255, 0.14);
     --btn-overlay-border-hover: rgba(59, 130, 246, 0.85);
-    --btn-overlay-glow:       0 0 10px rgba(59, 130, 246, 0.18), 0 2px 10px rgba(0, 0, 0, 0.5);
+    --btn-overlay-glow:       0 2px 10px rgba(0, 0, 0, 0.5);
     --btn-overlay-glow-hover: 0 0 16px rgba(59, 130, 246, 0.35), 0 2px 12px rgba(0, 0, 0, 0.5);
 }
 
@@ -353,6 +359,30 @@
     color: var(--text-sub);
     font-size: 10px;
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
+}
+
+.ship-stat-icon {
+    display: block;
+    font-size: 12px;
+    color: var(--text-sub);
+    margin-bottom: 5px;
+}
+
+/* Primary stat (live speed) — the one accent-filled card, like the reference.
+   Uses --primary (#3b82f6), the app's real dominant accent. */
+.ship-stat-card--primary {
+    background: linear-gradient(160deg, #60a5fa, var(--primary));
+    box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+}
+
+.ship-stat-card--primary .ship-stat-icon,
+.ship-stat-card--primary .ship-stat-value {
+    color: #fff;
+}
+
+.ship-stat-card--primary .ship-stat-label,
+.ship-stat-card--primary .ship-stat-unit {
+    color: rgba(255, 255, 255, 0.8);
 }
 
 .ship-detail-card {
@@ -2900,14 +2930,14 @@ body {
 }
 
 .filter-item input[type="checkbox"]:checked {
-    background: rgba(59, 130, 246, 0.35);
-    border-color: rgba(59, 130, 246, 0.4);
+    background: var(--primary);
+    border-color: var(--primary);
 }
 
 .filter-item input[type="checkbox"]:checked::after {
     transform: translateX(14px);
-    background: var(--secondary);
-    box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .filter-count {
@@ -3861,18 +3891,33 @@ body {
 }
 
 /* 그룹 트랙(바깥 박스) — 한 묶음임을 보여주는 세그먼트 컨트롤 컨테이너 */
+/* Layer toggles — vertical widget anchored to the map's top-right (below the
+   top bar). Zoom controls sit bottom-right, so no overlap. */
 #layerChips {
+    position: absolute;
+    top: 60px;
+    right: 32px;   /* align right edge with the 2D/3D toggle (top-bar right 12 + margin 20) */
+    z-index: 100;
     display: flex;
-    gap: 2px;
-    flex-shrink: 0;
-    align-items: center;
-    height: 36px;
+    flex-direction: column;
+    gap: 4px;
+    width: 118px;
     box-sizing: border-box;
-    background: rgba(10, 14, 22, 0.55);
+    background: rgba(10, 14, 22, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-pill);
-    padding: 3px 4px;
+    border-radius: 12px;
+    padding: 5px;
     backdrop-filter: blur(8px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* Each chip fills the column; caret pinned to the right edge */
+#layerChips .layer-chip {
+    width: 100%;
+    justify-content: flex-start;
+}
+#layerChips .layer-chip .chip-expand {
+    margin-left: auto;
 }
 
 /* ── Layer chips: 트랙 안의 세그먼트 (평소 투명, 켜지면 알약 하이라이트) ── */
@@ -3891,7 +3936,7 @@ body {
     font-weight: 700;
     color: var(--text-dim);
     cursor: pointer;
-    transition: background 0.18s, border-color 0.18s, color 0.18s;
+    transition: background 0.18s, border-color 0.18s, color 0.18s, box-shadow 0.18s;
     user-select: none;
 }
 
@@ -3909,14 +3954,15 @@ body {
     color: var(--text-main);
 }
 
-/* Active(전체 켜짐) = 솔리드 primary (콜리전 탭 스타일) */
+/* Active(켜짐) = 소프트 틴트 칩 (옅은 배경 + 컬러 아이콘/테두리 + 은은한 글로우) */
 .layer-chip.active {
-    background: var(--primary);
-    border-color: var(--primary);
-    color: #fff;
+    background: rgba(59, 130, 246, 0.18);
+    border-color: rgba(59, 130, 246, 0.55);
+    color: #eaf2ff;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.18);
 }
 .layer-chip.active > i {
-    color: #fff;
+    color: #60a5fa;
 }
 
 /* Count — abbreviated (data-ab), shown only when active */
@@ -3924,7 +3970,7 @@ body {
     font-family: 'JetBrains Mono', 'Pretendard Variable', monospace;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    color: rgba(255, 255, 255, 0.9);   /* solid primary 위에서 잘 보이게 */
+    color: #cfe0ff;   /* 소프트 틴트 배경 위에서 잘 보이게 */
     font-size: 0;
     margin-left: -2px;
 }
@@ -3953,9 +3999,9 @@ body {
 .chip-expand i {
     transition: transform 0.2s;
 }
-/* 솔리드 active 칩 위에서 캐럿이 잘 보이게 (흰색) */
+/* 소프트 active 칩 위에서 캐럿 색 (라이트 블루) */
 .layer-chip.active .chip-expand {
-    color: rgba(255, 255, 255, 0.9);
+    color: #93c5fd;
     opacity: 0.9;
 }
 .layer-chip:hover .chip-expand {
@@ -4048,6 +4094,12 @@ body {
 
 #mapSearchInput::placeholder {
     color: var(--text-sub);
+    transition: color 0.15s ease;
+}
+
+/* Hide the placeholder once the field is focused (active input) */
+#mapSearchInput:focus::placeholder {
+    color: transparent;
 }
 
 /* Region presets dropdown inside search */
@@ -4404,21 +4456,45 @@ body {
     margin-right: 2px;
 }
 
-/* 3D/2D 토글 — 레이어 칩과 동일한 그룹 트랙 + 세그먼트 (택일 컨트롤) */
+/* 3D/2D 토글 — 세그먼트 컨트롤 + 슬라이딩 인디케이터 (택일 컨트롤) */
 #mapModeToggle {
     display: flex;
-    gap: 2px;
+    gap: 0;
     align-items: center;
     height: 36px;
     box-sizing: border-box;
     background: rgba(10, 14, 22, 0.55);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--radius-pill);
-    padding: 3px 4px;
+    padding: 3px;
     backdrop-filter: blur(8px);
+    position: relative;
+}
+
+/* The filled pill that slides between the two equal-width segments. */
+#mapModeToggle::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc((100% - 6px) / 2);
+    border-radius: var(--radius-pill);
+    /* Soft-tint pill matching the layer chips' active state */
+    background: rgba(59, 130, 246, 0.18);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.18), inset 0 0 0 1px rgba(59, 130, 246, 0.55);
+    transition: transform 0.3s cubic-bezier(0.45, 0.05, 0.2, 1);
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* 2D selected → slide the pill to the second segment. */
+#mapModeToggle:has(.map-mode-btn[data-mode="2d"].active)::before {
+    transform: translateX(100%);
 }
 
 .map-mode-btn {
+    flex: 1 1 0;
     background: transparent;
     border: 1px solid transparent;
     color: var(--text-dim);
@@ -4428,23 +4504,24 @@ body {
     font-family: 'Rajdhani', 'S-CoreDream-6Bold', 'Pretendard Variable', sans-serif;
     font-size: 0.78rem;
     font-weight: 700;
-    transition: background 0.18s, border-color 0.18s, color 0.18s;
+    transition: color 0.25s ease;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 5px;
+    position: relative;
+    z-index: 1;
 }
 
+/* The pill provides the fill — active label/icon match the layer chips. */
 .map-mode-btn.active {
-    background: var(--primary);
-    border-color: var(--primary);
-    color: #fff;
+    color: #eaf2ff;
 }
 .map-mode-btn.active i {
-    color: #fff;
+    color: #60a5fa;
 }
 
 .map-mode-btn:hover:not(.active) {
-    background: var(--btn-surface-hover, rgba(255, 255, 255, 0.10));
     color: var(--text-main);
 }
 

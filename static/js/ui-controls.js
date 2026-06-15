@@ -92,8 +92,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (chip && container) {
                         var chipRect = chip.getBoundingClientRect();
                         var containerRect = container.getBoundingClientRect();
-                        dd.style.right = (containerRect.right - chipRect.right) + 'px';
-                        dd.style.top = (chipRect.bottom - containerRect.top + 4) + 'px';
+                        // Layer widget sits on the right edge → open the dropdown to
+                        // the LEFT of the chip, top-aligned with it.
+                        dd.style.right = (containerRect.right - chipRect.left + 8) + 'px';
+                        dd.style.top = (chipRect.top - containerRect.top) + 'px';
                     }
                 }
                 return;
@@ -1201,9 +1203,9 @@ function showShipInfo(entityOrMmsi) {
     // Key stats cards (status moved into the header → 3rd card shows draught)
     var draughtTxt = s.draught ? parseFloat(s.draught).toFixed(1) : '–';
     var statsHtml = '<div class="ship-stats-row">';
-    statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">SPEED</div><div class="ship-stat-value">' + speed + '</div><div class="ship-stat-unit">knots</div></div>';
-    statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">COURSE</div><div class="ship-stat-value">' + course + '°</div><div class="ship-stat-unit">COG</div></div>';
-    statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">DRAUGHT</div><div class="ship-stat-value">' + draughtTxt + '</div><div class="ship-stat-unit">m</div></div>';
+    statsHtml += '<div class="ship-stat-card ship-stat-card--primary"><i class="fa-solid fa-gauge-high ship-stat-icon"></i><div class="ship-stat-label">SPEED</div><div class="ship-stat-value">' + speed + '</div><div class="ship-stat-unit">knots</div></div>';
+    statsHtml += '<div class="ship-stat-card"><i class="fa-solid fa-compass ship-stat-icon"></i><div class="ship-stat-label">COURSE</div><div class="ship-stat-value">' + course + '°</div><div class="ship-stat-unit">COG</div></div>';
+    statsHtml += '<div class="ship-stat-card"><i class="fa-solid fa-water ship-stat-icon"></i><div class="ship-stat-label">DRAUGHT</div><div class="ship-stat-value">' + draughtTxt + '</div><div class="ship-stat-unit">m</div></div>';
     statsHtml += '</div>';
 
     // Detail card rows
