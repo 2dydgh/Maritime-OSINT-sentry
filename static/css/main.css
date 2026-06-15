@@ -7263,50 +7263,111 @@ button, .btn, [class*="-btn"] {
 /* ── 시뮬레이션 패널 조절 컨트롤 (슬라이더 + 선회 방향) ── */
 .rv-sim-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 28px; }
 .rv-sim-row > label { flex: 0 0 44px; font-size: 11.5px; color: #94a3b8; font-weight: 500; }
-.rv-sim-row input[type="range"] { flex: 1 1 auto; min-width: 0; height: 4px; cursor: pointer;
-  -webkit-appearance: none; appearance: none; border-radius: 2px;
-  background: rgba(148,163,184,0.16); outline: none; }
-.rv-sim-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
-  width: 12px; height: 12px; border-radius: 50%; background: var(--primary, #3b82f6); cursor: pointer;
-  border: 2px solid #0f172a; transition: transform 0.1s ease, background-color 0.1s ease; }
-.rv-sim-row input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%;
-  background: var(--primary, #3b82f6); cursor: pointer; border: 2px solid #0f172a; transition: transform 0.1s ease, background-color 0.1s ease; }
+.rv-sim-row input[type="range"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 6px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: 3px;
+    background: rgba(148, 163, 184, 0.2);
+    outline: none;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.rv-sim-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    cursor: pointer;
+    border: 2px solid var(--primary, #3b82f6);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s;
+}
+.rv-sim-row input[type="range"]:hover::-webkit-slider-thumb {
+    transform: scale(1.15);
+    box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4);
+}
+.rv-sim-row input[type="range"]:active::-webkit-slider-thumb {
+    transform: scale(1.05);
+    background: var(--primary, #3b82f6);
+    border-color: #ffffff;
+}
+
+.rv-sim-row input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    cursor: pointer;
+    border: 2px solid var(--primary, #3b82f6);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s;
+}
+.rv-sim-row input[type="range"]:hover::-moz-range-thumb {
+    transform: scale(1.15);
+    box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4);
+}
+.rv-sim-row input[type="range"]:active::-moz-range-thumb {
+    transform: scale(1.05);
+    background: var(--primary, #3b82f6);
+    border-color: #ffffff;
+}
 .rv-sim-val { flex: 0 0 52px; text-align: right; font-size: 12px; font-weight: 600;
   color: #e2e8f0; font-variant-numeric: tabular-nums; }
 .rv-sim-dir {
     flex: 1 1 auto;
     display: flex;
-    background: rgba(0, 0, 0, 0.4);
-    border-radius: 6px;
-    padding: 3px;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.4);
     border: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 0;
+    position: relative;
 }
 .rv-sim-dir-btn {
     flex: 1;
-    padding: 4px 0;
-    border-radius: 4px;
+    padding: 6px 0;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 600;
     background: transparent;
     color: #64748b;
     border: none;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 6px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     text-align: center;
+    position: relative;
+    z-index: 2;
 }
-.rv-sim-dir-btn:hover { color: #94a3b8; }
-/* Port (Left / Red) Active */
-#rv-sim-dir-port.active {
-    background: rgba(239, 68, 68, 0.15);
-    color: #fca5a5;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(239, 68, 68, 0.4);
+.rv-sim-dir-btn:hover {
+    color: #cbd5e1;
 }
-/* Starboard (Right / Green) Active */
-#rv-sim-dir-stbd.active {
-    background: rgba(16, 185, 129, 0.15);
-    color: #6ee7b7;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(16, 185, 129, 0.4);
+.rv-sim-dir-btn.active {
+    color: #ffffff;
+    background: var(--primary, #3b82f6);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.5);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+/* Elegant directional arrows using pseudo-elements */
+#rv-sim-dir-port::before {
+    content: '◀';
+    font-family: inherit;
+    margin-right: 6px;
+    font-size: 0.8em;
+    opacity: 0.8;
+}
+#rv-sim-dir-stbd::after {
+    content: '▶';
+    font-family: inherit;
+    margin-left: 6px;
+    font-size: 0.8em;
+    opacity: 0.8;
 }
 
 /* ── Real-time Prediction HUD (Bottom Left) ── */
