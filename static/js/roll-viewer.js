@@ -1598,9 +1598,9 @@ var RollViewer = (function () {
         errorHud.className = 'rv-prediction-hud';
         errorHud.innerHTML =
             '<div class="rv-pred-hud-title">실시간 예측 오차 ERROR METRICS</div>' +
-            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">오차 (RMSE)</span><span class="rv-pred-hud-val" id="rv-rmse">0.0°</span></div>' +
-            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">횡요 오차 (Δ Roll)</span><span class="rv-pred-hud-val" id="rv-d-roll">0.0°</span></div>' +
-            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">종요 오차 (Δ Pitch)</span><span class="rv-pred-hud-val" id="rv-d-pitch">0.0°</span></div>';
+            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">RMSE</span><span class="rv-pred-hud-val" id="rv-rmse">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-rmse-bar"></i></span></div>' +
+            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">Δ Roll</span><span class="rv-pred-hud-val" id="rv-d-roll">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-d-roll-bar"></i></span></div>' +
+            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">Δ Pitch</span><span class="rv-pred-hud-val" id="rv-d-pitch">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-d-pitch-bar"></i></span></div>';
         canvasWrap.appendChild(errorHud);
 
         // Camera preset buttons (bottom-right)
@@ -3935,15 +3935,10 @@ var RollViewer = (function () {
                     { roll: smoothRoll, pitch: smoothPitch },
                     { roll: smoothPredRoll, pitch: smoothPredPitch }
                 );
-                var dRollEl = document.getElementById('rv-d-roll');
-                var dPitchEl = document.getElementById('rv-d-pitch');
-                var rmseEl = document.getElementById('rv-rmse');
-                if (dRollEl) {
-                    dRollEl.textContent = Math.abs(_d.dRoll).toFixed(1) + '°';
-                    dRollEl.className = 'rv-pred-hud-val ' + (Math.abs(_d.dRoll) < 2 ? 'rv-ok' : Math.abs(_d.dRoll) < 5 ? 'rv-warn' : 'rv-bad');
-                }
-                if (dPitchEl) dPitchEl.textContent = Math.abs(_d.dPitch).toFixed(1) + '°';
-                if (rmseEl) rmseEl.textContent = RollPrediction.computeRMSE(rollHistory, predRollHistory).toFixed(1) + '°';
+                // (값, 막대) = 오차 / 만점스케일 / 경고임계 / 위험임계
+                _setErrBar('rv-rmse', 'rv-rmse-bar', RollPrediction.computeRMSE(rollHistory, predRollHistory), 6, 2, 4);
+                _setErrBar('rv-d-roll', 'rv-d-roll-bar', _d.dRoll, 6, 2, 4);
+                _setErrBar('rv-d-pitch', 'rv-d-pitch-bar', _d.dPitch, 3, 1, 2);
             }
             updateCanvasHUD(absRoll, absPitch, smoothSpeed);
 
@@ -4245,6 +4240,16 @@ var RollViewer = (function () {
         el.textContent = absRoll.toFixed(1) + '°';
         var level = absRoll < 5 ? 'safe' : absRoll < 10 ? 'caution' : absRoll < 15 ? 'warning' : 'danger';
         el.className = 'rv-split-roll rv-roll-' + level;
+    }
+
+    // 오차 지표 1줄 갱신: 숫자 + 막대 길이(오차/스케일) + 색(녹/황/적)
+    function _setErrBar(valId, barId, value, maxScale, warnT, badT) {
+        var v = Math.abs(value);
+        var lvl = v < warnT ? 'rv-ok' : v < badT ? 'rv-warn' : 'rv-bad';
+        var valEl = document.getElementById(valId);
+        var barEl = document.getElementById(barId);
+        if (valEl) { valEl.textContent = v.toFixed(1) + '°'; valEl.className = 'rv-pred-hud-val ' + lvl; }
+        if (barEl) { barEl.style.width = (Math.min(v / maxScale, 1) * 100).toFixed(0) + '%'; barEl.className = 'rv-pred-hud-bar-fill ' + lvl; }
     }
 
     // 임의의 게이지 세트를 갱신. (gaugeId, fillId, valueId, absRoll)
