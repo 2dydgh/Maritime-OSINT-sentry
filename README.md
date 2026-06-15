@@ -2,7 +2,7 @@
 
 AIS 선박 추적, 위성 궤도 전파, 이상 징후 탐지, ML 기반 충돌 예측을 3D 전술 글로브 위에서 통합 운용하는 실시간 해양 상황인식(MSA) 플랫폼입니다.
 
-![Main Interface](static/demo.gif)
+![Main Interface](static/demos/main.png)
 
 ## 시스템 개요
 
@@ -14,53 +14,27 @@ AIS 선박 추적, 위성 궤도 전파, 이상 징후 탐지, ML 기반 충돌 
 
 | 단계 | 상태 | 설명 |
 |------|------|------|
-| **감시 대시보드** | 완료 | 실시간 AIS 추적, 이상 징후 피드, 듀얼 맵 모드, 비전 모드 |
+| **감시 대시보드** | 완료 | 실시간 AIS 추적, 이상 징후 피드, 듀얼 맵 모드 |
 | **충돌 AI 모델** | 완료 | XGBoost 위험 예측 + 3단계 공간 전처리 필터 + 육지 차폐 |
-| **디지털 트윈** | 계획 | 시뮬레이션 레이어 — 항로 예측, What-if 시나리오, 멀티센서 퓨전 (항공, 추가 해양 데이터) |
+| **디지털 트윈** | 진행 | 시뮬레이션 레이어 — 횡요각 예측, 관습 항로, LLM 어시스턴트 |
 
 ## 주요 기능
 
 ### 실시간 선박 추적 (AIS)
 
-![AIS Tracking](static/demos/ais-tracking.gif)
+| 3D Globe | 2D Map |
+|----------|--------|
+| ![AIS 3D](static/demos/3d.png) | ![AIS 2D](static/demos/2d.png) |
 
 - **AisStream.io** 라이브 스트림 연동
 - CesiumJS 전술 글로브와 고정밀 동기화
 - 선박 상세 정보: MMSI, 선명, 선종, SOG, COG, 목적지
-- **BillboardCollection** 기반 고성능 선박 렌더링
-
-### 듀얼 맵 모드
-
-![Dual Map](static/demos/dual-map.gif)
-
-- **3D Globe** (CesiumJS) — 지형 기반 전술 뷰, 지역 이동(fly-to)
-- **2D Map** (Leaflet) — 경량 평면 지도, 리전 탭 내비게이션
-- 선박/위성 상태 공유하며 모드 간 원활한 전환
-
-### 위성 궤도 전파 (SGP4)
-- 정보 관련 위성(군사, SAR, SIGINT) 실시간 궤도 계산
-- 자동 페일오버 기반 TLE 수집 로직
-- SGP4 고정밀 전파를 통한 위치, 속도, 방위 계산
-
-### 항공기 추적 (ADS-B)
-
-- **OpenSky Network** REST API 폴링(10초 주기) 기반 실시간 항공기 위치 추적
-- ICAO24 군용 주소 블록(US/UK/FR/DE/RU/CN/KR/JP/IL/AU) 매핑을 통한 자동 분류 — **민간 / 군용 / 헬리콥터 / 기타**
-- ADS-B Emitter Category 코드 활용 — 회전익(rotorcraft) 자동 식별
-- 백그라운드 폴링 + 인메모리 캐시로 부하 분리, `/api/v1/aircraft` REST 엔드포인트 제공
-
-### 실시간 이상 탐지 (라이브 피드)
-
-![Live Feed](static/demos/live-feed.gif)
-
-- **과속 경보**: 운용 한계 초과 선박 자동 탐지 (화물/유조선 25kt+)
-- **신호 소실 감시**: "다크" 선박 및 AIS 신호 두절 실시간 식별
-- **목적지 변경**: 항해 중 목적지 변경 즉시 알림
-- **인터랙티브 피드**: 클릭 시 해당 선박으로 자동 이동 및 상세 정보 표시
+- **BillboardCollection** 기반 고성능 선박 렌더링 (전 세계 3만+ 선박 동시 추적)
+- **3D Globe** (CesiumJS) ↔ **2D Map** (Leaflet) 듀얼 맵 모드, 마지막 뷰포트 공유 전환
 
 ### 충돌 위험 분석 (이중 엔진)
 
-![Collision Analysis](static/demos/collision-analysis.gif)
+![Collision Analysis](static/demos/collision_ai.png)
 
 - **거리 기반 분석**: 공간 그리드 필터링(5nm 반경)을 통한 TCPA/DCPA 계산
 - **Class A/B 차등 임계값**: AIS 트랜스폰더 클래스(대형 Class A / 소형 Class B)에 따라 선박 쌍별 임계값 자동 조정
@@ -77,50 +51,41 @@ AIS 선박 추적, 위성 궤도 전파, 이상 징후 탐지, ML 기반 충돌 
     2. **COG 투영선 수렴 검사**: COG 방향 벡터를 직선으로 투영하여, 교차점이 양쪽 전방에 있는 경우(crossing/head-on) 또는 평행한 경우(overtaking)만 통과
     3. **베어링 검증**: head-on/crossing은 양쪽 모두 상대를 향해야 하고(90° 이내), overtaking은 한 척만 향하면 통과
 - **육지 차폐 필터**: GSHHG 해안선 데이터를 활용하여 육지로 분리된 선박 쌍 자동 제외
-- **인터랙티브 시각화**:
-  - COG 예상 경로선 (점선) — 10분간 예상 항로 표시
-  - CPA (최근접점) 마커 — 실시간 DCPA/TCPA 라벨
-  - CPA 위험 영역 원 (펄스 애니메이션) — DCPA 비례 반경
-  - 위험도 색상 코딩: 위험(빨강), 경고(주황), 주의(노랑), 안전(초록)
+- **인터랙티브 시각화**: COG 예상 경로선, CPA(최근접점) 마커·라벨, CPA 위험 영역 원(펄스), 위험도 색상 코딩
 
 ### 2D 해역 위험도 분석
 
+![Hazard Analysis](static/demos/accident.png)
+
 - **헥스 그리드 위험도 레이어** — 사고/충돌/혼잡 점수를 육각 셀로 시각화 (위험·경고·주의 단계별 색상 코딩)
 - **영역 분석 도구** — 드래그 사각형으로 선택한 해역의 평균/최대 위험도 및 위험 사유 자동 집계
-- **베이스맵 전환** — 위성 영상 / 해도(nautical chart) 모드 토글, 위험 셀 가독성을 위한 컨테이너 필터 적용
+- **해도 베이스맵** — 위성 영상 / 해도(nautical chart) 토글, 위험 셀 가독성을 위한 컨테이너 필터 적용
 - 2D ↔ 3D 모드 전환 시 마지막 뷰포트 자동 복원
 
 ### 횡요각 3D 시뮬레이션 (Roll Viewer)
 
-![Roll Viewer](static/demos/roll-viewer.gif)
+![Roll Viewer](static/demos/roll.png)
 
-- **Three.js 기반 3D 선박 모델** — 선종별(화물선, 유조선, 여객선, 어선, 군함, 예인선) 전용 PBR 3D 모델 렌더링
+- **Three.js 기반 3D 선박 모델** — 선종별(화물선, 유조선, 여객선, 어선, 군함, 예인선) 전용 3D 모델 렌더링
 - **실시간 횡요각/종요각 시뮬레이션** — 해상 기상 데이터(풍속, 파고, 파주기)를 반영한 물리 기반 롤링 시뮬레이션
 - **선종별 롤링 특성** — 선박 유형에 따라 진폭과 주기를 차등 적용 (어선: 높은 진폭/빠른 주기, 유조선: 낮은 진폭/느린 주기)
-- **실시간 차트** — 횡요각(Roll)과 종요각(Pitch) 이력을 실시간 그래프로 표시
-- **해양 환경 렌더링** — 파도 애니메이션, 뱃머리 물보라 파티클 시스템, 동적 하늘 배경
-- **기상 연동** — 선박 위치 기반 실시간 기상 데이터(OpenWeatherMap) 자동 반영
+- **실시간 차트** — 횡요각(Roll)·종요각(Pitch) 이력을 실시간 그래프로 표시
+- **해양 환경 렌더링** — 파도 애니메이션, 뱃머리 물보라 파티클, 동적 하늘 배경
+- **빈 상태 빠른 선택** — 추적 중인 선박(한국 근해·대형선 우선)을 카드에서 바로 선택
 
 ### 관습 항로 시뮬레이션 (Route Viewer)
 
-![Route Viewer](static/demos/route-viewer.gif)
+![Route Viewer](static/demos/navigation.png)
 
-- **글로벌 해상 항로 시각화** — Searoute 기반 실제 관습 항로(대권 항로 + 해협/운하 경유) 산출 및 3D 글로브 렌더링
-- **항구 검색 및 선택** — 전 세계 주요 항구 검색, 또는 글로브 직접 클릭으로 출발지/목적지 설정
-- **항해 시뮬레이션** — 선박 아이콘이 산출된 항로를 따라 이동하는 애니메이션 (속력 조절: x1 ~ x2000)
-- **항로 정보 표시** — 총 거리(km/nm), 예상 소요 시간, 실시간 진행률
-- **주요 해역 바로가기** — 말라카 해협, 수에즈 운하, 파나마 운하, 남중국해 등 주요 해역으로 즉시 이동
-
-### 선박 근접 패널
-- 선택 선박 기준 주변 선박 실시간 추적 및 거리 측정
-- 근접 선박 간 연결선 렌더링
-- ML 위험도 보강 및 거리 심각도 표시
-
-### Sentinel-2 위성 영상
-- 우클릭 컨텍스트 메뉴를 통한 Microsoft Planetary Computer 고해상도 위성 영상 검색
-- 즉시 썸네일 미리보기 및 메타데이터 조회
+- **관습 항로 산출** — Searoute 해상 항로 네트워크 기반으로 출발–도착 항구 간 실제 항로(육지 회피·해협 경유)를 계산하고, centripetal Catmull-Rom 스플라인으로 부드럽게 렌더링
+- **2D 해상 지도** — 위성/해도 베이스맵 위에 항로 표시 (국내 항구 간 관습 항로에 최적화)
+- **항구 선택** — 주요 국내 항구 마커·이름표 클릭, 이름 검색, 또는 크로스헤어로 좌표 직접 지정
+- **선박 크기 등급(A~E)** — 선박 길이 등급 입력 — 흘수에 따른 수심 통항 제약을 반영하는 항로 모델용
+- **항해 시뮬레이션** — 선박이 항로를 따라 이동하는 애니메이션(속력 x1~x2000) + 총 거리·예상 소요·ETA·통과 해역 표시
 
 ### LLM 어시스턴트 (Ollama Tool-Calling)
+
+![LLM Assistant](static/demos/aichat.png)
 
 - **자연어 채팅 인터페이스** — Ollama 모델 기반, 도구 호출을 통한 데이터 조회 및 화면 제어
 - **프론트엔드 상태 인식** — 현재 화면(횡요각 뷰어 등)과 표시 중인 선박을 매 턴 컨텍스트로 주입하여 "이 배", "현재 선박" 같은 지시 표현 처리
@@ -128,27 +93,13 @@ AIS 선박 추적, 위성 궤도 전파, 이상 징후 탐지, ML 기반 충돌 
 - 지원 도구: `get_ships`, `get_collision_risks`, `get_area_status`, `get_ship_detail`, `fly_to`, `filter_ships`, `open_roll_viewer`, `return_to_globe`, `trigger_capsize`, `set_turn_scenario`, `set_roll_scenario`
 - 연결 풀링 + Ollama `keep_alive`로 모델 상시 로드, 응답 지연 최소화
 
-### 비전 모드
-
-![Vision Mode](static/demos/vision-mode.gif)
-
-- **Normal**, **Night Vision (NV)**, **FLIR Thermal**, **CRT** 디스플레이 모드
-- 모드별 전체 UI 테마 적용
-
-### HUD 및 모니터링 오버레이
-- 선박/위성 수, 충돌 위험 배지가 포함된 HUD
-- 데이터 지연 시간 표시 및 연결 상태 모니터링
-
-### 제한 구역 및 군사 이벤트
-- 제한 해역 GeoJSON API (PostGIS 기반)
-- 군사/보안 이벤트 추적 (신뢰도, 시간 데이터 포함)
-
 ## 기술 스택
 
-- **프론트엔드**: CesiumJS, Leaflet, Vanilla CSS, JavaScript (ES6+)
+- **프론트엔드**: CesiumJS, Leaflet, Three.js, Vanilla CSS, JavaScript (ES6+)
 - **백엔드**: FastAPI (Python 3.12), Uvicorn
 - **데이터베이스**: PostgreSQL + PostGIS
 - **충돌 모델**: XGBoost (da10-service), GSHHG 해안선 shapefile (`shapely`, `pyshp`)
+- **항로/LLM**: `searoute`, Ollama (tool-calling)
 - **모니터링**: Prometheus, Grafana, Redis
 - **핵심 라이브러리**: `sgp4`, `asyncpg`, `apscheduler`, `websockets`, `httpx`
 

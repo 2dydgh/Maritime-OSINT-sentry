@@ -1,5 +1,24 @@
 // ── Maritime OSINT Sentry — Satellite Layer ──
 
+// Classic satellite silhouette (body + solar-panel wings + dish), drawn in a
+// 0 0 48 48 viewBox centered at 24,24. Returned as SVG markup so it can be
+// embedded both in the 3D Cesium data-URI billboard and the 2D Leaflet divIcon.
+function _satBodySvg(c) {
+    return '\
+        <rect x=\'21\' y=\'17\' width=\'6\' height=\'14\' rx=\'1.5\' fill=\'' + c + '\' opacity=\'0.95\'/>\
+        <line x1=\'16\' y1=\'24\' x2=\'21\' y2=\'24\' stroke=\'' + c + '\' stroke-width=\'1.5\'/>\
+        <line x1=\'27\' y1=\'24\' x2=\'32\' y2=\'24\' stroke=\'' + c + '\' stroke-width=\'1.5\'/>\
+        <rect x=\'4\' y=\'19\' width=\'12\' height=\'10\' fill=\'none\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.9\'/>\
+        <line x1=\'8\' y1=\'19\' x2=\'8\' y2=\'29\' stroke=\'' + c + '\' stroke-width=\'1\' opacity=\'0.7\'/>\
+        <line x1=\'12\' y1=\'19\' x2=\'12\' y2=\'29\' stroke=\'' + c + '\' stroke-width=\'1\' opacity=\'0.7\'/>\
+        <rect x=\'32\' y=\'19\' width=\'12\' height=\'10\' fill=\'none\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.9\'/>\
+        <line x1=\'36\' y1=\'19\' x2=\'36\' y2=\'29\' stroke=\'' + c + '\' stroke-width=\'1\' opacity=\'0.7\'/>\
+        <line x1=\'40\' y1=\'19\' x2=\'40\' y2=\'29\' stroke=\'' + c + '\' stroke-width=\'1\' opacity=\'0.7\'/>\
+        <line x1=\'24\' y1=\'17\' x2=\'24\' y2=\'11\' stroke=\'' + c + '\' stroke-width=\'1.5\'/>\
+        <circle cx=\'24\' cy=\'9.5\' r=\'2\' fill=\'' + c + '\'/>';
+}
+window._satBodySvg = _satBodySvg;
+
 var _satIconCache = {};
 function getSatIcon(colorHex, missionType) {
     var key = colorHex + '|' + (missionType || '');
@@ -7,22 +26,25 @@ function getSatIcon(colorHex, missionType) {
 
     var c = colorHex;
     var gid = c.slice(1) + (missionType || 'def');
-    // Diamond shape: rhombus centered at 24,24
-    var body = '\
-        <polygon points=\'24,6 42,24 24,42 6,24\' fill=\'none\' stroke=\'' + c + '\' stroke-width=\'2\' stroke-linejoin=\'round\' opacity=\'0.9\'/>\
-        <line x1=\'24\' y1=\'14\' x2=\'24\' y2=\'20\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.5\'/>\
-        <line x1=\'24\' y1=\'28\' x2=\'24\' y2=\'34\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.5\'/>\
-        <line x1=\'14\' y1=\'24\' x2=\'20\' y2=\'24\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.5\'/>\
-        <line x1=\'28\' y1=\'24\' x2=\'34\' y2=\'24\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.5\'/>';
+    // Classic satellite: central body + two solar-panel wings + dish antenna,
+    // centered at 24,24 in a 0 0 48 48 viewBox. Shared verbatim with the 2D
+    // Leaflet icon (see syncSatellitesToLeaflet) so both maps look identical.
+    var body = _satBodySvg(c);
 
-    var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 48 48\'>\
+    // NOTE: write a literal '#' here. encodeURIComponent() below turns it into a
+    // single %23 that the browser decodes once back to '#', so the filter ref
+    // resolves. Pre-writing %23 double-encodes it (%2523 → %23) and the glow
+    // filter never matches, leaving the icon unrendered → black Cesium billboard.
+    // Explicit width/height are required for the SVG to rasterize at the right
+    // size as a billboard image (viewBox alone rasterizes to 0/black in canvas).
+    var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'48\' height=\'48\' viewBox=\'0 0 48 48\'>\
         <defs>\
             <filter id=\'glow-' + gid + '\' x=\'-50%\' y=\'-50%\' width=\'200%\' height=\'200%\'>\
                 <feGaussianBlur stdDeviation=\'2\' result=\'blur\'/>\
                 <feMerge><feMergeNode in=\'blur\'/><feMergeNode in=\'SourceGraphic\'/></feMerge>\
             </filter>\
         </defs>\
-        <g filter=\'url(%23glow-' + gid + ')\'>' + body + '</g>\
+        <g filter=\'url(#glow-' + gid + ')\'>' + body + '</g>\
     </svg>';
     var uri = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
     _satIconCache[key] = uri;
@@ -88,8 +110,10 @@ document.getElementById('layer-sats').addEventListener('change', function(e) {
         } else {
             Object.values(leafletSatMarkers).forEach(function(m) { leafletMap.removeLayer(m); });
             Object.values(leafletSatTracks).forEach(function(t) { leafletMap.removeLayer(t); });
+            Object.values(leafletSatFootprints).forEach(function(f) { leafletMap.removeLayer(f); });
             leafletSatMarkers = {};
             leafletSatTracks = {};
+            leafletSatFootprints = {};
         }
     }
 });
@@ -326,6 +350,21 @@ function _propagateSatPositions() {
                         }
                     });
                 }
+
+                // 관측 범위(센서 footprint) — 전역 토글(layer-sat-footprint)이 제어
+                var fpInit = _computeFootprint(lat, lng, altKm, 36);
+                if (fpInit.length >= 6 && fpInit.every(isFinite)) {
+                    satDataSource.entities.add({
+                        id: 'footprint-' + satId,
+                        polygon: {
+                            hierarchy: Cesium.Cartesian3.fromDegreesArray(fpInit),
+                            material: cesiumColor.withAlpha(0.1),
+                            outline: true,
+                            outlineColor: cesiumColor.withAlpha(0.45),
+                            height: 0
+                        }
+                    });
+                }
             }
 
             satDataSource.entities.add({
@@ -377,7 +416,16 @@ function _propagateSatPositions() {
         var groundE = satDataSource.entities.getById('ground-' + satId);
         if (groundE) groundE.show = missionVisible && document.getElementById('layer-sat-ground').checked;
         var fpE = satDataSource.entities.getById('footprint-' + satId);
-        if (fpE) fpE.show = missionVisible && document.getElementById('layer-sat-footprint').checked;
+        if (fpE) {
+            var fpShow = missionVisible && document.getElementById('layer-sat-footprint').checked;
+            fpE.show = fpShow;
+            if (fpShow) {
+                var fpNow = _computeFootprint(lat, lng, altKm, 36);
+                if (fpNow.length >= 6 && fpNow.every(isFinite)) {
+                    fpE.polygon.hierarchy = Cesium.Cartesian3.fromDegreesArray(fpNow);
+                }
+            }
+        }
     });
 
     var cacheIds = new Set(Object.keys(_satRecCache));
@@ -486,39 +534,10 @@ function _getSatRealTimePosition(satId) {
     return { lat: sat.lat, lng: sat.lng, altKm: sat.alt_km || 400 };
 }
 
-function _toggleSatFootprint(satId) {
-    if (_activeFootprintSatId) {
-        var old = satDataSource.entities.getById('footprint-' + _activeFootprintSatId);
-        if (old) satDataSource.entities.remove(old);
-    }
-
-    if (_activeFootprintSatId === satId) {
-        _activeFootprintSatId = null;
-        return;
-    }
-
-    var cache = _satRecCache[satId];
-    if (!cache) return;
-    var color = SAT_COLORS[cache.sat.mission] || '#94a3b8';
-    var pos = _getSatRealTimePosition(satId);
-    if (!pos) return;
-
-    var footprintCoords = _computeFootprint(pos.lat, pos.lng, pos.altKm);
-    if (footprintCoords.length > 4) {
-        satDataSource.entities.add({
-            id: 'footprint-' + satId,
-            polygon: {
-                hierarchy: Cesium.Cartesian3.fromDegreesArray(footprintCoords),
-                material: Cesium.Color.fromCssColorString(color).withAlpha(0.12),
-                outline: true,
-                outlineColor: Cesium.Color.fromCssColorString(color).withAlpha(0.5),
-                outlineWidth: 1,
-                height: 0
-            }
-        });
-        _activeFootprintSatId = satId;
-    }
-}
+// 관측 범위(footprint)는 layer-sat-footprint 토글로 전체 위성에 대해 전역 표시된다
+// (_propagateSatPositions / syncSatellitesToLeaflet 참조). 과거의 "위성 클릭 시 단일
+// footprint 토글"은 전역 footprint와 id(footprint-<satId>)가 충돌하므로 폐지한다.
+function _toggleSatFootprint() { /* deprecated — 전역 '관측 범위' 토글 사용 */ }
 window._toggleSatFootprint = _toggleSatFootprint;
 window._activeFootprintSatId = null;
 

@@ -5,7 +5,13 @@ var ShipBuilders = (function () {
 
     var _shipMatCache = {};
     var _rustTextureCache = {};
+    var _containerTexCache = {};
+    var _containerMatCache = {};
     var _envMap = null;
+    var _shipName = null;       // set per build() for hull name decals
+    var _currentGroup = null;   // group currently being built (for decal helpers)
+    var hullMeshRef = null;     // set by each builder; decals project onto this mesh
+    var _decalProxy = null;     // non-indexed copy — r137 DecalGeometry rejects indexed geometry
 
     function setEnvMap(envMap) {
         _envMap = envMap;
@@ -58,6 +64,19 @@ var ShipBuilders = (function () {
 
         ctx.fillStyle = baseColor;
         ctx.fillRect(0, 0, sz, sz);
+
+        // Hull plating seams — horizontal weld lines with staggered vertical joints
+        ctx.fillStyle = '#000000';
+        for (var py = 28; py < sz; py += 44) {
+            ctx.globalAlpha = 0.14;
+            ctx.fillRect(0, py, sz, 1.5);
+            ctx.globalAlpha = 0.06;
+            var stagger = ((py / 44) % 2) * 32;
+            for (var px = stagger; px < sz; px += 64) {
+                ctx.fillRect(px, py - 44, 1.5, 44);
+            }
+        }
+        ctx.globalAlpha = 1.0;
 
         var rustColors = ['#8B4513', '#A0522D', '#6B3410', '#CD853F', '#D2691E'];
 
@@ -119,6 +138,201 @@ var ShipBuilders = (function () {
             params.envMapIntensity = 0.35;
         }
         return new THREE.MeshStandardMaterial(params);
+    }
+
+    // ── Corrugated container texture — vertical ribs + grime ──
+    function createContainerTexture(baseColor) {
+        if (_containerTexCache[baseColor]) return _containerTexCache[baseColor];
+        var THREE = window.THREE;
+        var w = 128, h = 128;
+        var cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        var ctx = cv.getContext('2d');
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(0, 0, w, h);
+
+        for (var x = 0; x < w; x += 8) {
+            ctx.globalAlpha = 0.22;
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x, 0, 2, h);
+            ctx.globalAlpha = 0.13;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x + 4, 0, 2, h);
+        }
+
+        ctx.fillStyle = '#1a1a1a';
+        for (var s = 0; s < 5; s++) {
+            ctx.globalAlpha = 0.05 + Math.random() * 0.1;
+            ctx.fillRect(Math.random() * w, 0, 2 + Math.random() * 4, 20 + Math.random() * 60);
+        }
+
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(0, 0, w, h);
+        ctx.globalAlpha = 1;
+
+        var tex = new THREE.CanvasTexture(cv);
+        _containerTexCache[baseColor] = tex;
+        return tex;
+    }
+
+    // Per-face materials: corrugated sides, plain darker roof/floor.
+    function containerMats(baseColor) {
+        if (_containerMatCache[baseColor]) return _containerMatCache[baseColor];
+        var THREE = window.THREE;
+        var side = new THREE.MeshStandardMaterial({
+            map: createContainerTexture(baseColor),
+            roughness: 0.85,
+            metalness: 0.15
+        });
+        var top = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(baseColor).multiplyScalar(0.7),
+            roughness: 0.9,
+            metalness: 0.15
+        });
+        if (_envMap) {
+            side.envMap = _envMap; side.envMapIntensity = 0.2;
+            top.envMap = _envMap; top.envMapIntensity = 0.15;
+        }
+        var mats = [side, side, top, top, side, side];
+        _containerMatCache[baseColor] = mats;
+        return mats;
+    }
+
+    // ── Hull identity decals (name + draft marks) projected onto the plating ──
+    var HULL_DIMS = {
+        cargo:     { length: 17, beam: 3.8, deckY: 3.0, wlY: 1.6 },
+        tanker:    { length: 18, beam: 4.4, deckY: 3.0, wlY: 1.6 },
+        passenger: { length: 18, beam: 5.0, deckY: 3.4, wlY: 1.4 },
+        fishing:   { length: 10, beam: 2.8, deckY: 2.5, wlY: 1.4 },
+        military:  { length: 18, beam: 3.2, deckY: 2.9, wlY: 1.6 },
+        tug:       { length: 8,  beam: 3.6, deckY: 3.0, wlY: 1.6 },
+        other:     { length: 11, beam: 3.2, deckY: 2.8, wlY: 1.5 }
+    };
+
+    function makeTextTexture(text, color, w, h) {
+        var THREE = window.THREE;
+        var cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        var ctx = cv.getContext('2d');
+        var fs = Math.min(h * 0.68, (w * 0.92) / Math.max(text.length, 1) * 1.7);
+        ctx.font = '700 ' + fs.toFixed(0) + "px 'Wanted Sans Variable', 'Pretendard Variable', 'Inter', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.92;
+        ctx.fillText(text, w / 2, h / 2);
+        return new THREE.CanvasTexture(cv);
+    }
+
+    function makeDraftTexture(color) {
+        var THREE = window.THREE;
+        var cv = document.createElement('canvas');
+        cv.width = 96; cv.height = 256;
+        var ctx = cv.getContext('2d');
+        ctx.font = "700 38px 'JetBrains Mono', monospace";
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.85;
+        var levels = [8, 6, 4, 2];
+        for (var i = 0; i < levels.length; i++) {
+            var y = 32 + i * 64;
+            ctx.fillText(String(levels[i]) + 'M', 6, y);
+            ctx.fillRect(64, y - 3, 26, 6);
+        }
+        return new THREE.CanvasTexture(cv);
+    }
+
+    function _decalMat(tex) {
+        var THREE = window.THREE;
+        return new THREE.MeshStandardMaterial({
+            map: tex, transparent: true, roughness: 0.7, metalness: 0.1,
+            polygonOffset: true, polygonOffsetFactor: -2
+        });
+    }
+
+    function _getDecalProxy() {
+        var THREE = window.THREE;
+        if (_decalProxy && _decalProxy.userData.src === hullMeshRef) return _decalProxy;
+        var geo = hullMeshRef.geometry.index
+            ? hullMeshRef.geometry.toNonIndexed()
+            : hullMeshRef.geometry;
+        _decalProxy = new THREE.Mesh(geo, hullMeshRef.material);
+        _decalProxy.position.copy(hullMeshRef.position);
+        _decalProxy.rotation.copy(hullMeshRef.rotation);
+        _decalProxy.scale.copy(hullMeshRef.scale);
+        _decalProxy.updateMatrixWorld(true);
+        _decalProxy.userData.src = hullMeshRef;
+        return _decalProxy;
+    }
+
+    function _projectHullDecal(group, tex, pos, rotY, w, h) {
+        var THREE = window.THREE;
+        if (THREE.DecalGeometry && hullMeshRef) {
+            var geo = new THREE.DecalGeometry(
+                _getDecalProxy(),
+                new THREE.Vector3(pos.x, pos.y, pos.z),
+                new THREE.Euler(0, rotY, 0),
+                new THREE.Vector3(w, h, 2.0)
+            );
+            var mat = new THREE.MeshStandardMaterial({
+                map: tex, transparent: true, depthWrite: false,
+                polygonOffset: true, polygonOffsetFactor: -4,
+                roughness: 0.7, metalness: 0.1, side: THREE.DoubleSide
+            });
+            group.add(new THREE.Mesh(geo, mat));
+            return;
+        }
+        var plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), _decalMat(tex));
+        plane.rotation.y = rotY;
+        plane.position.set(pos.x, pos.y, pos.z);
+        group.add(plane);
+    }
+
+    function addHullIdentity(THREE, group, type) {
+        var dims = HULL_DIMS[type] || HULL_DIMS.other;
+        var name = (_shipName && _shipName !== 'UNKNOWN') ? String(_shipName).toUpperCase() : null;
+        var textColor = (type === 'passenger' || type === 'military') ? '#23303c' : '#e8edf2';
+        var nameY = dims.wlY + (dims.deckY - dims.wlY) * 0.58;
+        var halfZ = dims.beam / 2 + 0.06;
+
+        if (name) {
+            var nameW = Math.min(dims.length * 0.22, 0.42 * name.length + 0.8);
+            var nameH = nameW * 0.26;
+            var tex = makeTextTexture(name, textColor, 512, 96);
+            _projectHullDecal(group, tex, { x: dims.length * 0.22, y: nameY, z: halfZ }, 0, nameW, nameH);
+            _projectHullDecal(group, tex, { x: dims.length * 0.22, y: nameY, z: -halfZ }, Math.PI, nameW, nameH);
+            _projectHullDecal(group, tex, { x: -dims.length / 2 - 0.02, y: nameY, z: 0 }, -Math.PI / 2, nameW * 0.75, nameH * 0.75);
+        }
+
+        if (type === 'cargo' || type === 'tanker' || type === 'passenger' || type === 'military') {
+            var dTex = makeDraftTexture(textColor);
+            _projectHullDecal(group, dTex, { x: 0, y: dims.wlY + 0.2, z: halfZ }, 0, 0.5, 1.4);
+            _projectHullDecal(group, dTex, { x: 0, y: dims.wlY + 0.2, z: -halfZ }, Math.PI, 0.5, 1.4);
+        }
+    }
+
+    // ── Underwater fittings ──
+    function addPropeller(THREE, group, x, y, r, z) {
+        var prop = new THREE.Group();
+        var bronze = shipMat('#9c7a45', { metalness: 0.8, roughness: 0.35 });
+        var hubGeo = new THREE.CylinderGeometry(0.12 * r, 0.16 * r, 0.38 * r, 8);
+        hubGeo.rotateZ(Math.PI / 2);
+        prop.add(new THREE.Mesh(hubGeo, bronze));
+        for (var i = 0; i < 4; i++) {
+            var pivot = new THREE.Group();
+            var bladeGeo = new THREE.BoxGeometry(0.05 * r, 0.85 * r, 0.3 * r);
+            var blade = new THREE.Mesh(bladeGeo, bronze);
+            blade.position.y = 0.5 * r;
+            blade.rotation.y = 0.45;
+            pivot.add(blade);
+            pivot.rotation.x = i * Math.PI / 2 + 0.4;
+            prop.add(pivot);
+        }
+        prop.position.set(x, y, z || 0);
+        group.add(prop);
     }
 
     // ── createHullGeometry — parametric hull with curved cross-section ──
@@ -206,10 +420,10 @@ var ShipBuilders = (function () {
         _add(group, new THREE.Mesh(midGeo, mat)).position.set(midX, y + height * 0.5, z);
     }
 
-    function addBulbousBow(THREE, group, bowX, y, radius, color) {
-        var geo = new THREE.SphereGeometry(radius, 12, 8);
-        geo.scale(2.2, 0.7, 0.9);
-        _add(group, new THREE.Mesh(geo, shipMat(color, { roughness: 0.6 }))).position.set(bowX, y, 0);
+    function addBulbousBow(THREE, group, x, y, scale, color) {
+        var geo = new THREE.SphereGeometry(0.5 * scale, 10, 8);
+        geo.scale(1.9, 0.75, 0.75);
+        _add(group, new THREE.Mesh(geo, shipMat(color, { roughness: 0.6 }))).position.set(x, y, 0);
     }
 
     function addAnchor(THREE, group, x, y, z, scale) {
@@ -263,16 +477,17 @@ var ShipBuilders = (function () {
             length: 18, beam: 4.4, depth: 3.0,
             bowFineness: 1.0, sternFullness: 0.8
         });
-        var hull = new THREE.Mesh(hullGeo, rustHullMat('#e2e8f0', 'tanker'));
+        var hull = new THREE.Mesh(hullGeo, rustHullMat('#5d3328', 'tanker'));
         hull.position.set(0, 3.0, 0);
+        hullMeshRef = hull;
         group.add(hull);
 
         var deckGeo = new THREE.BoxGeometry(16, 0.2, 4.2);
-        _add(group, new THREE.Mesh(deckGeo, shipMat('#3f3f46'))).position.set(0, 3.0, 0);
+        _add(group, new THREE.Mesh(deckGeo, shipMat('#46594c', { roughness: 0.8 }))).position.set(0, 3.0, 0);
 
         for (var td = -2; td <= 2; td++) {
             var domeGeo = new THREE.SphereGeometry(1.4, 12, 6, 0, Math.PI * 2, 0, Math.PI / 3);
-            _add(group, new THREE.Mesh(domeGeo, shipMat('#52525b', { roughness: 0.7, metalness: 0.3 }))).position.set(td * 3, 3.1, 0);
+            _add(group, new THREE.Mesh(domeGeo, shipMat('#c9ced3', { roughness: 0.7, metalness: 0.3 }))).position.set(td * 3, 3.1, 0);
         }
 
         var catwalkGeo = new THREE.BoxGeometry(14, 0.06, 0.4);
@@ -304,13 +519,13 @@ var ShipBuilders = (function () {
         }
 
         var bridgeGeo = new THREE.BoxGeometry(3.5, 2.0, 3.5);
-        _add(group, new THREE.Mesh(bridgeGeo, shipMat('#3f3f46'))).position.set(-5.5, 4.0, 0);
+        _add(group, new THREE.Mesh(bridgeGeo, shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 4.0, 0);
         var bridgeUpperGeo = new THREE.BoxGeometry(3.0, 1.0, 3.2);
-        _add(group, new THREE.Mesh(bridgeUpperGeo, shipMat('#4a4a52'))).position.set(-5.5, 5.5, 0);
+        _add(group, new THREE.Mesh(bridgeUpperGeo, shipMat('#e3e9ee', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 5.5, 0);
 
         var wingGeo = new THREE.BoxGeometry(1.0, 0.8, 0.6);
-        _add(group, new THREE.Mesh(wingGeo, shipMat('#3f3f46'))).position.set(-5.5, 5.4, 2.2);
-        _add(group, new THREE.Mesh(wingGeo.clone(), shipMat('#3f3f46'))).position.set(-5.5, 5.4, -2.2);
+        _add(group, new THREE.Mesh(wingGeo, shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 5.4, 2.2);
+        _add(group, new THREE.Mesh(wingGeo.clone(), shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 5.4, -2.2);
 
         var winGeo = new THREE.BoxGeometry(0.1, 0.5, 2.8);
         _add(group, new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-3.7, 5.5, 0);
@@ -343,6 +558,8 @@ var ShipBuilders = (function () {
         addAnchor(THREE, group, 8.5, 2.0, -2.0, 1.0);
         addHawsepipe(THREE, group, 8.8, 2.6, -2.0, 1.0);
         addRudder(THREE, group, -8.8, 0.8, 1.8, color);
+        addPropeller(THREE, group, -8.2, 0.8, 1.0);
+        addBulbousBow(THREE, group, 9.2, 0.5, 1.1, '#5d3328');
     }
 
     function buildCargo(THREE, group, color) {
@@ -350,8 +567,9 @@ var ShipBuilders = (function () {
             length: 17, beam: 3.8, depth: 3.0,
             bowFineness: 1.3, sternFullness: 0.7
         });
-        var hull = new THREE.Mesh(hullGeo, rustHullMat('#e2e8f0', 'cargo'));
+        var hull = new THREE.Mesh(hullGeo, rustHullMat('#2c3e50', 'cargo'));
         hull.position.set(0, 3.0, 0);
+        hullMeshRef = hull;
         group.add(hull);
 
         var deckGeo = new THREE.BoxGeometry(15, 0.2, 3.8);
@@ -362,7 +580,7 @@ var ShipBuilders = (function () {
             _add(group, new THREE.Mesh(holdCoverGeo, shipMat('#52525b', { roughness: 0.7 }))).position.set(3.5 - hc * 2, 3.15, 0);
         }
 
-        var containerColors = ['#dc2626', '#2563eb', '#16a34a', '#ca8a04', '#9333ea', '#0891b2'];
+        var containerColors = ['#9b3b2e', '#27506e', '#3a5f47', '#b06a28', '#5b6068', '#6e3f4a'];
         var rows = [
             { x: 3.5, layers: 3 },
             { x: 1.5, layers: 2 },
@@ -375,7 +593,7 @@ var ShipBuilders = (function () {
                 for (var z = -1; z <= 1; z++) {
                     var cGeo = new THREE.BoxGeometry(1.6, 0.9, 1.1);
                     var cColor = containerColors[Math.floor(Math.random() * containerColors.length)];
-                    var container = new THREE.Mesh(cGeo, shipMat(cColor, { roughness: 0.8, metalness: 0.2 }));
+                    var container = new THREE.Mesh(cGeo, containerMats(cColor));
                     container.position.set(row.x, 3.6 + layer * 0.95, z * 1.2);
                     group.add(container);
                 }
@@ -397,13 +615,13 @@ var ShipBuilders = (function () {
         _add(group, new THREE.Mesh(cableGeo, shipMat('#71717a'))).position.set(-1.8, 5.8, 0);
 
         var bridgeLowerGeo = new THREE.BoxGeometry(3, 2.5, 3.5);
-        _add(group, new THREE.Mesh(bridgeLowerGeo, shipMat('#3f3f46'))).position.set(-5.5, 4.3, 0);
+        _add(group, new THREE.Mesh(bridgeLowerGeo, shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 4.3, 0);
         var bridgeUpperGeo = new THREE.BoxGeometry(2.5, 1.2, 3.2);
-        _add(group, new THREE.Mesh(bridgeUpperGeo, shipMat('#4a4a52'))).position.set(-5.5, 6.2, 0);
+        _add(group, new THREE.Mesh(bridgeUpperGeo, shipMat('#e3e9ee', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 6.2, 0);
 
         var bWingGeo = new THREE.BoxGeometry(0.8, 0.6, 0.5);
-        _add(group, new THREE.Mesh(bWingGeo, shipMat('#3f3f46'))).position.set(-5.5, 6.1, 2.1);
-        _add(group, new THREE.Mesh(bWingGeo.clone(), shipMat('#3f3f46'))).position.set(-5.5, 6.1, -2.1);
+        _add(group, new THREE.Mesh(bWingGeo, shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 6.1, 2.1);
+        _add(group, new THREE.Mesh(bWingGeo.clone(), shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 6.1, -2.1);
 
         var winGeo = new THREE.BoxGeometry(0.1, 0.6, 2.8);
         _add(group, new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.8 }))).position.set(-3.95, 6.2, 0);
@@ -412,7 +630,7 @@ var ShipBuilders = (function () {
         _add(group, new THREE.Mesh(winSideGeo.clone(), shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.5 }))).position.set(-5.5, 6.2, -1.62);
 
         var funnelGeo = new THREE.CylinderGeometry(0.35, 0.45, 2, 8);
-        _add(group, new THREE.Mesh(funnelGeo, shipMat('#27272a'))).position.set(-6.5, 6.5, 0);
+        _add(group, new THREE.Mesh(funnelGeo, shipMat('#a63d35', { roughness: 0.6 }))).position.set(-6.5, 6.5, 0);
         var fCapGeo = new THREE.CylinderGeometry(0.4, 0.33, 0.2, 8);
         _add(group, new THREE.Mesh(fCapGeo, shipMat('#1e1e1e'))).position.set(-6.5, 7.55, 0);
 
@@ -434,6 +652,8 @@ var ShipBuilders = (function () {
         addAnchor(THREE, group, 7.5, 2.0, -1.8, 1.0);
         addHawsepipe(THREE, group, 7.8, 2.6, -1.8, 1.0);
         addRudder(THREE, group, -7.8, 0.8, 1.6, color);
+        addPropeller(THREE, group, -7.3, 0.8, 0.9);
+        addBulbousBow(THREE, group, 8.7, 0.5, 1.0, '#2c3e50');
     }
 
     function buildPassenger(THREE, group, color) {
@@ -443,6 +663,7 @@ var ShipBuilders = (function () {
         });
         var hull = new THREE.Mesh(hullGeo, rustHullMat('#f8fafc', 'passenger'));
         hull.position.set(0, 3.4, 0);
+        hullMeshRef = hull;
         group.add(hull);
 
         var deckWidths = [13, 12, 10, 8];
@@ -510,6 +731,8 @@ var ShipBuilders = (function () {
         addAnchor(THREE, group, 8.5, 2.0, -2.2, 0.9);
         addHawsepipe(THREE, group, 8.8, 2.6, -2.2, 0.9);
         addRudder(THREE, group, -7.8, 0.6, 1.6, '#cbd5e1');
+        addPropeller(THREE, group, -8.2, 0.8, 1.0);
+        addBulbousBow(THREE, group, 9.2, 0.5, 1.1, '#f8fafc');
     }
 
     function buildFishing(THREE, group, color) {
@@ -517,8 +740,9 @@ var ShipBuilders = (function () {
             length: 10, beam: 2.8, depth: 2.0,
             bowFineness: 1.5, sternFullness: 0.8
         });
-        var hull = new THREE.Mesh(hullGeo, rustHullMat('#e2e8f0', 'fishing'));
+        var hull = new THREE.Mesh(hullGeo, rustHullMat('#2c5f94', 'fishing'));
         hull.position.set(0, 2.5, 0);
+        hullMeshRef = hull;
         group.add(hull);
 
         var deckGeo = new THREE.BoxGeometry(8, 0.15, 2.8);
@@ -529,7 +753,7 @@ var ShipBuilders = (function () {
         _add(group, new THREE.Mesh(bulwarkGeo.clone(), shipMat('#cbd5e1', { roughness: 0.7 }))).position.set(0.5, 2.8, -1.4);
 
         var bridgeGeo = new THREE.BoxGeometry(2, 1.8, 2);
-        _add(group, new THREE.Mesh(bridgeGeo, shipMat('#374151'))).position.set(-2, 3.5, 0);
+        _add(group, new THREE.Mesh(bridgeGeo, shipMat('#dde3e8', { roughness: 0.65 }))).position.set(-2, 3.5, 0);
         var roofGeo = new THREE.BoxGeometry(2.2, 0.1, 2.2);
         _add(group, new THREE.Mesh(roofGeo, shipMat('#52525b'))).position.set(-2, 4.45, 0);
 
@@ -549,7 +773,7 @@ var ShipBuilders = (function () {
         crossTreeGeo.rotateX(Math.PI / 2);
         _add(group, new THREE.Mesh(crossTreeGeo, shipMat('#9ca3af', { metalness: 0.5 }))).position.set(0, 6.5, 0);
 
-        var boomGeo = new THREE.CylinderGeometry(0.03, 0.05, 5, 6);
+        var boomGeo = new THREE.CylinderGeometry(0.06, 0.09, 5, 6);
         var boom1 = new THREE.Mesh(boomGeo, shipMat('#9ca3af', { metalness: 0.5 }));
         boom1.position.set(0, 5.5, 1.5);
         boom1.rotation.x = -0.5;
@@ -561,7 +785,7 @@ var ShipBuilders = (function () {
         boom2.rotation.z = 0.3;
         group.add(boom2);
 
-        var aFrameGeo = new THREE.CylinderGeometry(0.04, 0.06, 2.5, 6);
+        var aFrameGeo = new THREE.CylinderGeometry(0.07, 0.1, 2.5, 6);
         var aFrame1 = new THREE.Mesh(aFrameGeo, shipMat('#fbbf24', { metalness: 0.5 }));
         aFrame1.position.set(-3.8, 3.5, 0.6);
         aFrame1.rotation.z = -0.2;
@@ -593,6 +817,7 @@ var ShipBuilders = (function () {
         addAnchor(THREE, group, 4.5, 1.8, 1.2, 0.7);
         addHawsepipe(THREE, group, 4.7, 2.3, 1.2, 0.7);
         addRudder(THREE, group, -4.5, 0.6, 1.2, color);
+        addPropeller(THREE, group, -4.1, 0.7, 0.5);
     }
 
     function buildMilitary(THREE, group, color) {
@@ -602,6 +827,7 @@ var ShipBuilders = (function () {
         });
         var hull = new THREE.Mesh(hullGeo, rustHullMat('#9ca3af', 'military'));
         hull.position.set(0, 2.9, 0);
+        hullMeshRef = hull;
         group.add(hull);
 
         var deckGeo = new THREE.BoxGeometry(15, 0.15, 3.2);
@@ -620,12 +846,12 @@ var ShipBuilders = (function () {
 
         var superGeo = new THREE.ExtrudeGeometry(superShape, { depth: 2.5, bevelEnabled: false });
         superGeo.rotateX(-Math.PI / 2);
-        var superstructure = new THREE.Mesh(superGeo, shipMat('#52525b'));
+        var superstructure = new THREE.Mesh(superGeo, shipMat('#8a929b', { roughness: 0.65 }));
         superstructure.position.set(-2, 3.0, -1.25);
         group.add(superstructure);
 
         var bridgeUpperGeo = new THREE.BoxGeometry(3.5, 0.8, 2.5);
-        _add(group, new THREE.Mesh(bridgeUpperGeo, shipMat('#4a4a52'))).position.set(-2, 5.7, 0);
+        _add(group, new THREE.Mesh(bridgeUpperGeo, shipMat('#959da6', { roughness: 0.65 }))).position.set(-2, 5.7, 0);
 
         var winGeo = new THREE.BoxGeometry(3.5, 0.2, 2.3);
         _add(group, new THREE.Mesh(winGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.6 }))).position.set(-2, 5.9, 0);
@@ -668,7 +894,7 @@ var ShipBuilders = (function () {
         _add(group, new THREE.Mesh(rotRadarGeo, shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-2, 9.2, 0);
 
         var funnelGeo = new THREE.BoxGeometry(1.2, 1.5, 1.8);
-        _add(group, new THREE.Mesh(funnelGeo, shipMat('#3f3f46'))).position.set(-5, 4.5, 0);
+        _add(group, new THREE.Mesh(funnelGeo, shipMat('#8a929b', { roughness: 0.65 }))).position.set(-5, 4.5, 0);
         var grillGeo = new THREE.BoxGeometry(1.0, 0.06, 1.6);
         _add(group, new THREE.Mesh(grillGeo, shipMat('#27272a'))).position.set(-5, 5.28, 0);
 
@@ -698,6 +924,8 @@ var ShipBuilders = (function () {
         var sonarGeo = new THREE.SphereGeometry(0.5, 10, 8);
         sonarGeo.scale(1.5, 0.8, 0.8);
         _add(group, new THREE.Mesh(sonarGeo, shipMat('#52525b', { roughness: 0.4 }))).position.set(10.5, 1.0, 0);
+        addPropeller(THREE, group, -7.4, 0.8, 0.75, 0.5);
+        addPropeller(THREE, group, -7.4, 0.8, 0.75, -0.5);
     }
 
     function buildTug(THREE, group, color) {
@@ -705,8 +933,9 @@ var ShipBuilders = (function () {
             length: 8, beam: 3.6, depth: 2.8,
             bowFineness: 0.8, sternFullness: 0.9
         });
-        var hull = new THREE.Mesh(hullGeo, rustHullMat('#e2e8f0', 'tug'));
+        var hull = new THREE.Mesh(hullGeo, rustHullMat('#7a2e25', 'tug'));
         hull.position.set(0, 3.0, 0);
+        hullMeshRef = hull;
         group.add(hull);
 
         var deckGeo = new THREE.BoxGeometry(6, 0.2, 3.2);
@@ -716,7 +945,7 @@ var ShipBuilders = (function () {
         _add(group, new THREE.Mesh(kneeGeo, shipMat('#374151', { roughness: 0.8, metalness: 0.3 }))).position.set(3.5, 2.5, 0);
 
         var bridgeGeo = new THREE.BoxGeometry(2.5, 2.8, 2.8);
-        _add(group, new THREE.Mesh(bridgeGeo, shipMat('#374151'))).position.set(0, 4.5, 0);
+        _add(group, new THREE.Mesh(bridgeGeo, shipMat('#e6e1d3', { roughness: 0.65 }))).position.set(0, 4.5, 0);
         var roofGeo = new THREE.BoxGeometry(2.8, 0.12, 3.0);
         _add(group, new THREE.Mesh(roofGeo, shipMat('#52525b'))).position.set(0, 5.96, 0);
 
@@ -781,6 +1010,7 @@ var ShipBuilders = (function () {
         addAnchor(THREE, group, 3.5, 1.8, 1.6, 0.7);
         addHawsepipe(THREE, group, 3.7, 2.4, 1.6, 0.7);
         addRudder(THREE, group, -3.5, 0.6, 1.4, color);
+        addPropeller(THREE, group, -3.1, 0.7, 0.7);
     }
 
     function buildGenericShip(THREE, group, color) {
@@ -788,8 +1018,9 @@ var ShipBuilders = (function () {
             length: 11, beam: 3.2, depth: 2.5,
             bowFineness: 1.2, sternFullness: 0.7
         });
-        var hull = new THREE.Mesh(hullGeo, rustHullMat('#e2e8f0', 'other'));
+        var hull = new THREE.Mesh(hullGeo, rustHullMat('#454c54', 'other'));
         hull.position.set(0, 2.8, 0);
+        hullMeshRef = hull;
         group.add(hull);
 
         var deckGeo = new THREE.BoxGeometry(10, 0.15, 3.2);
@@ -847,13 +1078,18 @@ var ShipBuilders = (function () {
         addAnchor(THREE, group, 5.0, 1.8, 1.4, 0.8);
         addHawsepipe(THREE, group, 5.2, 2.4, 1.4, 0.8);
         addRudder(THREE, group, -5.5, 0.6, 1.2, color);
+        addPropeller(THREE, group, -5.1, 0.7, 0.6);
     }
 
     // ── Main entry point ──
-    function buildShipModel(type, color) {
+    // name (optional) → painted on the hull as an identity decal
+    function buildShipModel(type, color, name) {
         var THREE = window.THREE;
         var group = new THREE.Group();
         color = color || (window.SHIP_COLORS && window.SHIP_COLORS[type]) || '#6b7280';
+        _shipName = name || null;
+        hullMeshRef = null;
+        _decalProxy = null;
 
         switch (type) {
             case 'tanker':    buildTanker(THREE, group, color); break;
@@ -871,6 +1107,11 @@ var ShipBuilders = (function () {
         };
         var wl = wlMap[type] || wlMap['other'];
         addWaterline(THREE, group, wl[0], wl[1], wl[2]);
+
+        // Painted name + draft marks (uses hullMeshRef set by the builder above)
+        var idType = (type === 'tanker' || type === 'cargo' || type === 'passenger' ||
+                      type === 'fishing' || type === 'military' || type === 'tug') ? type : 'other';
+        addHullIdentity(THREE, group, idType);
 
         return group;
     }

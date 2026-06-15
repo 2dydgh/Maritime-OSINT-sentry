@@ -15,10 +15,12 @@ var ShipPreview3D = (function () {
 
     var _shipType = null;
     var _dimensions = null;
+    var _shipName = null;
 
-    function initThumbnail(containerEl, shipType, dimensions) {
+    function initThumbnail(containerEl, shipType, dimensions, shipName) {
         _shipType = shipType;
         _dimensions = dimensions;
+        _shipName = shipName || null;
         _initScene(containerEl, false);
     }
 
@@ -141,7 +143,7 @@ var ShipPreview3D = (function () {
         _buildEnvMap(THREE);
 
         // ── Build ship ──
-        shipGroup = ShipBuilders.buildShipModel(_shipType);
+        shipGroup = ShipBuilders.buildShipModel(_shipType, null, _shipName);
 
         // Enable shadows (same as roll-viewer)
         shipGroup.traverse(function (child) {

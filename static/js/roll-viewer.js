@@ -14,7 +14,7 @@ var RollViewer = (function () {
     var waterMesh = null;
     var gltfModelCache = {};   // { type: THREE.Group }
     var gltfLoader = null;
-    var useGltfModels = false;  // disabled — GLTF models need per-model tuning
+    var useGltfModels = false;  // disabled — only cargo.glb exists; code ships keep all types consistent
     var composer = null;
     var mainDirLight = null;
     var waterNormals = null;
@@ -181,6 +181,62 @@ var RollViewer = (function () {
         return 'other';
     }
 
+    var SHIP_TYPE_KO = {
+        cargo: '화물선', tanker: '탱커', passenger: '여객선',
+        fishing: '어선', military: '군함', tug: '예인선', other: '기타'
+    };
+
+    function _escHtml(s) {
+        return String(s).replace(/[&<>"]/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+        });
+    }
+
+    // Rough distance (km) from the centre of Korean waters (equirectangular approx).
+    var _KR_CENTER = { lat: 36.0, lon: 128.5 };
+    function _distFromKoreaKm(lat, lon) {
+        if (lat == null || lon == null || isNaN(lat) || isNaN(lon)) return 99999;
+        var dLat = lat - _KR_CENTER.lat;
+        var dLon = (lon - _KR_CENTER.lon) * Math.cos(_KR_CENTER.lat * Math.PI / 180);
+        return Math.sqrt(dLat * dLat + dLon * dLon) * 111;
+    }
+
+    // Pick vessels for the empty-state quick picker, ranked by Korea-nearshore
+    // proximity + vessel size (roll prediction matters most for large ships, and
+    // the demo context is domestic). Each entry carries enough info (type / length
+    // / speed / proximity) for the user to choose with a rationale.
+    function _pickCandidateShips(limit) {
+        limit = limit || 10;
+        var map = window.shipDataMap || {};
+        var keys = Object.keys(map);
+        var scored = [];
+        for (var i = 0; i < keys.length; i++) {
+            var s = map[keys[i]];
+            if (!s) continue;
+            var mmsi = s.mmsi || keys[i];
+            var len = parseFloat(s.length) || 0;
+            var lat = parseFloat(s.lat), lon = parseFloat(s.lng);
+            var dist = _distFromKoreaKm(lat, lon);
+            var sog = parseFloat(s.sog);
+            var typeKo = SHIP_TYPE_KO[getShipTypeKey(s)] || '기타';
+            var hasName = s.name && s.name !== 'UNKNOWN';
+            // Nearshore bonus (up to ~1500km) weighted with length.
+            var score = Math.max(0, 1500 - dist) * 0.3 + len;
+            scored.push({
+                mmsi: mmsi,
+                name: hasName ? _escHtml(s.name) : ('MMSI ' + mmsi),
+                typeKo: typeKo,
+                lenTxt: len ? Math.round(len) + 'm' : null,
+                sogTxt: (!isNaN(sog) && sog > 0) ? sog.toFixed(1) + 'kn' : null,
+                near: dist < 600,
+                distTxt: dist < 99999 ? (dist < 1 ? '0km' : Math.round(dist) + 'km') : null,
+                score: score
+            });
+        }
+        scored.sort(function (a, b) { return b.score - a.score; });
+        return scored.slice(0, limit);
+    }
+
     function easeOutCubic(t) {
         return 1 - Math.pow(1 - t, 3);
     }
@@ -244,10 +300,37 @@ var RollViewer = (function () {
             container.appendChild(backBtn);
             var placeholder = document.createElement('div');
             placeholder.className = 'roll-viewer-placeholder';
+            var ships = _pickCandidateShips(10);
+            var listHtml = ships.length
+                ? '<div class="roll-ship-picker">' + ships.map(function(s) {
+                        var meta = [s.lenTxt, s.sogTxt, s.distTxt && ('한국 ' + s.distTxt)]
+                            .filter(Boolean).join(' · ');
+                        return '<button class="roll-ship-row" data-mmsi="' + s.mmsi + '">' +
+                            '<i class="fa-solid fa-ship"></i>' +
+                            '<div class="roll-ship-main">' +
+                                '<div class="roll-ship-line1">' +
+                                    '<span class="roll-ship-name">' + s.name + '</span>' +
+                                    '<span class="roll-ship-type">' + s.typeKo + '</span>' +
+                                    (s.near ? '<span class="roll-ship-near">근해</span>' : '') +
+                                '</div>' +
+                                (meta ? '<div class="roll-ship-line2">' + meta + '</div>' : '') +
+                            '</div>' +
+                        '</button>';
+                    }).join('') + '</div>'
+                : '<div class="screen-empty-sub" style="margin-top:10px;">추적 중인 선박이 없습니다.<br>지구본에서 선박을 선택해 주세요.</div>';
             placeholder.innerHTML =
-                '<i class="fa-solid fa-ship"></i>' +
-                '<span>지구본에서 선박을 선택한 후<br>횡요각 카드를 클릭하세요</span>';
+                '<div class="screen-empty-card roll-empty-card">' +
+                    '<i class="fa-solid fa-compass-drafting"></i>' +
+                    '<div class="screen-empty-title">횡요각 예측</div>' +
+                    '<div class="screen-empty-sub">지구본에서 선박을 클릭하거나,<br>아래에서 바로 선택하세요</div>' +
+                    (ships.length ? '<div class="roll-picker-head">추적 중인 선박 · 한국 근해 우선</div>' : '') +
+                    listHtml +
+                '</div>';
             container.appendChild(placeholder);
+            placeholder.addEventListener('click', function (e) {
+                var row = e.target.closest('.roll-ship-row');
+                if (row && row.dataset.mmsi) load(row.dataset.mmsi);
+            });
             return;
         }
 
@@ -320,6 +403,16 @@ var RollViewer = (function () {
         startAnimation();
     }
 
+    // The canvas extends under the glass info panel; shift the projection so the
+    // ship centers in the uncovered area. Panel width comes from the CSS var.
+    function applyPanelViewOffset(w, h) {
+        var layoutEl = document.querySelector('.roll-viewer-layout');
+        var panelW = layoutEl
+            ? parseFloat(getComputedStyle(layoutEl).getPropertyValue('--rv-panel-w')) || 0
+            : 0;
+        camera.setViewOffset(w, h, panelW / 2, 0, w, h);
+    }
+
     // ── initScene(container) ──
     function initScene(container) {
         var THREE = window.THREE;
@@ -334,6 +427,7 @@ var RollViewer = (function () {
         camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
         camera.position.set(CAM_START.x, CAM_START.y, CAM_START.z);
         camera.lookAt(0, 2, 0);
+        applyPanelViewOffset(w, h);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -391,6 +485,7 @@ var RollViewer = (function () {
             var ww = container.clientWidth;
             var hh = container.clientHeight;
             camera.aspect = ww / (hh || 1);
+            applyPanelViewOffset(ww, hh);
             camera.updateProjectionMatrix();
             renderer.setSize(ww, hh);
             if (composer) composer.setSize(ww, hh);
@@ -1799,29 +1894,31 @@ var RollViewer = (function () {
                 var container = new THREE.Group();
                 container.add(model);
 
-                // Normalize scale — target hull length ~20 units
+                // Orient FIRST so the bounding box below reflects the final pose —
+                // rotating after centering shifts the model off the roll pivot.
                 var box = new THREE.Box3().setFromObject(container);
                 var size = new THREE.Vector3();
+                box.getSize(size);
+                if (size.z > size.x * 1.3) {
+                    model.rotation.y = Math.PI / 2;
+                }
+
+                // Normalize scale — target hull length ~20 units
+                box.setFromObject(container);
                 box.getSize(size);
                 var maxDim = Math.max(size.x, size.y, size.z);
                 var scale = 20 / maxDim;
                 model.scale.setScalar(scale);
 
-                // Recompute after scale
+                // Recompute after scale, center horizontally, and sink the hull so
+                // the waterline actually cuts it (group origin is the roll pivot)
                 box.setFromObject(container);
                 box.getSize(size);
                 var center = new THREE.Vector3();
                 box.getCenter(center);
-
-                // Center horizontally, place bottom at waterline (y ~ 2)
                 model.position.x -= center.x;
                 model.position.z -= center.z;
-                model.position.y -= box.min.y - 2;
-
-                // Auto-rotate: if model is longer on Z axis, rotate to face +X
-                if (size.z > size.x * 1.3) {
-                    model.rotation.y = Math.PI / 2;
-                }
+                model.position.y -= box.min.y + size.y * 0.18;
 
                 // Enable shadows and apply envMap
                 container.traverse(function (child) {
@@ -1920,6 +2017,19 @@ var RollViewer = (function () {
         ctx.fillStyle = baseColor;
         ctx.fillRect(0, 0, sz, sz);
 
+        // Hull plating seams — horizontal weld lines with staggered vertical joints
+        ctx.fillStyle = '#000000';
+        for (var py = 28; py < sz; py += 44) {
+            ctx.globalAlpha = 0.14;
+            ctx.fillRect(0, py, sz, 1.5);
+            ctx.globalAlpha = 0.06;
+            var stagger = ((py / 44) % 2) * 32;
+            for (var px = stagger; px < sz; px += 64) {
+                ctx.fillRect(px, py - 44, 1.5, 44);
+            }
+        }
+        ctx.globalAlpha = 1.0;
+
         var rustColors = ['#8B4513', '#A0522D', '#6B3410', '#CD853F', '#D2691E'];
 
         // Rust patches (elliptical blotches)
@@ -1984,6 +2094,236 @@ var RollViewer = (function () {
             params.envMapIntensity = 0.35;
         }
         return new THREE.MeshStandardMaterial(params);
+    }
+
+    // ── Corrugated container texture — vertical ribs + grime so boxes read as
+    // real containers instead of flat-shaded toy blocks ──
+    var _containerTexCache = {};
+    function createContainerTexture(baseColor) {
+        if (_containerTexCache[baseColor]) return _containerTexCache[baseColor];
+        var THREE = window.THREE;
+        var w = 128, h = 128;
+        var cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        var ctx = cv.getContext('2d');
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(0, 0, w, h);
+
+        // Vertical corrugation ribs (shadow + highlight pair)
+        for (var x = 0; x < w; x += 8) {
+            ctx.globalAlpha = 0.22;
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x, 0, 2, h);
+            ctx.globalAlpha = 0.13;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x + 4, 0, 2, h);
+        }
+
+        // Grime streaks running down from the roof line
+        ctx.fillStyle = '#1a1a1a';
+        for (var s = 0; s < 5; s++) {
+            ctx.globalAlpha = 0.05 + Math.random() * 0.1;
+            ctx.fillRect(Math.random() * w, 0, 2 + Math.random() * 4, 20 + Math.random() * 60);
+        }
+
+        // Corner-casting frame
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(0, 0, w, h);
+        ctx.globalAlpha = 1;
+
+        var tex = new THREE.CanvasTexture(cv);
+        _containerTexCache[baseColor] = tex;
+        return tex;
+    }
+
+    // Per-face materials: corrugated sides, plain darker roof/floor.
+    // BoxGeometry face order: +x, -x, +y(top), -y, +z, -z
+    var _containerMatCache = {};
+    function containerMats(baseColor) {
+        if (_containerMatCache[baseColor]) return _containerMatCache[baseColor];
+        var THREE = window.THREE;
+        var side = new THREE.MeshStandardMaterial({
+            map: createContainerTexture(baseColor),
+            roughness: 0.85,
+            metalness: 0.15
+        });
+        var top = new THREE.MeshStandardMaterial({
+            color: new THREE.Color(baseColor).multiplyScalar(0.7),
+            roughness: 0.9,
+            metalness: 0.15
+        });
+        if (shipEnvMap) {
+            side.envMap = shipEnvMap; side.envMapIntensity = 0.2;
+            top.envMap = shipEnvMap; top.envMapIntensity = 0.15;
+        }
+        var mats = [side, side, top, top, side, side];
+        _containerMatCache[baseColor] = mats;
+        return mats;
+    }
+
+    // ── Hull identity decals — painted ship name (bow quarters + stern) and
+    // draft marks, rendered as thin planes floating just off the hull plating ──
+    var HULL_DIMS = {
+        cargo:     { length: 17, beam: 3.8, deckY: 3.0, wlY: 1.6 },
+        tanker:    { length: 18, beam: 4.4, deckY: 3.0, wlY: 1.6 },
+        passenger: { length: 18, beam: 5.0, deckY: 3.4, wlY: 1.4 },
+        fishing:   { length: 10, beam: 2.8, deckY: 2.5, wlY: 1.4 },
+        military:  { length: 18, beam: 3.2, deckY: 2.9, wlY: 1.6 },
+        tug:       { length: 8,  beam: 3.6, deckY: 3.0, wlY: 1.6 },
+        other:     { length: 11, beam: 3.2, deckY: 2.8, wlY: 1.5 }
+    };
+
+    function makeTextTexture(text, color, w, h) {
+        var THREE = window.THREE;
+        var cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        var ctx = cv.getContext('2d');
+        var fs = Math.min(h * 0.68, (w * 0.92) / Math.max(text.length, 1) * 1.7);
+        ctx.font = '700 ' + fs.toFixed(0) + "px 'Wanted Sans Variable', 'Pretendard Variable', 'Inter', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.92;
+        ctx.fillText(text, w / 2, h / 2);
+        return new THREE.CanvasTexture(cv);
+    }
+
+    // Draft mark column: depth numbers + gauge ticks, read bottom-up like real marks
+    function makeDraftTexture(color) {
+        var THREE = window.THREE;
+        var cv = document.createElement('canvas');
+        cv.width = 96; cv.height = 256;
+        var ctx = cv.getContext('2d');
+        ctx.font = "700 38px 'JetBrains Mono', monospace";
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.85;
+        var levels = [8, 6, 4, 2];
+        for (var i = 0; i < levels.length; i++) {
+            var y = 32 + i * 64;
+            ctx.fillText(String(levels[i]) + 'M', 6, y);
+            ctx.fillRect(64, y - 3, 26, 6);
+        }
+        return new THREE.CanvasTexture(cv);
+    }
+
+    var hullMeshRef = null;   // set by each builder; decals project onto this mesh
+    var _decalProxy = null;   // non-indexed copy — r137 DecalGeometry rejects indexed geometry
+
+    function _getDecalProxy() {
+        var THREE = window.THREE;
+        if (_decalProxy && _decalProxy.userData.src === hullMeshRef) return _decalProxy;
+        var geo = hullMeshRef.geometry.index
+            ? hullMeshRef.geometry.toNonIndexed()
+            : hullMeshRef.geometry;
+        _decalProxy = new THREE.Mesh(geo, hullMeshRef.material);
+        _decalProxy.position.copy(hullMeshRef.position);
+        _decalProxy.rotation.copy(hullMeshRef.rotation);
+        _decalProxy.scale.copy(hullMeshRef.scale);
+        _decalProxy.updateMatrixWorld(true);
+        _decalProxy.userData.src = hullMeshRef;
+        return _decalProxy;
+    }
+
+    // Project a texture onto the hull plating so it hugs the curvature like paint.
+    // Falls back to a floating plane when DecalGeometry isn't loaded.
+    function _projectHullDecal(tex, pos, rotY, w, h) {
+        var THREE = window.THREE;
+        if (THREE.DecalGeometry && hullMeshRef && shipGroup) {
+            var geo = new THREE.DecalGeometry(
+                _getDecalProxy(),
+                new THREE.Vector3(pos.x, pos.y, pos.z),
+                new THREE.Euler(0, rotY, 0),
+                new THREE.Vector3(w, h, 2.0)
+            );
+            var mat = new THREE.MeshStandardMaterial({
+                map: tex,
+                transparent: true,
+                depthWrite: false,
+                polygonOffset: true,
+                polygonOffsetFactor: -4,
+                roughness: 0.7,
+                metalness: 0.1,
+                // Hull triangles have mixed winding (masked by the hull's own
+                // DoubleSide material) — without this the decal gets culled.
+                side: THREE.DoubleSide
+            });
+            addToShip(new THREE.Mesh(geo, mat));
+            return;
+        }
+        var plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), _decalMat(tex));
+        plane.rotation.y = rotY;
+        plane.position.set(pos.x, pos.y, pos.z);
+        addToShip(plane);
+    }
+
+    function _decalMat(tex) {
+        var THREE = window.THREE;
+        return new THREE.MeshStandardMaterial({
+            map: tex,
+            transparent: true,
+            roughness: 0.7,
+            metalness: 0.1,
+            polygonOffset: true,
+            polygonOffsetFactor: -2
+        });
+    }
+
+    function addHullIdentity(THREE, type) {
+        var dims = HULL_DIMS[type] || HULL_DIMS.other;
+        var ship = window.shipDataMap && window.shipDataMap[currentMmsi];
+        var name = (ship && ship.name && ship.name !== 'UNKNOWN') ? String(ship.name).toUpperCase() : null;
+        // Light text on dark hulls, dark text on the pale passenger/military hulls
+        var textColor = (type === 'passenger' || type === 'military') ? '#23303c' : '#e8edf2';
+        var nameY = dims.wlY + (dims.deckY - dims.wlY) * 0.58;
+        var halfZ = dims.beam / 2 + 0.06;
+
+        if (name) {
+            var nameW = Math.min(dims.length * 0.22, 0.42 * name.length + 0.8);
+            var nameH = nameW * 0.26;
+            var tex = makeTextTexture(name, textColor, 512, 96);
+            _projectHullDecal(tex, { x: dims.length * 0.22, y: nameY, z: halfZ }, 0, nameW, nameH);
+            _projectHullDecal(tex, { x: dims.length * 0.22, y: nameY, z: -halfZ }, Math.PI, nameW, nameH);
+            _projectHullDecal(tex, { x: -dims.length / 2 - 0.02, y: nameY, z: 0 }, -Math.PI / 2, nameW * 0.75, nameH * 0.75);
+        }
+
+        // Draft marks — big merchant/naval hulls only. Midship, where the hull is
+        // full-beam (the bow taper slips out of the decal projection box).
+        if (type === 'cargo' || type === 'tanker' || type === 'passenger' || type === 'military') {
+            var dTex = makeDraftTexture(textColor);
+            _projectHullDecal(dTex, { x: 0, y: dims.wlY + 0.2, z: halfZ }, 0, 0.5, 1.4);
+            _projectHullDecal(dTex, { x: 0, y: dims.wlY + 0.2, z: -halfZ }, Math.PI, 0.5, 1.4);
+        }
+    }
+
+    // ── Underwater & stern fittings ──
+    function addPropeller(THREE, x, y, r, z) {
+        var prop = new THREE.Group();
+        var bronze = shipMat('#9c7a45', { metalness: 0.8, roughness: 0.35 });
+        var hubGeo = new THREE.CylinderGeometry(0.12 * r, 0.16 * r, 0.38 * r, 8);
+        hubGeo.rotateZ(Math.PI / 2);
+        prop.add(new THREE.Mesh(hubGeo, bronze));
+        for (var i = 0; i < 4; i++) {
+            var pivot = new THREE.Group();
+            var bladeGeo = new THREE.BoxGeometry(0.05 * r, 0.85 * r, 0.3 * r);
+            var blade = new THREE.Mesh(bladeGeo, bronze);
+            blade.position.y = 0.5 * r;
+            blade.rotation.y = 0.45; // blade pitch
+            pivot.add(blade);
+            pivot.rotation.x = i * Math.PI / 2 + 0.4;
+            prop.add(pivot);
+        }
+        prop.position.set(x, y, z || 0);
+        addToShip(prop);
+    }
+
+    function addBulbousBow(THREE, x, y, scale, color) {
+        var geo = new THREE.SphereGeometry(0.5 * scale, 10, 8);
+        geo.scale(1.9, 0.75, 0.75);
+        addToShip(new THREE.Mesh(geo, shipMat(color, { roughness: 0.6 }))).position.set(x, y, 0);
     }
 
     // ── Deck railing helper — stanchions + top bar + middle bar ──
@@ -2163,23 +2503,23 @@ var RollViewer = (function () {
         // Cardinal direction labels (N, E, S, W)
         var cardinals = [
             { label: 'N', angle: 0, color: '#ef4444' },
-            { label: 'E', angle: Math.PI / 2, color: '#ffffff' },
-            { label: 'S', angle: Math.PI, color: '#ffffff' },
-            { label: 'W', angle: -Math.PI / 2, color: '#ffffff' }
+            { label: 'E', angle: Math.PI / 2, color: '#cbd5e1' },
+            { label: 'S', angle: Math.PI, color: '#cbd5e1' },
+            { label: 'W', angle: -Math.PI / 2, color: '#cbd5e1' }
         ];
         cardinals.forEach(function (c) {
             var cv = document.createElement('canvas');
-            cv.width = 64; cv.height = 64;
+            cv.width = 128; cv.height = 128;
             var cx = cv.getContext('2d');
             cx.fillStyle = c.color;
-            cx.font = 'bold 48px monospace';
+            cx.font = "600 88px 'Wanted Sans Variable', 'Pretendard Variable', 'Inter', sans-serif";
             cx.textAlign = 'center';
             cx.textBaseline = 'middle';
-            cx.fillText(c.label, 32, 32);
+            cx.fillText(c.label, 64, 68);
             var tex = new THREE.CanvasTexture(cv);
-            var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.85 }));
-            sp.position.set(Math.sin(c.angle) * 15.5, 1.0, Math.cos(c.angle) * 15.5);
-            sp.scale.set(2.5, 2.5, 1);
+            var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.7 }));
+            sp.position.set(Math.sin(c.angle) * 15.5, 1.4, Math.cos(c.angle) * 15.5);
+            sp.scale.set(1.9, 1.9, 1);
             compassGroup.add(sp);
         });
 
@@ -2189,7 +2529,7 @@ var RollViewer = (function () {
         canvas.width = 128; canvas.height = 32;
         var ctx = canvas.getContext('2d');
         ctx.fillStyle = '#38bdf8';
-        ctx.font = 'bold 20px monospace';
+        ctx.font = "700 20px 'Wanted Sans Variable', 'Pretendard Variable', 'Inter', sans-serif";
         ctx.textAlign = 'center';
         ctx.fillText('WAVE ' + Math.round(weather.waveDirection) + '°', 64, 22);
         var texture = new THREE.CanvasTexture(canvas);
@@ -2369,6 +2709,9 @@ var RollViewer = (function () {
         };
         var wl = wlMap[type] || wlMap['other'];
         addWaterline(THREE, wl[0], wl[1], wl[2]);
+
+        // Painted name + draft marks from the selected ship's AIS data
+        addHullIdentity(THREE, type);
     }
 
     // ── buildShip(type) — GLTF model with code-based fallback ──
@@ -2517,18 +2860,20 @@ var RollViewer = (function () {
             length: 18, beam: 4.4, depth: 3.0,
             bowFineness: 1.0, sternFullness: 0.8
         });
-        var hullMat = rustHullMat('#e2e8f0', 'tanker');
+        var hullMat = rustHullMat('#5d3328', 'tanker');
         var hull = new THREE.Mesh(hullGeo, hullMat);
         hull.position.set(0, 3.0, 0);
+        hullMeshRef = hull;
         addToShip(hull);
 
+        // Painted deck green — classic tanker working deck
         var deckGeo = new THREE.BoxGeometry(16, 0.2, 4.2);
-        addToShip(new THREE.Mesh(deckGeo, shipMat('#3f3f46'))).position.set(0, 3.0, 0);
+        addToShip(new THREE.Mesh(deckGeo, shipMat('#46594c', { roughness: 0.8 }))).position.set(0, 3.0, 0);
 
         // Tank dome tops (spherical caps)
         for (var td = -2; td <= 2; td++) {
             var domeGeo = new THREE.SphereGeometry(1.4, 12, 6, 0, Math.PI * 2, 0, Math.PI / 3);
-            addToShip(new THREE.Mesh(domeGeo, shipMat('#52525b', { roughness: 0.7, metalness: 0.3 }))).position.set(td * 3, 3.1, 0);
+            addToShip(new THREE.Mesh(domeGeo, shipMat('#c9ced3', { roughness: 0.7, metalness: 0.3 }))).position.set(td * 3, 3.1, 0);
         }
 
         // Catwalk (elevated walkway along centerline)
@@ -2562,16 +2907,16 @@ var RollViewer = (function () {
             addToShip(new THREE.Mesh(capGeo, shipMat('#71717a', { metalness: 0.5 }))).position.set(vp * 3, 4.55, 1.5);
         }
 
-        // Bridge (multi-layer)
+        // Bridge (multi-layer) — white accommodation block
         var bridgeGeo = new THREE.BoxGeometry(3.5, 2.0, 3.5);
-        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#3f3f46'))).position.set(-5.5, 4.0, 0);
+        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 4.0, 0);
         var bridgeUpperGeo = new THREE.BoxGeometry(3.0, 1.0, 3.2);
-        addToShip(new THREE.Mesh(bridgeUpperGeo, shipMat('#4a4a52'))).position.set(-5.5, 5.5, 0);
+        addToShip(new THREE.Mesh(bridgeUpperGeo, shipMat('#e3e9ee', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 5.5, 0);
 
         // Bridge wings
         var wingGeo = new THREE.BoxGeometry(1.0, 0.8, 0.6);
-        addToShip(new THREE.Mesh(wingGeo, shipMat('#3f3f46'))).position.set(-5.5, 5.4, 2.2);
-        addToShip(new THREE.Mesh(wingGeo.clone(), shipMat('#3f3f46'))).position.set(-5.5, 5.4, -2.2);
+        addToShip(new THREE.Mesh(wingGeo, shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 5.4, 2.2);
+        addToShip(new THREE.Mesh(wingGeo.clone(), shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 5.4, -2.2);
 
         // Windows (front + sides)
         var winGeo = new THREE.BoxGeometry(0.1, 0.5, 2.8);
@@ -2612,6 +2957,9 @@ var RollViewer = (function () {
         addHawsepipe(THREE, 8.8, 2.6, -2.0, 1.0);
         // Rudder
         addRudder(THREE, -8.8, 0.8, 1.8, color);
+        // Propeller + bulbous bow (kept deep so it only hints through the water)
+        addPropeller(THREE, -8.2, 0.8, 1.0);
+        addBulbousBow(THREE, 9.2, 0.5, 1.1, '#5d3328');
     }
 
     // ── Cargo: 컨테이너 적재, 크레인, 높은 브릿지, 래싱브릿지, 레일링 ──
@@ -2621,9 +2969,10 @@ var RollViewer = (function () {
             length: 17, beam: 3.8, depth: 3.0,
             bowFineness: 1.3, sternFullness: 0.7
         });
-        var hullMat = rustHullMat('#e2e8f0', 'cargo');
+        var hullMat = rustHullMat('#2c3e50', 'cargo');
         var hull = new THREE.Mesh(hullGeo, hullMat);
         hull.position.set(0, 3.0, 0);
+        hullMeshRef = hull;
         addToShip(hull);
 
         var deckGeo = new THREE.BoxGeometry(15, 0.2, 3.8);
@@ -2635,8 +2984,9 @@ var RollViewer = (function () {
             addToShip(new THREE.Mesh(holdCoverGeo, shipMat('#52525b', { roughness: 0.7 }))).position.set(3.5 - hc * 2, 3.15, 0);
         }
 
-        // Containers with lashing rods (visible gaps between)
-        var containerColors = ['#dc2626', '#2563eb', '#16a34a', '#ca8a04', '#9333ea', '#0891b2'];
+        // Containers with lashing rods (visible gaps between) — weathered
+        // shipping-line tones, not saturated web colors
+        var containerColors = ['#9b3b2e', '#27506e', '#3a5f47', '#b06a28', '#5b6068', '#6e3f4a'];
         var rows = [
             { x: 3.5, layers: 3 },
             { x: 1.5, layers: 2 },
@@ -2649,7 +2999,7 @@ var RollViewer = (function () {
                 for (var z = -1; z <= 1; z++) {
                     var cGeo = new THREE.BoxGeometry(1.6, 0.9, 1.1);
                     var cColor = containerColors[Math.floor(Math.random() * containerColors.length)];
-                    var container = new THREE.Mesh(cGeo, shipMat(cColor, { roughness: 0.8, metalness: 0.2 }));
+                    var container = new THREE.Mesh(cGeo, containerMats(cColor));
                     container.position.set(row.x, 3.6 + layer * 0.95, z * 1.2);
                     addToShip(container);
                 }
@@ -2674,16 +3024,16 @@ var RollViewer = (function () {
         var cableGeo = new THREE.CylinderGeometry(0.015, 0.015, 3, 4);
         addToShip(new THREE.Mesh(cableGeo, shipMat('#71717a'))).position.set(-1.8, 5.8, 0);
 
-        // Bridge (multi-deck)
+        // Bridge (multi-deck) — white accommodation block, like real ships
         var bridgeLowerGeo = new THREE.BoxGeometry(3, 2.5, 3.5);
-        addToShip(new THREE.Mesh(bridgeLowerGeo, shipMat('#3f3f46'))).position.set(-5.5, 4.3, 0);
+        addToShip(new THREE.Mesh(bridgeLowerGeo, shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 4.3, 0);
         var bridgeUpperGeo = new THREE.BoxGeometry(2.5, 1.2, 3.2);
-        addToShip(new THREE.Mesh(bridgeUpperGeo, shipMat('#4a4a52'))).position.set(-5.5, 6.2, 0);
+        addToShip(new THREE.Mesh(bridgeUpperGeo, shipMat('#e3e9ee', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 6.2, 0);
 
         // Bridge wings
         var bWingGeo = new THREE.BoxGeometry(0.8, 0.6, 0.5);
-        addToShip(new THREE.Mesh(bWingGeo, shipMat('#3f3f46'))).position.set(-5.5, 6.1, 2.1);
-        addToShip(new THREE.Mesh(bWingGeo.clone(), shipMat('#3f3f46'))).position.set(-5.5, 6.1, -2.1);
+        addToShip(new THREE.Mesh(bWingGeo, shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 6.1, 2.1);
+        addToShip(new THREE.Mesh(bWingGeo.clone(), shipMat('#d6dde3', { roughness: 0.6, metalness: 0.15 }))).position.set(-5.5, 6.1, -2.1);
 
         // Windows (front + sides)
         var winGeo = new THREE.BoxGeometry(0.1, 0.6, 2.8);
@@ -2692,9 +3042,9 @@ var RollViewer = (function () {
         addToShip(new THREE.Mesh(winSideGeo, shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.5 }))).position.set(-5.5, 6.2, 1.62);
         addToShip(new THREE.Mesh(winSideGeo.clone(), shipMat('#38bdf8', { emissive: '#38bdf8', emissiveIntensity: 0.5 }))).position.set(-5.5, 6.2, -1.62);
 
-        // Funnel with cap
+        // Funnel with cap — red body, black cap (classic livery)
         var funnelGeo = new THREE.CylinderGeometry(0.35, 0.45, 2, 8);
-        addToShip(new THREE.Mesh(funnelGeo, shipMat('#27272a'))).position.set(-6.5, 6.5, 0);
+        addToShip(new THREE.Mesh(funnelGeo, shipMat('#a63d35', { roughness: 0.6 }))).position.set(-6.5, 6.5, 0);
         var fCapGeo = new THREE.CylinderGeometry(0.4, 0.33, 0.2, 8);
         addToShip(new THREE.Mesh(fCapGeo, shipMat('#1e1e1e'))).position.set(-6.5, 7.55, 0);
 
@@ -2722,6 +3072,9 @@ var RollViewer = (function () {
         addHawsepipe(THREE, 7.8, 2.6, -1.8, 1.0);
         // Rudder
         addRudder(THREE, -7.8, 0.8, 1.6, color);
+        // Propeller + bulbous bow (kept deep so it only hints through the water)
+        addPropeller(THREE, -7.3, 0.8, 0.9);
+        addBulbousBow(THREE, 8.7, 0.5, 1.0, '#2c3e50');
     }
 
     // ── Passenger: 다층 데크, 넓은 상부구조, 큰 펀넬, 구명정, 레이더돔 ──
@@ -2734,6 +3087,7 @@ var RollViewer = (function () {
         var hullMat = rustHullMat('#f8fafc', 'passenger');
         var hull = new THREE.Mesh(hullGeo, hullMat);
         hull.position.set(0, 3.4, 0);
+        hullMeshRef = hull;
         addToShip(hull);
 
         // Multi-deck superstructure with window strips
@@ -2819,6 +3173,9 @@ var RollViewer = (function () {
         addHawsepipe(THREE, 8.8, 2.6, -2.2, 0.9);
         // Rudder
         addRudder(THREE, -7.8, 0.6, 1.6, '#cbd5e1');
+        // Propeller + bulbous bow (kept deep so it only hints through the water)
+        addPropeller(THREE, -8.2, 0.8, 1.0);
+        addBulbousBow(THREE, 9.2, 0.5, 1.1, '#f8fafc');
     }
 
     // ── Fishing: 작은 선체, 아웃리거/붐, 마스트, A프레임, 그물드럼, 항해등 ──
@@ -2828,9 +3185,10 @@ var RollViewer = (function () {
             length: 10, beam: 2.8, depth: 2.0,
             bowFineness: 1.5, sternFullness: 0.8
         });
-        var hullMat = rustHullMat('#e2e8f0', 'fishing');
+        var hullMat = rustHullMat('#2c5f94', 'fishing');
         var hull = new THREE.Mesh(hullGeo, hullMat);
         hull.position.set(0, 2.5, 0);
+        hullMeshRef = hull;
         addToShip(hull);
 
         var deckGeo = new THREE.BoxGeometry(8, 0.15, 2.8);
@@ -2841,9 +3199,9 @@ var RollViewer = (function () {
         addToShip(new THREE.Mesh(bulwarkGeo, shipMat('#cbd5e1', { roughness: 0.7 }))).position.set(0.5, 2.8, 1.4);
         addToShip(new THREE.Mesh(bulwarkGeo.clone(), shipMat('#cbd5e1', { roughness: 0.7 }))).position.set(0.5, 2.8, -1.4);
 
-        // Bridge (with roof)
+        // Bridge (with roof) — white wheelhouse
         var bridgeGeo = new THREE.BoxGeometry(2, 1.8, 2);
-        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#374151'))).position.set(-2, 3.5, 0);
+        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#dde3e8', { roughness: 0.65 }))).position.set(-2, 3.5, 0);
         var roofGeo = new THREE.BoxGeometry(2.2, 0.1, 2.2);
         addToShip(new THREE.Mesh(roofGeo, shipMat('#52525b'))).position.set(-2, 4.45, 0);
 
@@ -2867,8 +3225,8 @@ var RollViewer = (function () {
         crossTreeGeo.rotateX(Math.PI / 2);
         addToShip(new THREE.Mesh(crossTreeGeo, shipMat('#9ca3af', { metalness: 0.5 }))).position.set(0, 6.5, 0);
 
-        // Outrigger booms
-        var boomGeo = new THREE.CylinderGeometry(0.03, 0.05, 5, 6);
+        // Outrigger booms — thick enough to read in silhouette
+        var boomGeo = new THREE.CylinderGeometry(0.06, 0.09, 5, 6);
         var boom1 = new THREE.Mesh(boomGeo, shipMat('#9ca3af', { metalness: 0.5 }));
         boom1.position.set(0, 5.5, 1.5);
         boom1.rotation.x = -0.5;
@@ -2882,7 +3240,7 @@ var RollViewer = (function () {
         addToShip(boom2);
 
         // A-frame at stern
-        var aFrameGeo = new THREE.CylinderGeometry(0.04, 0.06, 2.5, 6);
+        var aFrameGeo = new THREE.CylinderGeometry(0.07, 0.1, 2.5, 6);
         var aFrame1 = new THREE.Mesh(aFrameGeo, shipMat('#fbbf24', { metalness: 0.5 }));
         aFrame1.position.set(-3.8, 3.5, 0.6);
         aFrame1.rotation.z = -0.2;
@@ -2922,6 +3280,8 @@ var RollViewer = (function () {
         addHawsepipe(THREE, 4.7, 2.3, 1.2, 0.7);
         // Rudder
         addRudder(THREE, -4.5, 0.6, 1.2, color);
+        // Propeller
+        addPropeller(THREE, -4.1, 0.7, 0.5);
     }
 
     // ── Military: 날렵한 선체, 스텔스 상부구조, 무장, CIWS, 헬기패드, 레이더 ──
@@ -2934,6 +3294,7 @@ var RollViewer = (function () {
         var hullMat = rustHullMat('#9ca3af', 'military');
         var hull = new THREE.Mesh(hullGeo, hullMat);
         hull.position.set(0, 2.9, 0);
+        hullMeshRef = hull;
         addToShip(hull);
 
         var deckGeo = new THREE.BoxGeometry(15, 0.15, 3.2);
@@ -2951,15 +3312,16 @@ var RollViewer = (function () {
         superShape.lineTo(-2.5, -1.5);
         superShape.closePath();
 
+        // Uniform haze gray like a real warship — superstructure matches the hull tone
         var superGeo = new THREE.ExtrudeGeometry(superShape, { depth: 2.5, bevelEnabled: false });
         superGeo.rotateX(-Math.PI / 2);
-        var superstructure = new THREE.Mesh(superGeo, shipMat('#52525b'));
+        var superstructure = new THREE.Mesh(superGeo, shipMat('#8a929b', { roughness: 0.65 }));
         superstructure.position.set(-2, 3.0, -1.25);
         addToShip(superstructure);
 
         // Bridge upper tier
         var bridgeUpperGeo = new THREE.BoxGeometry(3.5, 0.8, 2.5);
-        addToShip(new THREE.Mesh(bridgeUpperGeo, shipMat('#4a4a52'))).position.set(-2, 5.7, 0);
+        addToShip(new THREE.Mesh(bridgeUpperGeo, shipMat('#959da6', { roughness: 0.65 }))).position.set(-2, 5.7, 0);
 
         // Windows
         var winGeo = new THREE.BoxGeometry(3.5, 0.2, 2.3);
@@ -3012,9 +3374,9 @@ var RollViewer = (function () {
         var rotRadarGeo = new THREE.BoxGeometry(2, 0.08, 0.5);
         addToShip(new THREE.Mesh(rotRadarGeo, shipMat('#94a3b8', { metalness: 0.4 }))).position.set(-2, 9.2, 0);
 
-        // Funnel (angled, stealth-shaped)
+        // Funnel (angled, stealth-shaped) — haze gray to match
         var funnelGeo = new THREE.BoxGeometry(1.2, 1.5, 1.8);
-        addToShip(new THREE.Mesh(funnelGeo, shipMat('#3f3f46'))).position.set(-5, 4.5, 0);
+        addToShip(new THREE.Mesh(funnelGeo, shipMat('#8a929b', { roughness: 0.65 }))).position.set(-5, 4.5, 0);
         // Funnel top grill
         var grillGeo = new THREE.BoxGeometry(1.0, 0.06, 1.6);
         addToShip(new THREE.Mesh(grillGeo, shipMat('#27272a'))).position.set(-5, 5.28, 0);
@@ -3053,6 +3415,9 @@ var RollViewer = (function () {
         var sonarGeo = new THREE.SphereGeometry(0.5, 10, 8);
         sonarGeo.scale(1.5, 0.8, 0.8);
         addToShip(new THREE.Mesh(sonarGeo, shipMat('#52525b', { roughness: 0.4 }))).position.set(10.5, 1.0, 0);
+        // Twin screws matching the twin rudders
+        addPropeller(THREE, -7.4, 0.8, 0.75, 0.5);
+        addPropeller(THREE, -7.4, 0.8, 0.75, -0.5);
     }
 
     // ── Tug: 짧고 넓은 선체, 큰 브릿지, 예인 장비, 푸시니, 서치라이트 ──
@@ -3062,9 +3427,10 @@ var RollViewer = (function () {
             length: 8, beam: 3.6, depth: 2.8,
             bowFineness: 0.8, sternFullness: 0.9
         });
-        var hullMat = rustHullMat('#e2e8f0', 'tug');
+        var hullMat = rustHullMat('#7a2e25', 'tug');
         var hull = new THREE.Mesh(hullGeo, hullMat);
         hull.position.set(0, 3.0, 0);
+        hullMeshRef = hull;
         addToShip(hull);
 
         var deckGeo = new THREE.BoxGeometry(6, 0.2, 3.2);
@@ -3074,9 +3440,9 @@ var RollViewer = (function () {
         var kneeGeo = new THREE.BoxGeometry(0.3, 1.5, 3.0);
         addToShip(new THREE.Mesh(kneeGeo, shipMat('#374151', { roughness: 0.8, metalness: 0.3 }))).position.set(3.5, 2.5, 0);
 
-        // Bridge (tall, good visibility)
+        // Bridge (tall, good visibility) — cream wheelhouse over the red hull
         var bridgeGeo = new THREE.BoxGeometry(2.5, 2.8, 2.8);
-        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#374151'))).position.set(0, 4.5, 0);
+        addToShip(new THREE.Mesh(bridgeGeo, shipMat('#e6e1d3', { roughness: 0.65 }))).position.set(0, 4.5, 0);
         // Bridge roof
         var roofGeo = new THREE.BoxGeometry(2.8, 0.12, 3.0);
         addToShip(new THREE.Mesh(roofGeo, shipMat('#52525b'))).position.set(0, 5.96, 0);
@@ -3156,6 +3522,8 @@ var RollViewer = (function () {
         addHawsepipe(THREE, 3.7, 2.4, 1.6, 0.7);
         // Rudder
         addRudder(THREE, -3.5, 0.6, 1.4, color);
+        // Propeller (oversized for bollard pull, like a real tug)
+        addPropeller(THREE, -3.1, 0.7, 0.7);
     }
 
     // ── Generic/Unknown: 소형 다목적 선박 — 둥근 선체, 중앙 캐빈, 작업 데크, 레일링 ──
@@ -3165,9 +3533,10 @@ var RollViewer = (function () {
             length: 11, beam: 3.2, depth: 2.5,
             bowFineness: 1.2, sternFullness: 0.7
         });
-        var hullMat = rustHullMat('#e2e8f0', 'other');
+        var hullMat = rustHullMat('#454c54', 'other');
         var hull = new THREE.Mesh(hullGeo, hullMat);
         hull.position.set(0, 2.8, 0);
+        hullMeshRef = hull;
         addToShip(hull);
 
         // Flat work deck
@@ -3240,6 +3609,8 @@ var RollViewer = (function () {
         addHawsepipe(THREE, 5.2, 2.4, 1.4, 0.8);
         // Rudder
         addRudder(THREE, -5.5, 0.6, 1.2, color);
+        // Propeller
+        addPropeller(THREE, -5.1, 0.7, 0.6);
     }
 
     // ── startAnimation() ──
@@ -3469,6 +3840,13 @@ var RollViewer = (function () {
             updatePitchGauge(absPitch, smoothPitch);
             updateCanvasHUD(absRoll, absPitch, smoothSpeed);
 
+            // Encounter period drifts with heading/speed — 2Hz is plenty for the panel
+            _analysisAccum += dt;
+            if (_analysisAccum >= 0.5) {
+                _analysisAccum = 0;
+                updateAnalysis();
+            }
+
             // Push to history, cap at 60
             rollHistory.push(absRoll);
             if (rollHistory.length > 60) rollHistory.shift();
@@ -3522,6 +3900,78 @@ var RollViewer = (function () {
         return { level: 'safe', label: '안전 범위' };
     }
 
+    // Encounter period Te = Tw / (1 − 2π·U·cos(μ)/(g·Tw)) — μ is the angle between
+    // wave propagation and ship heading (0 = following seas, 180 = head seas).
+    function _encounterPeriod(waveT, speedKt, relAngleDeg) {
+        if (!waveT || waveT <= 0) return 0;
+        var U = speedKt * 0.5144;
+        var mu = relAngleDeg * Math.PI / 180;
+        var denom = 1 - (2 * Math.PI * U * Math.cos(mu)) / (9.81 * waveT);
+        // Ship riding the waves at their own speed — encounter period diverges
+        if (Math.abs(denom) < 0.02) return Infinity;
+        return Math.abs(waveT / denom);
+    }
+
+    var ANALYSIS_AXIS_MAX = 24; // seconds — full width of the period axis
+
+    function _periodPct(t) {
+        return Math.max(0, Math.min(100, t / ANALYSIS_AXIS_MAX * 100));
+    }
+
+    // One-sentence explanation of WHY the current verdict was reached — shown under
+    // the period axis so the badge is never unexplained.
+    function _analysisReason(naturalP, te, risk) {
+        if (!te || !isFinite(te)) return '파주기 정보가 없어 공진 위험을 판정할 수 없습니다.';
+        var d = Math.abs(naturalP - te).toFixed(1);
+        var base = '현재 속력·침로에서 배가 파도를 만나는 주기(조우주기)는 ' + te.toFixed(1) + 's. ';
+        if (risk.level === 'danger') {
+            return base + '선체가 스스로 흔들리는 고유주기(' + naturalP.toFixed(1) + 's)와 ' + d + 's 차이 — 매 파도가 횡요를 증폭시키는 공진 구간입니다.';
+        }
+        if (risk.level === 'caution') {
+            return base + '선체 고유주기(' + naturalP.toFixed(1) + 's)와 ' + d + 's 차이로 공진 구간에 근접해 있습니다.';
+        }
+        return base + '선체 고유주기(' + naturalP.toFixed(1) + 's)와 ' + d + 's 떨어져 있어 공진 가능성이 낮습니다.';
+    }
+
+    // Refresh the live parts of the ANALYSIS section: encounter period shifts with
+    // speed/heading (turn scenario) and weather overrides, so resonance is judged
+    // on Te vs the natural period, not the raw wave period.
+    var _analysisAccum = 0;
+
+    function updateAnalysis() {
+        var teEl = document.getElementById('rv-an-te');
+        if (!teEl) return;
+
+        var waveT = (weather && weather.wavePeriod) || 0;
+        var relAngle = ((weather && weather.waveDirection) || 0) - (turnScenarioActive ? turnHeading : 0);
+        var te = _encounterPeriod(waveT, shipSpeed, relAngle);
+        var risk = _resonanceRisk(naturalRollPeriod, isFinite(te) ? te : 0);
+        var margin = (isFinite(te) && te > 0) ? Math.abs(naturalRollPeriod - te) : null;
+
+        teEl.textContent = !te ? '-' : (isFinite(te) ? te.toFixed(1) + ' s' : '∞');
+
+        var marginEl = document.getElementById('rv-an-margin');
+        if (marginEl) {
+            marginEl.textContent = margin === null ? '-' : margin.toFixed(1) + ' s';
+            marginEl.className = 'rv-info-value rv-an-margin rv-an-margin-' + risk.level;
+        }
+
+        var pill = document.getElementById('rv-an-resonance');
+        if (pill) {
+            pill.textContent = risk.label;
+            pill.className = 'rv-info-value rv-resonance rv-resonance-' + risk.level;
+        }
+
+        var marker = document.getElementById('rv-period-marker-te');
+        if (marker) {
+            marker.style.left = _periodPct(isFinite(te) ? te : ANALYSIS_AXIS_MAX) + '%';
+            marker.setAttribute('data-level', risk.level);
+        }
+
+        var note = document.getElementById('rv-an-note');
+        if (note) note.textContent = _analysisReason(naturalRollPeriod, te, risk);
+    }
+
     function buildInfoPanel(ship) {
         var panel = document.createElement('div');
         panel.className = 'roll-viewer-panel';
@@ -3544,10 +3994,13 @@ var RollViewer = (function () {
         var callsign = ship.callsign || '-';
         var imo = ship.imo ? String(ship.imo) : '-';
 
-        // Roll analysis — estimated natural period vs observed wave period
+        // Roll analysis — natural period vs the period the ship actually meets the
+        // waves at (encounter period, depends on speed and heading)
         var naturalPeriod = _estimateRollPeriod(ship, typeKey);
         var wavePeriodObs = (_baseWeather && _baseWeather.wavePeriod) || 0;
-        var resonance = _resonanceRisk(naturalPeriod, wavePeriodObs);
+        var encounterT = _encounterPeriod(wavePeriodObs, shipSpeed, (_baseWeather && _baseWeather.waveDirection) || 0);
+        var resonance = _resonanceRisk(naturalPeriod, isFinite(encounterT) ? encounterT : 0);
+        var marginInit = (isFinite(encounterT) && encounterT > 0) ? Math.abs(naturalPeriod - encounterT) : null;
         var hdgVal = ship.heading !== undefined ? ship.heading + '°' : (ship.cog !== undefined ? parseFloat(ship.cog).toFixed(0) + '°' : '-');
 
         panel.innerHTML =
@@ -3580,7 +4033,25 @@ var RollViewer = (function () {
             '<div class="roll-viewer-section-title">횡요각 분석 ANALYSIS</div>' +
             '<div class="rv-info-row"><span class="rv-info-label">고유 횡요주기</span><span class="rv-info-value">' + naturalPeriod.toFixed(1) + ' s</span></div>' +
             '<div class="rv-info-row"><span class="rv-info-label">파주기</span><span class="rv-info-value">' + (wavePeriodObs ? wavePeriodObs.toFixed(0) + ' s' : '-') + '</span></div>' +
-            '<div class="rv-info-row"><span class="rv-info-label">공진 판정</span><span class="rv-info-value rv-resonance rv-resonance-' + resonance.level + '">' + resonance.label + '</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">조우주기</span><span class="rv-info-value" id="rv-an-te">' + (encounterT ? (isFinite(encounterT) ? encounterT.toFixed(1) + ' s' : '∞') : '-') + '</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">공진 여유</span><span class="rv-info-value rv-an-margin rv-an-margin-' + resonance.level + '" id="rv-an-margin">' + (marginInit === null ? '-' : marginInit.toFixed(1) + ' s') + '</span></div>' +
+            '<div class="rv-info-row"><span class="rv-info-label">공진 판정</span><span class="rv-info-value rv-resonance rv-resonance-' + resonance.level + '" id="rv-an-resonance">' + resonance.label + '</span></div>' +
+            '<div class="rv-period-axis">' +
+            '<div class="rv-period-track">' +
+            '<div class="rv-period-zone rv-period-zone-caution" style="left:' + _periodPct(naturalPeriod - 2.5) + '%;width:' + (_periodPct(naturalPeriod + 2.5) - _periodPct(naturalPeriod - 2.5)) + '%"></div>' +
+            '<div class="rv-period-zone rv-period-zone-danger" style="left:' + _periodPct(naturalPeriod - 1) + '%;width:' + (_periodPct(naturalPeriod + 1) - _periodPct(naturalPeriod - 1)) + '%"></div>' +
+            '<div class="rv-period-marker rv-period-marker-tn" style="left:' + _periodPct(naturalPeriod) + '%"><span>고유</span></div>' +
+            '<div class="rv-period-marker rv-period-marker-te" id="rv-period-marker-te" data-level="' + resonance.level + '" style="left:' + _periodPct(isFinite(encounterT) ? encounterT : ANALYSIS_AXIS_MAX) + '%"><span>조우</span></div>' +
+            '</div>' +
+            '<div class="rv-period-scale"><span>0s</span><span>6</span><span>12</span><span>18</span><span>24s</span></div>' +
+            '<div class="rv-an-legend">' +
+            '<span><i class="rv-an-swatch rv-an-swatch-tn"></i>고유주기</span>' +
+            '<span><i class="rv-an-swatch rv-an-swatch-te"></i>조우주기</span>' +
+            '<span><i class="rv-an-swatch rv-an-swatch-caution"></i>주의 ±2.5s</span>' +
+            '<span><i class="rv-an-swatch rv-an-swatch-danger"></i>위험 ±1s</span>' +
+            '</div>' +
+            '<div class="rv-an-note" id="rv-an-note">' + _analysisReason(naturalPeriod, encounterT, resonance) + '</div>' +
+            '</div>' +
             '</div>';
 
         return panel;

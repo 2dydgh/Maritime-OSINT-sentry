@@ -120,25 +120,71 @@ document.addEventListener('DOMContentLoaded', function() {
                 var satCb = document.getElementById('layer-sats');
                 if (satCb) { satCb.checked = chip.classList.contains('active'); satCb.dispatchEvent(new Event('change')); }
             } else if (layer === 'weather') {
-                var wxOn = chip.classList.contains('active');
-                // 강수 레이더
-                if (typeof cloudLayer !== 'undefined' && cloudLayer) {
-                    cloudLayer.show = wxOn;
-                    if (wxOn && typeof viewer !== 'undefined') viewer.imageryLayers.raiseToTop(cloudLayer);
+                // 기상 = 단일 선택(라디오): 켜져 있으면 모두 끄고, 꺼져 있으면 기본(강수) 하나만 켬
+                var WX = ['wx-precipitation', 'wx-wave-height', 'wx-wind'];
+                var anyOn = WX.some(function(id) { var c = document.getElementById(id); return c && c.checked; });
+                if (anyOn) {
+                    WX.forEach(function(id) {
+                        var cb = document.getElementById(id);
+                        if (cb && cb.checked) { cb.checked = false; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+                    });
+                } else {
+                    var def = document.getElementById('wx-precipitation');
+                    if (def) { def.checked = true; def.dispatchEvent(new Event('change', { bubbles: true })); }
                 }
-                var wxPrecip = document.getElementById('wx-precipitation');
-                if (wxPrecip) wxPrecip.checked = wxOn;
-                // 파고/풍향 오버레이
-                var wxWave = document.getElementById('wx-wave-height');
-                var wxWind = document.getElementById('wx-wind');
-                if (!wxOn) {
-                    if (wxWave) { wxWave.checked = false; }
-                    if (wxWind) { wxWind.checked = false; }
-                }
-                if (typeof renderWeatherOverlays === 'function') renderWeatherOverlays();
             }
+            _syncLayerChips();
         });
     }
+
+    // 하위 상세 토글 → 칩(전체) 표시 동기화
+    //  하위 종류가 하나라도 켜져 있으면 칩 active (켜지면 무조건 솔리드, partial 없음).
+    //  위성은 마스터(layer-sats)가 on/off 기준.
+    function _anyChecked(sel) {
+        return Array.prototype.some.call(
+            document.querySelectorAll(sel), function(cb) { return cb.checked; });
+    }
+    function _setActive(layer, active) {
+        var chip = document.querySelector('.layer-chip[data-layer="' + layer + '"]');
+        if (chip) { chip.classList.toggle('active', !!active); chip.classList.remove('partial'); }
+    }
+    function _syncLayerChips() {
+        _setActive('ships', _anyChecked('#shipFilter input[type="checkbox"]'));
+        _setActive('aircraft', _anyChecked('#aircraftFilter input[type="checkbox"]'));
+        _setActive('satellites', _anyChecked('#layer-sats'));
+        _setActive('weather', _anyChecked('#wx-precipitation, #wx-wave-height, #wx-wind'));
+    }
+    window._syncLayerChips = _syncLayerChips;
+
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.closest &&
+            e.target.closest('#shipFilter, #aircraftFilter, #weatherFilter, #satFilter')) {
+            _syncLayerChips();
+        }
+    });
+
+    // 초기 로드 시 칩 표시를 실제 체크박스 상태와 일치시킴
+    _syncLayerChips();
+
+    // 칩 카운트 배지 — 큰 숫자를 축약(30,345 → 30k)해서 data-ab에 기록 (CSS ::after가 표시)
+    (function() {
+        function abbr(s) {
+            var n = parseInt(String(s).replace(/[^\d]/g, ''), 10);
+            if (isNaN(n)) return s || '';
+            if (n >= 1000) {
+                var k = n / 1000;
+                return (n < 10000 ? k.toFixed(1).replace(/\.0$/, '') : Math.round(k)) + 'k';
+            }
+            return String(n);
+        }
+        ['chipShipCount', 'chipSatCount', 'chipAircraftCount'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            var upd = function() { el.setAttribute('data-ab', abbr(el.textContent)); };
+            upd();
+            new MutationObserver(upd).observe(el, { childList: true, characterData: true, subtree: true });
+        });
+    })();
 
     // Close dropdowns on outside click
     document.addEventListener('click', function(e) {
@@ -424,10 +470,10 @@ async function loadHistoryWindow(centerDate, opts) {
                 ',
                     position: positionProperty,
                     billboard: {
-                        image: getShipIcon(SHIP_COLORS[type] || SHIP_COLORS['other'], type || 'other'),
-                        width: getShipSize(shipData.length, shipData.beam).width,
-                        height: getShipSize(shipData.length, shipData.beam).height,
-                        scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
+                        image: getShipArrowIcon(SHIP_COLORS[type] || SHIP_COLORS['other']),
+                        width: SHIP_ARROW_W,
+                        height: SHIP_ARROW_H,
+                        scaleByDistance: new Cesium.NearFarScalar(5e5, 1.9, 1.5e7, 0.9),
                         disableDepthTestDistance: Number.POSITIVE_INFINITY,
                         rotation: new Cesium.CallbackProperty(function() {
                             var heading = headingProperty.getValue(viewer.clock.currentTime);
@@ -1072,6 +1118,25 @@ if (shipInfoBackBtn) {
     });
 }
 
+// Korean vessel-type label for the detail-panel badge.
+function _korShipType(t) {
+    var m = {
+        cargo: '화물선', tanker: '유조선', passenger: '여객선', fishing: '어선',
+        military: '군함', tug: '예인선', pleasure: '레저보트', highspeed: '고속선',
+        sailing: '범선', other: '기타'
+    };
+    return m[t] || (t || '기타');
+}
+
+// Country flag chip — only when `country` is a 2-letter ISO code (flag-icons).
+// Otherwise returns '' so we never show a broken flag for full-name/unknown data.
+function _flagHtml(country) {
+    if (country && /^[A-Za-z]{2}$/.test(country)) {
+        return '<span class="fi fi-' + country.toLowerCase() + ' ship-id-flag"></span>';
+    }
+    return '';
+}
+
 // Show custom ship info panel when entity is clicked
 function showShipInfo(entityOrMmsi) {
     var title = document.getElementById('shipInfoTitle');
@@ -1125,11 +1190,20 @@ function showShipInfo(entityOrMmsi) {
     var statusColor = sogVal > 0.5 ? 'var(--accent-green)' : 'var(--text-dim)';
     var statusDot = sogVal > 0.5 ? '●' : '○';
 
-    // Key stats cards
+    // Identity header: flag + colored type badge + nav status
+    var typeColor = (typeof SHIP_COLORS !== 'undefined' && SHIP_COLORS[s.type]) ? SHIP_COLORS[s.type] : '#6b7280';
+    var idRowHtml = '<div class="ship-id-row">'
+        + _flagHtml(s.country)
+        + '<span class="ship-type-badge"><span class="ship-type-dot" style="background:' + typeColor + '"></span>' + _korShipType(s.type) + '</span>'
+        + '<span class="ship-navstatus" style="color:' + statusColor + '">' + statusDot + ' ' + statusText + '</span>'
+        + '</div>';
+
+    // Key stats cards (status moved into the header → 3rd card shows draught)
+    var draughtTxt = s.draught ? parseFloat(s.draught).toFixed(1) : '–';
     var statsHtml = '<div class="ship-stats-row">';
     statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">SPEED</div><div class="ship-stat-value">' + speed + '</div><div class="ship-stat-unit">knots</div></div>';
-    statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">COURSE</div><div class="ship-stat-value">' + course + '°</div><div class="ship-stat-unit">heading</div></div>';
-    statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">STATUS</div><div class="ship-stat-value" style="color:' + statusColor + '">' + statusDot + '</div><div class="ship-stat-unit">' + statusText + '</div></div>';
+    statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">COURSE</div><div class="ship-stat-value">' + course + '°</div><div class="ship-stat-unit">COG</div></div>';
+    statsHtml += '<div class="ship-stat-card"><div class="ship-stat-label">DRAUGHT</div><div class="ship-stat-value">' + draughtTxt + '</div><div class="ship-stat-unit">m</div></div>';
     statsHtml += '</div>';
 
     // Detail card rows
@@ -1148,14 +1222,20 @@ function showShipInfo(entityOrMmsi) {
     detailHtml += '</div>';
 
     if (window.ShipPreview3D) ShipPreview3D.dispose();
-    body.innerHTML = statsHtml + detailHtml;
+    // Header first, then the prominent 3D preview, then stats + details.
+    body.innerHTML = idRowHtml;
 
-    // 3D Ship Model Preview (thumbnail — click to open modal)
+    // 3D Ship Model Preview (prominent, top — click to open modal)
     var previewContainer = document.createElement('div');
-    previewContainer.className = 'ship-preview-container';
+    previewContainer.className = 'ship-preview-container ship-preview-lg';
     previewContainer.id = 'shipPreview3d';
     previewContainer.title = 'Click to enlarge';
     body.appendChild(previewContainer);
+
+    // Stats + detail below the preview
+    var detailWrap = document.createElement('div');
+    detailWrap.innerHTML = statsHtml + detailHtml;
+    body.appendChild(detailWrap);
 
     // Expand hint
     var expandHint = document.createElement('div');
@@ -1169,7 +1249,7 @@ function showShipInfo(entityOrMmsi) {
         beam: s.beam ? parseFloat(s.beam) : null,
         draught: s.draught ? parseFloat(s.draught) : null
     };
-    ShipPreview3D.init(previewContainer, shipTypeKey, dims);
+    ShipPreview3D.init(previewContainer, shipTypeKey, dims, s.name);
 
     // Distinguish drag (rotation) from click — only open modal on short, non-moved clicks
     var _previewPointerStart = null;
@@ -1211,17 +1291,15 @@ handler.setInputAction(function(click) {
 
             // Satellite click
             if (_satRecCache[entityId]) {
-                _toggleSatFootprint(entityId);
-                if (_activeFootprintSatId === entityId) {
-                    var pos = _getSatRealTimePosition(entityId);
-                    if (pos) {
-                        var horizonAngle = Math.acos(6371 / (6371 + pos.altKm));
-                        var footprintRadiusKm = 6371 * horizonAngle;
-                        var viewAlt = Math.max(footprintRadiusKm * 4 * 1000, 8000000);
-                        smoothFlyTo({
-                            destination: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, viewAlt)
-                        });
-                    }
+                // 위성 클릭 — 해당 위성으로 줌인 (관측 범위는 상단 '관측 범위' 토글로 표시)
+                var pos = _getSatRealTimePosition(entityId);
+                if (pos) {
+                    var horizonAngle = Math.acos(6371 / (6371 + pos.altKm));
+                    var footprintRadiusKm = 6371 * horizonAngle;
+                    var viewAlt = Math.max(footprintRadiusKm * 4 * 1000, 8000000);
+                    smoothFlyTo({
+                        destination: Cesium.Cartesian3.fromDegrees(pos.lng, pos.lat, viewAlt)
+                    });
                 }
                 return;
             }
@@ -1265,11 +1343,6 @@ handler.setInputAction(function(click) {
     }
     clearProximity();
     clearShipHighlight();
-    if (_activeFootprintSatId) {
-        var old = satDataSource.entities.getById('footprint-' + _activeFootprintSatId);
-        if (old) satDataSource.entities.remove(old);
-        _activeFootprintSatId = null;
-    }
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
 // ── Map Place Search (Nominatim Geocoding + Local Cache) ──
@@ -1622,12 +1695,8 @@ var _searchLeafletMarker = null;
 
     function buildPresets() {
         if (!presetEl) return;
-        // Use 3D regions if available, otherwise 2D
-        var regions3d = (typeof REGIONS !== 'undefined') ? REGIONS : {};
-        var regions2d = (typeof REGION_VIEWS !== 'undefined') ? REGION_VIEWS : {};
-        var tabs3d = (typeof REGION_TABS_3D !== 'undefined') ? REGION_TABS_3D : [];
-        var tabs2d = (typeof REGION_TABS_2D !== 'undefined') ? REGION_TABS_2D : [];
-        var tabs = (currentMapMode === '2d') ? tabs2d : tabs3d;
+        // Unified strategic-hotspot set — same presets in 2D and 3D.
+        var tabs = (typeof REGION_TABS !== 'undefined') ? REGION_TABS : [];
         var html = '<div class="presets-label">QUICK NAVIGATION</div><div class="preset-grid">';
         tabs.forEach(function(t) {
             html += '<button class="preset-btn" data-region="' + t.key + '">' + t.label + '</button>';

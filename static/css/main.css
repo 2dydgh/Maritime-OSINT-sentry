@@ -35,6 +35,23 @@
     --radius-tag: 4px;      /* tiny static tags */
     --radius-pill: 7px;     /* interactive pill buttons & chips */
     --radius-group: 10px;   /* segmented-control containers */
+
+    /* ── Button system — shared interactive surface + motion tokens ──
+       Same-role controls (toggles, primary actions, overlay buttons) draw their
+       default/hover/active states from these so they stay in lockstep. */
+    --btn-surface:        rgba(255, 255, 255, 0.06);  /* ghost / toggle resting */
+    --btn-surface-hover:  rgba(255, 255, 255, 0.12);
+    --btn-surface-active: rgba(255, 255, 255, 0.16);  /* pressed */
+    --btn-border:         rgba(255, 255, 255, 0.10);
+    --btn-border-hover:   rgba(255, 255, 255, 0.22);
+    --btn-transition:     all 0.15s ease;
+    /* Overlay buttons floating over map/3D imagery need dark contrast + blue glow */
+    --btn-overlay-bg:        rgba(8, 18, 38, 0.82);
+    --btn-overlay-bg-hover:  rgba(15, 30, 60, 0.92);
+    --btn-overlay-border:       rgba(59, 130, 246, 0.5);
+    --btn-overlay-border-hover: rgba(59, 130, 246, 0.85);
+    --btn-overlay-glow:       0 0 10px rgba(59, 130, 246, 0.18), 0 2px 10px rgba(0, 0, 0, 0.5);
+    --btn-overlay-glow-hover: 0 0 16px rgba(59, 130, 246, 0.35), 0 2px 12px rgba(0, 0, 0, 0.5);
 }
 
 #app-layout {
@@ -93,19 +110,28 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    transition: color 0.2s;
+    transition: color 0.15s ease, background 0.15s ease;
     position: relative;
 }
 
 .rail-icon:hover {
-    color: var(--text-sub);
-    background: transparent;
+    color: var(--text-main, #f4f4f5);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.rail-icon:active {
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .rail-icon.active {
     background: var(--primary-muted);
     color: var(--primary);
     box-shadow: none;
+}
+
+.rail-icon.active:hover {
+    background: rgba(59, 130, 246, 0.22);
+    color: var(--primary);
 }
 
 .rail-icon.active::before {
@@ -357,6 +383,59 @@
     color: var(--text-main);
     font-size: 11px;
     font-family: 'JetBrains Mono', 'Pretendard Variable', monospace;
+}
+
+/* ── Ship detail-panel: identity header ── */
+.ship-id-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.ship-id-flag {
+    width: 22px;
+    height: 16px;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.ship-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-main);
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
+}
+
+.ship-type-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    box-shadow: 0 0 6px currentColor;
+}
+
+.ship-navstatus {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
+    white-space: nowrap;
+}
+
+/* Prominent 3D preview at the top of the panel */
+.ship-preview-container.ship-preview-lg {
+    height: 200px;
+    margin-top: 0;
+    margin-bottom: 12px;
+    background: linear-gradient(180deg, rgba(20, 32, 48, 0.5), rgba(10, 16, 26, 0.5));
 }
 
 /* Bottom Stats Bar */
@@ -989,16 +1068,17 @@
 
 /* ── Roll Prediction Viewer ── */
 .roll-viewer-layout {
-    display: flex;
+    --rv-panel-w: 300px;
+    position: relative;
     width: 100%;
     height: 100%;
     background: var(--bg-color);
 }
 
+/* Canvas spans the full layout so the 3D scene shows through the glass panel */
 .roll-viewer-canvas-wrap {
-    flex: 7;
-    position: relative;
-    min-width: 0;
+    position: absolute;
+    inset: 0;
 }
 
 
@@ -1010,13 +1090,18 @@
 
 
 .roll-viewer-panel {
-    flex: 3;
-    min-width: 260px;
-    max-width: 340px;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--rv-panel-w);
+    z-index: 4;
     display: flex;
     flex-direction: column;
     gap: 0;
-    background: var(--panel-bg-solid);
+    background: rgba(15, 16, 20, 0.55);
+    backdrop-filter: blur(14px) saturate(1.1);
+    -webkit-backdrop-filter: blur(14px) saturate(1.1);
     border-left: 1px solid var(--panel-border);
     overflow-y: auto;
 }
@@ -1209,6 +1294,16 @@
     box-shadow: 0 0 8px rgba(255, 255, 255, 0.08);
 }
 
+.rv-tilt-indicator[data-level="safe"] .rv-tilt-ring {
+    border-color: rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.18);
+}
+
+.rv-tilt-indicator[data-level="caution"] .rv-tilt-ring {
+    border-color: rgba(251, 191, 36, 0.65);
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.18);
+}
+
 .rv-tilt-indicator[data-level="warning"] .rv-tilt-ring {
     border-color: var(--accent-amber);
     box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
@@ -1238,6 +1333,22 @@
     bottom: 0;
     height: 30px;
     background: rgba(255, 255, 255, 0.08);
+}
+
+.rv-tilt-indicator[data-level="safe"] .rv-tilt-horizon {
+    border-color: rgba(59, 130, 246, 0.85);
+}
+
+.rv-tilt-indicator[data-level="safe"] .rv-tilt-horizon::before {
+    background: rgba(59, 130, 246, 0.16);
+}
+
+.rv-tilt-indicator[data-level="caution"] .rv-tilt-horizon {
+    border-color: rgba(251, 191, 36, 0.85);
+}
+
+.rv-tilt-indicator[data-level="caution"] .rv-tilt-horizon::before {
+    background: rgba(251, 191, 36, 0.14);
 }
 
 .rv-tilt-indicator[data-level="warning"] .rv-tilt-horizon {
@@ -1299,31 +1410,210 @@
 }
 
 .roll-viewer-placeholder {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     width: 100%;
     height: 100%;
-    gap: 18px;
     padding: 32px 28px;
+    background:
+        radial-gradient(ellipse 60% 55% at 50% 42%, rgba(59, 130, 246, 0.10), transparent 70%),
+        linear-gradient(160deg, #0b1626 0%, #070d18 58%, #05080f 100%);
 }
 
-.roll-viewer-placeholder i {
-    font-size: 3.2rem;
-    color: var(--primary, #5b8def);
-    opacity: 0.85;
-    filter: drop-shadow(0 0 12px rgba(91, 141, 239, 0.35));
+/* Subtle grid motif, faded toward the edges so it reads as intentional. */
+.roll-viewer-placeholder::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 38px 38px;
+    -webkit-mask-image: radial-gradient(ellipse 78% 78% at 50% 45%, #000 28%, transparent 80%);
+    mask-image: radial-gradient(ellipse 78% 78% at 50% 45%, #000 28%, transparent 80%);
 }
 
-.roll-viewer-placeholder span {
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--text-main, #f4f4f5);
+.roll-viewer-placeholder .screen-empty-card {
+    position: relative;
+    z-index: 1;
+}
+
+/* ── Reusable empty-state guidance card (route / roll / hazard screens) ── */
+.screen-empty-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     text-align: center;
+    box-sizing: border-box;
+    width: 300px;
+    min-height: 168px;
+    padding: 26px 28px;
+    background: rgba(9, 13, 20, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    backdrop-filter: blur(3px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+
+.screen-empty-card > i {
+    font-size: 38px;
+    color: rgba(96, 165, 250, 0.9);
+    margin-bottom: 14px;
+    filter: drop-shadow(0 0 14px rgba(59, 130, 246, 0.5));
+    animation: routeEmptyFloat 3s ease-in-out infinite;
+}
+
+/* ── Roll empty-state quick ship picker ── */
+.roll-empty-card {
+    width: 330px;
+}
+
+.roll-ship-picker {
+    width: 100%;
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+    pointer-events: auto;
+}
+
+.roll-ship-picker::-webkit-scrollbar {
+    width: 4px;
+}
+
+.roll-ship-picker::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+}
+
+.roll-ship-picker::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+}
+
+.roll-ship-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 7px;
+    padding: 8px 10px;
+    color: #e2e8f0;
+    cursor: pointer;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.roll-ship-row:hover {
+    background: rgba(96, 165, 250, 0.16);
+    border-color: rgba(96, 165, 250, 0.5);
+}
+
+.roll-empty-card .roll-ship-row > i {
+    flex: 0 0 auto;
+    font-size: 14px;
+    color: #60a5fa;
+    margin: 0;
+    filter: none;
+    animation: none;
+}
+
+.roll-ship-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.roll-ship-line1 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.roll-ship-name {
+    min-width: 0;
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.roll-ship-type {
+    flex: 0 0 auto;
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(96, 165, 250, 0.18);
+    color: #bcd6ff;
+}
+
+.roll-ship-near {
+    flex: 0 0 auto;
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(16, 185, 129, 0.2);
+    color: #6ee7b7;
+}
+
+.roll-ship-line2 {
+    font-size: 11px;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.screen-empty-title {
+    font-family: var(--font-tactical, 'Rajdhani'), sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    color: #ffffff;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+.screen-empty-sub {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: #d4dcea;
     line-height: 1.65;
-    max-width: 320px;
-    letter-spacing: 0.01em;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+/* 사고 mode entry hint — centered over the 2D map */
+.hazard-entry-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) translateY(8px);
+    z-index: 500;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.hazard-entry-hint.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) translateY(0);
 }
 
 .roll-viewer-back {
@@ -1331,15 +1621,42 @@
     top: 12px;
     left: 12px;
     z-index: 5;
-    background: rgba(55, 55, 60, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #c8cdd3;
-    padding: 6px 14px;
+    background: rgba(11, 18, 32, 0.78);
+    border: 1px solid rgba(96, 165, 250, 0.55);
+    color: #dbe9ff;
+    padding: 7px 15px;
     border-radius: 8px;
-    font-size: 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.roll-viewer-back:hover {
+    background: rgba(20, 33, 56, 0.9);
+    border-color: rgba(96, 165, 250, 0.9);
+    color: #fff;
+}
+
+/* list header clarifying the quick-pick is an alternative to globe selection */
+.roll-picker-head {
+    width: 100%;
+    margin-top: 16px;
+    margin-bottom: 2px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: #7c8ba0;
+    text-align: left;
+}
+
+.roll-picker-head + .roll-ship-picker {
+    margin-top: 4px;
 }
 
 .roll-viewer-back:hover {
@@ -1356,7 +1673,7 @@
 .rv-scenario-btn {
     position: absolute;
     top: 12px;
-    left: 50%;
+    left: calc((100% - var(--rv-panel-w)) / 2); /* centered over the visible scene, not the full canvas */
     transform: translateX(-50%);
     z-index: 5;
     background: rgba(8, 18, 38, 0.82);
@@ -1474,6 +1791,125 @@
     color: #ef4444;
 }
 
+.rv-an-margin-safe { color: #10b981; }
+.rv-an-margin-caution { color: #fbbf24; }
+.rv-an-margin-danger { color: #ef4444; }
+
+/* ── Period axis: natural roll period vs encounter period ── */
+.rv-period-axis {
+    margin-top: 14px;
+}
+
+.rv-period-track {
+    position: relative;
+    height: 38px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.rv-period-zone {
+    position: absolute;
+    top: 12px;
+    bottom: 0;
+    border-radius: 2px 2px 0 0;
+}
+
+.rv-period-zone-caution { background: rgba(245, 158, 11, 0.14); }
+.rv-period-zone-danger { background: rgba(239, 68, 68, 0.22); }
+
+.rv-period-marker {
+    position: absolute;
+    top: 12px;
+    bottom: 0;
+    width: 2px;
+    transform: translateX(-50%);
+    transition: left 0.4s ease;
+}
+
+.rv-period-marker span {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.575rem;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.rv-period-marker-tn { background: rgba(203, 213, 225, 0.9); }
+.rv-period-marker-tn span { color: var(--text-sub); }
+
+.rv-period-marker-te {
+    background: #38bdf8;
+    box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+}
+
+/* 조우 label sits inside the track so it never collides with the 고유 label above */
+.rv-period-marker-te span {
+    top: auto;
+    bottom: 2px;
+    color: #38bdf8;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.rv-period-marker-te[data-level="caution"] {
+    background: #fbbf24;
+    box-shadow: 0 0 6px rgba(251, 191, 36, 0.5);
+}
+.rv-period-marker-te[data-level="caution"] span { color: #fbbf24; }
+
+.rv-period-marker-te[data-level="danger"] {
+    background: var(--accent-red);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+.rv-period-marker-te[data-level="danger"] span { color: var(--accent-red); }
+
+.rv-period-scale {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 0.575rem;
+    color: var(--text-sub);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.rv-an-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 10px;
+    font-size: 0.65rem;
+    color: var(--text-sub);
+}
+
+.rv-an-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.rv-an-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.rv-an-swatch-tn { width: 2px; border-radius: 0; background: rgba(203, 213, 225, 0.9); }
+.rv-an-swatch-te { width: 2px; border-radius: 0; background: #38bdf8; }
+.rv-an-swatch-caution { background: rgba(245, 158, 11, 0.35); }
+.rv-an-swatch-danger { background: rgba(239, 68, 68, 0.45); }
+
+.rv-an-note {
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 2px solid rgba(56, 189, 248, 0.4);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.72rem;
+    line-height: 1.55;
+    color: var(--text-sub);
+}
+
 /* ── Prediction modal: simulation OUTPUT (roll & pitch) at top-left ── */
 .rv-prediction-modal {
     position: absolute;
@@ -1517,7 +1953,7 @@
 .rv-canvas-hud-scenario {
     position: absolute;
     top: 60px;       /* aligned with prediction modal */
-    right: 12px;
+    right: calc(var(--rv-panel-w) + 12px); /* clear the glass info panel */
     z-index: 6;
     display: flex;
     flex-direction: column;
@@ -1708,7 +2144,7 @@
 .rv-cam-presets {
     position: absolute;
     bottom: 12px;
-    right: 12px;
+    right: calc(var(--rv-panel-w) + 12px); /* clear the glass info panel */
     z-index: 5;
     display: flex;
     flex-direction: column;
@@ -1719,16 +2155,17 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    background: rgba(55, 55, 60, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #c8cdd3;
+    background: var(--btn-overlay-bg);
+    border: 1px solid var(--btn-overlay-border);
+    color: #e2e8f0;
     padding: 6px 10px;
-    border-radius: 6px;
+    border-radius: var(--radius-pill);
     font-size: 0.68rem;
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: var(--btn-transition);
     white-space: nowrap;
+    box-shadow: var(--btn-overlay-glow);
 }
 
 .rv-cam-btn i {
@@ -1742,9 +2179,10 @@
 }
 
 .rv-cam-btn:hover {
-    background: rgba(70, 70, 75, 0.95);
-    color: var(--text-main);
-    border-color: rgba(255, 255, 255, 0.25);
+    background: var(--btn-overlay-bg-hover);
+    color: #fff;
+    border-color: var(--btn-overlay-border-hover);
+    box-shadow: var(--btn-overlay-glow-hover);
 }
 
 .rv-cam-btn:active {
@@ -2535,6 +2973,33 @@ body {
     background-color: #6b7280;
 }
 
+/* Legend swatches — category colors moved out of inline styles (values match the
+   map markers/overlays they label; keep these in sync with the renderers). */
+.color-precip        { background-color: #3b82f6; }
+.color-wave          { background-color: #06b6d4; }
+.color-wind          { background-color: #a78bfa; }
+.color-sat           { background-color: #3b82f6; }
+.color-sat-sar       { background-color: #f97316; }
+.color-sat-optical   { background-color: #94a3b8; }
+.color-sat-sigint    { background-color: #eab308; }
+.color-sat-recon     { background-color: #fde047; }
+.color-sat-nav       { background-color: #10b981; }
+.color-sat-ew        { background-color: #3b82f6; }
+.color-sat-station   { background-color: #002878; }
+.color-ac-civilian   { background-color: #8b5cf6; }
+.color-ac-military   { background-color: #ef4444; }
+.color-ac-helicopter { background-color: #f59e0b; }
+.color-ac-other      { background-color: #9ca3af; }
+.color-sigint-ais    { background-color: #eab308; }
+.color-sigint-rf     { background-color: #f97316; }
+.color-sigint-dark   { background-color: #ef4444; }
+.color-news-maritime { background-color: #38bdf8; }
+.color-news-security { background-color: #ef4444; }
+.color-news-trade    { background-color: #10b981; }
+.color-base-naval    { background-color: #002878; }
+.color-base-port     { background-color: #10b981; }
+.color-base-choke    { background-color: #f97316; }
+
 
 /* Nearby Vessels proximity list */
 #nearbyVesselsSection {
@@ -2702,9 +3167,9 @@ body {
     padding: 6px 20px;
     border-radius: var(--radius-pill);
     cursor: pointer;
-    font-family: 'Pretendard Variable', 'Inter', sans-serif;
-    font-size: 0.72rem;
-    font-weight: 600;
+    font-family: 'Rajdhani', 'S-CoreDream-6Bold', 'Pretendard Variable', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
     letter-spacing: 0.3px;
     transition: all 0.2s ease;
     text-align: center;
@@ -2721,9 +3186,9 @@ body {
 }
 
 .collision-tab-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--btn-surface-hover);
     color: var(--text-main);
-    border-color: rgba(255, 255, 255, 0.15);
+    border-color: var(--btn-border-hover);
 }
 
 .collision-tab-btn.active {
@@ -3057,24 +3522,26 @@ body {
 .map-nav-btn {
     width: 44px;
     height: 44px;
-    background: rgba(0, 0, 0, 0.45);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
+    background: var(--btn-overlay-bg);
+    border: 1px solid var(--btn-overlay-border);
+    border-radius: var(--radius-pill);
     color: var(--text-main);
     font-size: 1rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
+    transition: var(--btn-transition);
     user-select: none;
     backdrop-filter: blur(4px);
+    box-shadow: var(--btn-overlay-glow);
 }
 
 .map-nav-btn:hover {
-    background: rgba(59, 130, 246, 0.25);
-    border-color: rgba(59, 130, 246, 0.4);
-    color: var(--text-main);
+    background: var(--btn-overlay-bg-hover);
+    border-color: var(--btn-overlay-border-hover);
+    color: #fff;
+    box-shadow: var(--btn-overlay-glow-hover);
 }
 
 .map-nav-btn:active {
@@ -3088,7 +3555,7 @@ body {
     width: 40px;
     height: 40px;
     font-size: 0.9rem;
-    border-radius: 8px;
+    border-radius: var(--radius-pill);
 }
 
 /* Shared draggable panel styles */
@@ -3243,7 +3710,7 @@ body {
 }
 
 .vmode-btn:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--btn-surface-hover);
     color: var(--text-main);
 }
 
@@ -3294,10 +3761,6 @@ body {
     display: block;
 }
 
-#mapArea.mode-2d #mapNavControls {
-    display: none;
-}
-
 /* Hide Leaflet default zoom control */
 .leaflet-control-zoom {
     display: none !important;
@@ -3340,7 +3803,7 @@ body {
 /* Dark filter at tile-pane level (not per-tile).
    basemap-satellite class is toggled on the map container element by JS. */
 .basemap-satellite .leaflet-tile-pane {
-    filter: brightness(0.55) contrast(1.05) saturate(0.75);
+    filter: brightness(1) contrast(1.05) saturate(0.75);
 }
 
 #leafletContainer.vision-nv {
@@ -3397,110 +3860,119 @@ body {
     margin-right: 20px;
 }
 
+/* 그룹 트랙(바깥 박스) — 한 묶음임을 보여주는 세그먼트 컨트롤 컨테이너 */
 #layerChips {
     display: flex;
     gap: 2px;
     flex-shrink: 0;
-    background: rgba(20, 20, 22, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    padding: 4px;
-    backdrop-filter: blur(8px);
+    align-items: center;
     height: 36px;
     box-sizing: border-box;
-}
-
-.layer-chip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(0, 0, 0, 0.65);
-    backdrop-filter: blur(4px);
+    background: rgba(10, 14, 22, 0.55);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--radius-pill);
-    padding: 4px 10px;
-    font-family: 'Pretendard Variable', 'Inter', sans-serif;
-    font-size: 0.72rem;
-    font-weight: 600;
+    padding: 3px 4px;
+    backdrop-filter: blur(8px);
+}
+
+/* ── Layer chips: 트랙 안의 세그먼트 (평소 투명, 켜지면 알약 하이라이트) ── */
+.layer-chip {
+    --chip-accent: var(--primary);     /* 브랜드 단색 통일 (상태는 도트로 구분) */
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+    padding: 4px 9px 4px 8px;
+    font-family: 'Rajdhani', 'S-CoreDream-6Bold', 'Pretendard Variable', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
     color: var(--text-dim);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background 0.18s, border-color 0.18s, color 0.18s;
     user-select: none;
 }
 
-/* Body-half hover — suppressed while the caret itself is hovered (split-button feel) */
-.layer-chip:hover:not(:has(.chip-expand:hover)) {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.15);
+/* 한글 라벨은 같은 font-size에서 라틴('3D')보다 커 보여, 살짝 줄여 시각적으로 맞춤 */
+.chip-label { display: inline; font-weight: 700; letter-spacing: 0.01em; font-size: 0.7rem; }
+
+.layer-chip > i {
+    font-size: 0.78rem;
+    color: var(--text-sub);
+    transition: color 0.18s;
+}
+
+.layer-chip:hover {
+    background: var(--btn-surface-hover, rgba(255, 255, 255, 0.10));
     color: var(--text-main);
 }
 
-/* Caret hovered → keep the body at rest so only the caret half lights up */
-.layer-chip:has(.chip-expand:hover) {
-    border-color: rgba(255, 255, 255, 0.15);
-}
-
+/* Active(전체 켜짐) = 솔리드 primary (콜리전 탭 스타일) */
 .layer-chip.active {
     background: var(--primary);
     border-color: var(--primary);
     color: #fff;
-    box-shadow: none;
+}
+.layer-chip.active > i {
+    color: #fff;
 }
 
-.layer-chip i {
-    font-size: 0.75rem;
-}
-
+/* Count — abbreviated (data-ab), shown only when active */
 .chip-count {
     font-family: 'JetBrains Mono', 'Pretendard Variable', monospace;
-    font-weight: 800;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
-    color: #fff;
-    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.9);   /* solid primary 위에서 잘 보이게 */
+    font-size: 0;
+    margin-left: -2px;
+}
+.chip-count::after {
+    content: attr(data-ab);
+    font-size: 0.68rem;
+}
+.layer-chip:not(.active) .chip-count {
+    display: none;
 }
 
+/* Caret: borderless, faint; brightens on hover / when open */
 .chip-expand {
-    background: rgba(255, 255, 255, 0.06);
+    background: transparent;
     border: none;
-    border-left: 1px solid rgba(255, 255, 255, 0.22);
     color: var(--text-sub);
     cursor: pointer;
-    padding: 4px 6px;
-    padding-left: 8px;
-    margin-left: 8px;
-    font-size: 0.625rem;
-    border-radius: var(--radius-pill);
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-    transition: color 0.2s, background 0.2s;
+    padding: 2px;
+    margin-left: 1px;
+    font-size: 0.6rem;
+    line-height: 1;
+    border-radius: 50%;
+    opacity: 0.6;
+    transition: opacity 0.18s, color 0.18s, background 0.18s;
 }
-
 .chip-expand i {
     transition: transform 0.2s;
 }
-
+/* 솔리드 active 칩 위에서 캐럿이 잘 보이게 (흰색) */
+.layer-chip.active .chip-expand {
+    color: rgba(255, 255, 255, 0.9);
+    opacity: 0.9;
+}
+.layer-chip:hover .chip-expand {
+    opacity: 0.9;
+}
 .chip-expand:hover {
+    opacity: 1;
     color: #fff;
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.14);
 }
-
-/* Open state — brighter segment + flipped chevron */
 .chip-expand.expanded {
+    opacity: 1;
     color: #fff;
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.14);
 }
-
 .chip-expand.expanded i {
     transform: rotate(180deg);
-}
-
-/* Visible against active (blue) chip */
-.layer-chip.active .chip-expand {
-    color: rgba(255, 255, 255, 0.85);
-}
-
-.layer-chip.active .chip-expand:hover {
-    color: #fff;
 }
 
 /* Layer filter dropdown */
@@ -3932,44 +4404,47 @@ body {
     margin-right: 2px;
 }
 
+/* 3D/2D 토글 — 레이어 칩과 동일한 그룹 트랙 + 세그먼트 (택일 컨트롤) */
 #mapModeToggle {
     display: flex;
-    background: rgba(20, 20, 22, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    padding: 4px;
-    backdrop-filter: blur(8px);
-    overflow: hidden;
+    gap: 2px;
+    align-items: center;
     height: 36px;
     box-sizing: border-box;
+    background: rgba(10, 14, 22, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-pill);
+    padding: 3px 4px;
+    backdrop-filter: blur(8px);
 }
 
 .map-mode-btn {
     background: transparent;
-    backdrop-filter: none;
     border: 1px solid transparent;
     color: var(--text-dim);
-    padding: 4px 10px;
+    padding: 4px 11px;
     border-radius: var(--radius-pill);
     cursor: pointer;
-    font-family: 'Pretendard Variable', 'Inter', sans-serif;
-    font-size: 0.75rem;
-    font-weight: 600;
-    transition: all 0.2s ease;
+    font-family: 'Rajdhani', 'S-CoreDream-6Bold', 'Pretendard Variable', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    transition: background 0.18s, border-color 0.18s, color 0.18s;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
 }
 
 .map-mode-btn.active {
     background: var(--primary);
     border-color: var(--primary);
     color: #fff;
-    box-shadow: none;
+}
+.map-mode-btn.active i {
+    color: #fff;
 }
 
 .map-mode-btn:hover:not(.active) {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--btn-surface-hover, rgba(255, 255, 255, 0.10));
     color: var(--text-main);
 }
 
@@ -4032,7 +4507,7 @@ body {
 }
 
 .region-tab:hover:not(.active) {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--btn-surface-hover);
     color: var(--text-main);
 }
 
@@ -4478,6 +4953,210 @@ body {
     margin-right: 6px;
 }
 
+/* Click-target hint — tells the user the next click sets 출발 or 도착 */
+.route-click-hint {
+    position: absolute;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 101;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 16px;
+    background: rgba(9, 9, 11, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 18px;
+    color: #e8eef9;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.route-click-hint.active {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* port marker name tags are clickable to select the port (bigger target than the dot) */
+.route-port-tip {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.route-port-tip:hover {
+    border-color: rgba(251, 191, 36, 0.95) !important;
+    color: #fff;
+}
+
+/* name-tag hover preview color matches the active slot (출발 green / 도착 red) */
+#route-leaflet.route-target-from .route-port-tip:hover {
+    border-color: rgba(16, 185, 129, 0.95) !important;
+}
+
+#route-leaflet.route-target-to .route-port-tip:hover {
+    border-color: rgba(239, 68, 68, 0.95) !important;
+}
+
+.route-click-hint.hint-from {
+    border-color: rgba(16, 185, 129, 0.5);
+}
+
+.route-click-hint.hint-to {
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.route-click-hint i {
+    opacity: 0.8;
+}
+
+/* One-shot entrance flash — plays once when entering route mode */
+.route-enter-flash {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.22) 0%, rgba(59, 130, 246, 0) 62%);
+    animation: routeEnterFlash 0.85s ease-out forwards;
+}
+
+@keyframes routeEnterFlash {
+    0%   { opacity: 0; transform: scale(1.06); }
+    22%  { opacity: 1; }
+    100% { opacity: 0; transform: scale(1); }
+}
+
+/* Empty-state guidance shown before a route is generated */
+/* positioning-only wrapper — the panel itself is the shared .screen-empty-card */
+.route-empty-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) translateY(10px);
+    z-index: 60;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.route-empty-hint.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) translateY(0);
+}
+
+@keyframes routeEmptyFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+}
+
+/* 2D nautical route map — fills the route dedicated screen; panels overlay it */
+#route-leaflet {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: #0a1622;
+}
+
+/* Animated ship marker — inner element rotates with heading */
+.route-ship-divicon {
+    background: transparent;
+    border: none;
+}
+
+.route-ship-ico {
+    width: 28px;
+    height: 28px;
+    transform-origin: 50% 50%;
+    filter: drop-shadow(0 0 4px rgba(234, 179, 8, 0.65));
+    transition: transform 0.12s linear;
+}
+
+/* Start/end pin tooltips */
+.route-pin-label {
+    background: rgba(9, 9, 11, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #e8eef9;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 5px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    white-space: nowrap;
+}
+
+.route-pin-label.leaflet-tooltip-top::before {
+    display: none;
+}
+
+.route-pin-from {
+    border-color: rgba(16, 185, 129, 0.6);
+}
+
+.route-pin-to {
+    border-color: rgba(239, 68, 68, 0.6);
+}
+
+/* 출발/도착 badges inside the route pin labels */
+.rp-tag {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1.4;
+    padding: 0 5px;
+    border-radius: 3px;
+    margin-right: 5px;
+    vertical-align: middle;
+    letter-spacing: 0.5px;
+}
+
+.rp-from {
+    background: #10b981;
+    color: #04261b;
+}
+
+.rp-to {
+    background: #ef4444;
+    color: #2a0606;
+}
+
+/* Korean port markers — labels (zoom-gated) */
+.route-port-tip {
+    background: rgba(9, 9, 11, 0.78);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    color: #dbeafe;
+    font-family: 'Pretendard Variable', 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    white-space: nowrap;
+    transition: border-color 0.12s, color 0.12s;
+}
+
+.route-port-tip::before {
+    display: none;  /* hide tooltip arrow */
+}
+
+#route-leaflet.route-hide-port-labels .route-port-tip {
+    display: none;
+}
+
+/* Focus-suggestion dropdown header (주요 국내 항구) */
+.route-dropdown-head {
+    padding: 6px 10px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #6b7c8f;
+    text-transform: uppercase;
+}
+
 .route-overlay-panel {
     position: absolute;
     z-index: 100;
@@ -4536,6 +5215,50 @@ body {
     letter-spacing: 0.5px;
 }
 
+.route-size-hint {
+    text-transform: none;
+    color: #6b7c8f;
+    font-weight: 400;
+}
+
+.route-size-btns {
+    display: flex;
+    gap: 4px;
+}
+
+.route-size-btn {
+    flex: 1;
+    background: var(--btn-surface);
+    border: 1px solid var(--btn-border);
+    border-radius: var(--radius-pill);
+    padding: 7px 0;
+    color: #c3d0de;
+    font-family: var(--font-tactical, 'Rajdhani'), sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: var(--btn-transition);
+}
+
+.route-size-btn:hover:not(.active) {
+    background: var(--btn-surface-hover);
+    border-color: var(--btn-border-hover);
+    color: var(--text-main);
+}
+
+.route-size-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+.route-size-range {
+    margin-top: 5px;
+    font-size: 11px;
+    color: #8b97ad;
+    text-align: center;
+}
+
 .route-input-row {
     display: flex;
     gap: 6px;
@@ -4558,25 +5281,26 @@ body {
 }
 
 .route-click-btn {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    border-radius: 4px;
+    background: var(--btn-surface);
+    border: 1px solid var(--btn-border);
+    border-radius: var(--radius-pill);
     color: #a0b0c0;
     cursor: pointer;
     padding: 0 10px;
     font-size: 14px;
-    transition: all 0.2s;
+    transition: var(--btn-transition);
 }
 
-.route-click-btn:hover {
-    color: #3b82f6;
-    border-color: #3b82f6;
+.route-click-btn:hover:not(.active) {
+    background: var(--btn-surface-hover);
+    border-color: var(--btn-border-hover);
+    color: var(--text-main);
 }
 
 .route-click-btn.active {
-    color: var(--primary);
+    color: #fff;
     border-color: var(--primary);
-    background: var(--primary-muted);
+    background: var(--primary);
 }
 
 .route-coord-display {
@@ -4598,6 +5322,21 @@ body {
     max-height: 200px;
     overflow-y: auto;
     z-index: 110;
+}
+
+/* Match the custom scrollbar used across the app's panels */
+.route-dropdown::-webkit-scrollbar {
+    width: 4px;
+}
+
+.route-dropdown::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+}
+
+.route-dropdown::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
 }
 
 .route-dropdown-item {
@@ -4625,26 +5364,60 @@ body {
     font-size: 11px;
 }
 
+.route-action-row {
+    display: flex;
+    gap: 6px;
+    align-items: stretch;
+}
+
+.route-action-row .route-search-btn {
+    flex: 1;
+}
+
+.route-reset-btn {
+    flex: 0 0 auto;
+    background: var(--btn-surface);
+    border: 1px solid var(--btn-border);
+    border-radius: var(--radius-pill);
+    padding: 8px 12px;
+    color: #c3d0de;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: var(--btn-transition);
+}
+
+.route-reset-btn:hover {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #fff;
+}
+
+.route-reset-btn i {
+    margin-right: 4px;
+}
+
 .route-search-btn {
-    background: linear-gradient(135deg, #3b82f6 0%, #3058B0 100%);
-    border: none;
-    border-radius: 4px;
+    background: var(--primary);
+    border: 1px solid var(--primary);
+    border-radius: var(--radius-pill);
     padding: 8px;
     color: #fff;
     font-weight: 600;
     font-size: 13px;
     cursor: pointer;
     text-align: center;
-    transition: opacity 0.2s;
+    transition: var(--btn-transition);
 }
 
 .route-search-btn:disabled {
-    opacity: 0.4;
-    cursor: default;
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 .route-search-btn:not(:disabled):hover {
-    opacity: 0.85;
+    filter: brightness(1.12);
 }
 
 .route-error {
@@ -4706,7 +5479,7 @@ input[type="range"]#routeSpeedSlider {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: background 0.2s;
+    transition: var(--btn-transition);
 }
 
 .route-play-btn:hover {
@@ -4756,8 +5529,8 @@ input[type="range"]#routeSpeedSlider {
 }
 
 .route-rate-btn {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--btn-surface);
+    border: 1px solid var(--btn-border);
     border-radius: var(--radius-pill);
     padding: 4px 10px;
     color: #a0b0c0;
@@ -4765,17 +5538,19 @@ input[type="range"]#routeSpeedSlider {
     font-size: 12px;
     font-weight: 600;
     font-family: 'Pretendard Variable', 'Inter', sans-serif;
-    transition: all 0.2s;
+    transition: var(--btn-transition);
 }
 
-.route-rate-btn:hover {
-    color: #ccc;
+.route-rate-btn:hover:not(.active) {
+    background: var(--btn-surface-hover);
+    border-color: var(--btn-border-hover);
+    color: var(--text-main);
 }
 
 .route-rate-btn.active {
-    color: var(--primary);
+    color: #fff;
     border-color: var(--primary);
-    background: var(--primary-muted);
+    background: var(--primary);
 }
 
 /* ── Route Info Panel (right side) ── */
@@ -5392,23 +6167,22 @@ input[type="range"]#routeSpeedSlider {
     flex-shrink: 0;
     background: var(--primary, #3b82f6);
     color: #fff;
-    border: none;
-    border-radius: 8px;
+    border: 1px solid var(--primary);
+    border-radius: var(--radius-pill);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 0.7rem;
-    transition: background 0.2s, opacity 0.2s;
+    transition: var(--btn-transition);
 }
 
-.chat-send-btn:hover {
-    background: var(--accent, #2563eb);
-    filter: brightness(1.1);
+.chat-send-btn:hover:not(:disabled) {
+    filter: brightness(1.12);
 }
 
 .chat-send-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.45;
     cursor: not-allowed;
 }
 

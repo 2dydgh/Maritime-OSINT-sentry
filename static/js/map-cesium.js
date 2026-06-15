@@ -28,7 +28,7 @@ viewer.scene.maximumRenderTimeChange = Infinity; // 변화 없으면 즉시 렌�
 viewer.scene.postProcessStages.fxaa.enabled = false;
 // 타일 캐시 확대 + 비행 목적지 프리로드
 viewer.scene.globe.preloadFlightDestinations = true;
-viewer.scene.globe.tileCacheSize = 300;
+viewer.scene.globe.tileCacheSize = 600;  // 한 번 본 영역 재방문 시 재요청 없이 즉시 선명
 
 // 줌/스크롤 관성 — 부드러운 조작감
 var sscc = viewer.scene.screenSpaceCameraController;
@@ -46,17 +46,19 @@ var _moveEndTimer = null;
 viewer.camera.moveStart.addEventListener(function() {
     if (_moving) return;
     _moving = true;
-    viewer.scene.globe.maximumScreenSpaceError = 6;
-    if (google3DTileset) google3DTileset.maximumScreenSpaceError = 24;
+    // 이동 중 화질 강하 폭을 완화 — 시연/브리핑에선 blur 구간을 줄이는 게 우선
+    viewer.scene.globe.maximumScreenSpaceError = 4;
+    if (google3DTileset) google3DTileset.maximumScreenSpaceError = 16;
 });
 
 viewer.camera.moveEnd.addEventListener(function() {
     clearTimeout(_moveEndTimer);
+    // 멈춘 직후 빠르게 고해상도 복귀 (200ms → 80ms) — 선명해지는 시작을 앞당김
     _moveEndTimer = setTimeout(function() {
         _moving = false;
         viewer.scene.globe.maximumScreenSpaceError = _defaultSSE;
         if (google3DTileset) google3DTileset.maximumScreenSpaceError = 12;
-    }, 200);
+    }, 80);
 });
 
 // ResizeObserver for map area
@@ -226,6 +228,13 @@ var NAV_PAN_PIXELS = 200;
 var NAV_ZOOM_FACTOR = 0.4;
 
 function navZoom(direction) {
+    // In 2D the same on-screen +/- buttons drive the Leaflet map.
+    if (typeof currentMapMode !== 'undefined' && currentMapMode === '2d') {
+        if (typeof leafletMap !== 'undefined' && leafletMap) {
+            if (direction > 0) { leafletMap.zoomIn(); } else { leafletMap.zoomOut(); }
+        }
+        return;
+    }
     var height = viewer.camera.positionCartographic.height;
     var delta = height * NAV_ZOOM_FACTOR;
     if (direction > 0) {

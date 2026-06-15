@@ -1,7 +1,7 @@
 // ── Maritime Weather Overlay ──
 
 var _wxData = { marine: null, wind: null };
-var _wxLayers = { waveHeight: null, wind: null };
+var _wxLayers = { waveHeight: null, wind: null, precip: null };
 var _wxInterval = null;
 
 function _oceanRegionName(lat, lon) {
@@ -105,8 +105,27 @@ function renderWeatherOverlays() {
         clearWindLabels();
     }
 
+    renderPrecipitation();
     updateWxLegend();
 }
+
+// ── 강수 레이더 (RainViewer) ──
+// 3D는 Cesium cloudLayer(websocket.js)가 담당. 여기서는 2D Leaflet 타일을 관리한다.
+function renderPrecipitation() {
+    if (typeof leafletMap === 'undefined' || !leafletMap) return;
+    var wxPrecip = document.getElementById('wx-precipitation');
+    var want = !!(wxPrecip && wxPrecip.checked) &&
+               currentMapMode === '2d' && !!window._rainviewerTileUrl;
+    if (_wxLayers.precip) {
+        leafletMap.removeLayer(_wxLayers.precip);
+        _wxLayers.precip = null;
+    }
+    if (want) {
+        _wxLayers.precip = L.tileLayer(window._rainviewerTileUrl, { opacity: 0.55, zIndex: 250 });
+        _wxLayers.precip.addTo(leafletMap);
+    }
+}
+window.renderPrecipitation = renderPrecipitation;
 
 // ── Wave Height ──
 
@@ -206,7 +225,7 @@ function clearWaveHeight() {
     }
 }
 
-// ── Wind Speed Labels (canvas imagery) ──
+// ── Wind Speed Markers (말풍선 핀) ──
 
 function _windSpeedColor(speed) {
     if (speed < 5) return '#60a5fa';
@@ -215,72 +234,133 @@ function _windSpeedColor(speed) {
     return '#ef4444';
 }
 
-function _buildWindLabelCanvas(points, marinePoints) {
-    var W = 720, H = 360;
-    var canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    var ctx = canvas.getContext('2d');
+var _wxWindBillboards = null;   // 3D Cesium billboard collection
+var _windBubbleCache = {};      // dataURL 캐시 (속도|방향 버킷)
 
-    // 바다 좌표 셋
-    var oceanSet = {};
+function _roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+
+// 풍속 알약(말풍선) + 풍향 화살표 핀을 캔버스로 생성. {url,w,h} 반환.
+function _buildWindBubble(speed, dirDeg) {
+    var sp = Math.round(speed);
+    var dirB = Math.round(((dirDeg || 0) % 360) / 15) * 15;  // 15° 버킷
+    var key = sp + '|' + dirB;
+    if (_windBubbleCache[key]) return _windBubbleCache[key];
+
+    var color = _windSpeedColor(speed);
+    var S = 52, dpr = 2;
+    var canvas = document.createElement('canvas');
+    canvas.width = S * dpr; canvas.height = S * dpr;
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    var cx = S / 2, cy = S / 2;
+
+    // 풍향 화살표 — 바람이 불어가는 방향(from + 180°)을 가리킴
+    var flow = (dirB + 180) * Math.PI / 180;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(flow);
+    ctx.strokeStyle = color; ctx.fillStyle = color;
+    ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -9);
+    ctx.lineTo(0, -18);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, -22);
+    ctx.lineTo(-4, -15);
+    ctx.lineTo(4, -15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // 알약 본체
+    var pw = sp >= 100 ? 28 : (sp >= 10 ? 23 : 18), ph = 17;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1;
+    _roundRect(ctx, cx - pw / 2, cy - ph / 2, pw, ph, ph / 2);
+    ctx.fillStyle = 'rgba(15,23,42,0.86)';
+    ctx.fill();
+    ctx.restore();
+    _roundRect(ctx, cx - pw / 2, cy - ph / 2, pw, ph, ph / 2);
+    ctx.lineWidth = 1.5; ctx.strokeStyle = color; ctx.stroke();
+
+    // 숫자
+    ctx.fillStyle = '#fff';
+    ctx.font = '700 11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(sp), cx, cy + 0.5);
+
+    var out = { url: canvas.toDataURL(), w: S, h: S };
+    _windBubbleCache[key] = out;
+    return out;
+}
+
+function _oceanWindPoints(points, marinePoints) {
+    var oceanSet = null;
     if (marinePoints) {
+        oceanSet = {};
         marinePoints.forEach(function(m) {
             if (m.wave_height && m.wave_height > 0) oceanSet[m.lat + ',' + m.lon] = true;
         });
     }
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    points.forEach(function(p) {
-        if (p.wind_speed <= 0) return;
-        if (marinePoints && !oceanSet[p.lat + ',' + p.lon]) return;
-
-        var px = ((p.lon + 180) / 360) * W;
-        var py = ((90 - p.lat) / 180) * H;
-
-        var label = Math.round(p.wind_speed) + '';
-        var color = _windSpeedColor(p.wind_speed);
-
-        // 배경 원
-        ctx.beginPath();
-        ctx.arc(px, py, 5, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.45)';
-        ctx.fill();
-
-        // 숫자
-        ctx.font = 'bold 7px JetBrains Mono, monospace';
-        ctx.fillStyle = color;
-        ctx.fillText(label, px, py);
+    return points.filter(function(p) {
+        if (!(p.wind_speed > 0)) return false;
+        if (oceanSet && !oceanSet[p.lat + ',' + p.lon]) return false;
+        return true;
     });
-
-    return canvas;
 }
 
 function renderWindLabels(points, marinePoints) {
     clearWindLabels();
+    var pts = _oceanWindPoints(points, marinePoints);
 
-    var canvas = _buildWindLabelCanvas(points, marinePoints);
-
-    // 3D Cesium
+    // 3D Cesium — 빌보드 핀
     if (typeof viewer !== 'undefined' && viewer) {
-        var provider = new Cesium.SingleTileImageryProvider({
-            url: canvas.toDataURL(),
-            rectangle: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90)
+        if (!_wxWindBillboards) {
+            _wxWindBillboards = viewer.scene.primitives.add(new Cesium.BillboardCollection());
+        }
+        pts.forEach(function(p) {
+            var bub = _buildWindBubble(p.wind_speed, p.wind_direction);
+            _wxWindBillboards.add({
+                position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat),
+                image: bub.url,
+                width: bub.w,
+                height: bub.h,
+                scaleByDistance: new Cesium.NearFarScalar(1.0e6, 1.0, 2.2e7, 0.5),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3.0e7)
+            });
         });
-        _wxWindImagery = viewer.imageryLayers.addImageryProvider(provider);
-        _wxWindImagery.alpha = 0.9;
     }
 
-    // 2D Leaflet
+    // 2D Leaflet — 마커 핀
     if (typeof leafletMap !== 'undefined' && leafletMap && currentMapMode === '2d') {
-        var url = canvas.toDataURL();
-        _wxLayers.wind = L.imageOverlay(url, [[-90, -180], [90, 180]], { opacity: 0.9 });
+        _wxLayers.wind = L.layerGroup();
+        pts.forEach(function(p) {
+            var bub = _buildWindBubble(p.wind_speed, p.wind_direction);
+            var icon = L.icon({
+                iconUrl: bub.url,
+                iconSize: [bub.w, bub.h],
+                iconAnchor: [bub.w / 2, bub.h / 2]
+            });
+            L.marker([p.lat, p.lon], { icon: icon, interactive: false, keyboard: false })
+                .addTo(_wxLayers.wind);
+        });
         _wxLayers.wind.addTo(leafletMap);
     }
 }
 
 function clearWindLabels() {
+    if (_wxWindBillboards) _wxWindBillboards.removeAll();
     if (_wxWindImagery && typeof viewer !== 'undefined' && viewer) {
         viewer.imageryLayers.remove(_wxWindImagery);
         _wxWindImagery = null;
@@ -325,25 +405,32 @@ function updateWxLegend() {
 
 // ── Event Bindings + Init ──
 
-document.addEventListener('DOMContentLoaded', function() {
-    var wxWave = document.getElementById('wx-wave-height');
-    var wxWind = document.getElementById('wx-wind');
-    var wxPrecip = document.getElementById('wx-precipitation');
+var _WX_IDS = ['wx-precipitation', 'wx-wave-height', 'wx-wind'];
 
-    if (wxWave) wxWave.addEventListener('change', renderWeatherOverlays);
-    if (wxWind) wxWind.addEventListener('change', renderWeatherOverlays);
-
-    // 강수 레이더 = 기존 cloudLayer 토글
-    if (wxPrecip) {
-        wxPrecip.addEventListener('change', function(e) {
-            if (typeof cloudLayer !== 'undefined' && cloudLayer) {
-                cloudLayer.show = e.target.checked;
-                if (e.target.checked && typeof viewer !== 'undefined') {
-                    viewer.imageryLayers.raiseToTop(cloudLayer);
-                }
+// 기상 = 단일 선택(라디오): 하나를 켜면 나머지는 끈다.
+function _onWxToggle(e) {
+    if (e.target.checked) {
+        _WX_IDS.forEach(function(id) {
+            if (id !== e.target.id) {
+                var c = document.getElementById(id);
+                if (c && c.checked) c.checked = false;
             }
         });
     }
+    // 강수(cloudLayer) 표시는 wx-precipitation 체크 상태를 따른다
+    if (typeof cloudLayer !== 'undefined' && cloudLayer) {
+        var p = document.getElementById('wx-precipitation');
+        cloudLayer.show = !!(p && p.checked);
+        if (cloudLayer.show && typeof viewer !== 'undefined') viewer.imageryLayers.raiseToTop(cloudLayer);
+    }
+    renderWeatherOverlays();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    _WX_IDS.forEach(function(id) {
+        var cb = document.getElementById(id);
+        if (cb) cb.addEventListener('change', _onWxToggle);
+    });
 
     // 초기 fetch + 10분 주기 갱신
     fetchWeatherData();

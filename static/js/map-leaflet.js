@@ -1,14 +1,15 @@
 // ── Maritime OSINT Sentry — Leaflet 2D Map (Nautical Chart Style) ──
 
+// 2D region views mirror the 3D strategic-hotspot set (map-cesium.js REGIONS),
+// so toggling 2D<->3D keeps the same region menu and the same default location.
+// zoom levels are the Leaflet equivalents of the 3D camera altitudes.
 var REGION_VIEWS = {
-    'world':          { center: [20, 0],    zoom: 2 },
-    'east-asia':      { center: [35, 125],  zoom: 5 },
-    'southeast-asia': { center: [5, 115],   zoom: 5 },
-    'europe':         { center: [50, 15],   zoom: 4 },
-    'middle-east':    { center: [28, 48],   zoom: 5 },
-    'africa':         { center: [5, 20],    zoom: 4 },
-    'north-america':  { center: [40, -95],  zoom: 4 },
-    'south-america':  { center: [-15, -55], zoom: 4 }
+    'world':   { center: [20, 0],     zoom: 3 },
+    'korea':   { center: [35.5, 128], zoom: 6 },
+    'arctic':  { center: [75, 100],   zoom: 4 },
+    'somalia': { center: [12, 48],    zoom: 5 },
+    'malacca': { center: [2.5, 101.5],zoom: 6 },
+    'guinea':  { center: [3, 3],      zoom: 5 }
 };
 
 function flyToRegion2D(region, btn) {
@@ -20,18 +21,10 @@ function flyToRegion2D(region, btn) {
 }
 window.flyToRegion2D = flyToRegion2D;
 
-var REGION_TABS_2D = [
-    { key: 'world', label: '전체' },
-    { key: 'east-asia', label: '동아시아' },
-    { key: 'southeast-asia', label: '동남아' },
-    { key: 'europe', label: '유럽' },
-    { key: 'middle-east', label: '중동' },
-    { key: 'africa', label: '아프리카' },
-    { key: 'north-america', label: '북미' },
-    { key: 'south-america', label: '남미' }
-];
-
-var REGION_TABS_3D = [
+// Single shared region-tab set for both 2D and 3D — strategic hotspots.
+// The main 2D/3D toggle must feel like the same tool with only the dimension
+// changing, so both modes show the same tabs and the same default (한국 해역).
+var REGION_TABS = [
     { key: 'world', label: '전체' },
     { key: 'korea', label: '한국 해역' },
     { key: 'arctic', label: '북극항로' },
@@ -43,8 +36,8 @@ var REGION_TABS_3D = [
 function buildRegionTabs(mode) {
     var container = document.getElementById('regionTabs');
     if (!container) return;
-    var tabs = mode === '2d' ? REGION_TABS_2D : REGION_TABS_3D;
-    var activeKey = mode === '2d' ? 'east-asia' : 'korea';
+    var tabs = REGION_TABS;
+    var activeKey = 'korea';
     container.innerHTML = tabs.map(function(t) {
         return '<button class="region-tab' + (t.key === activeKey ? ' active' : '') + '" data-region="' + t.key + '" data-mode="' + mode + '">' + t.label + '</button>';
     }).join('');
@@ -107,13 +100,18 @@ function initLeaflet() {
     if (leafletInitialized) return;
 
     leafletMap = L.map('leafletContainer', {
-        center: REGION_VIEWS['east-asia'].center,
-        zoom: REGION_VIEWS['east-asia'].zoom,
-        minZoom: 2,
+        center: REGION_VIEWS['korea'].center,
+        zoom: REGION_VIEWS['korea'].zoom,
+        minZoom: 3,
         maxZoom: 19,
         zoomControl: false,
         attributionControl: false,
-        preferCanvas: true
+        preferCanvas: true,
+        // Lock to a single world copy — without this Leaflet repeats the map
+        // endlessly east/west, but ships only live on the real copy, so they
+        // vanish once you pan into a repeat. Hard-stop at the world edges.
+        maxBounds: [[-85, -180], [85, 180]],
+        maxBoundsViscosity: 1.0
     });
 
     // ── Default basemap: satellite (matches 3D globe tone) ──
@@ -152,13 +150,13 @@ function _useSatelliteBasemap() {
     // Satellite imagery — matches 3D Cesium globe tone.
     _satBaseLayer = L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        { maxZoom: 19 }
+        { maxZoom: 19, noWrap: true }
     ).addTo(leafletMap);
 
     // Dark labels overlay (CARTO)
     _satLabelLayer = L.tileLayer(
         'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
-        { maxZoom: 19, subdomains: 'abcd', pane: 'overlayPane' }
+        { maxZoom: 19, subdomains: 'abcd', pane: 'overlayPane', noWrap: true }
     ).addTo(leafletMap);
 }
 
@@ -181,13 +179,13 @@ function _useChartBasemap() {
     // imagery. Light by design → no dark tile filter.
     _chartBaseLayer = L.tileLayer(
         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        { maxZoom: 19, subdomains: 'abcd', errorTileUrl: BLANK_TILE, attribution: '© OpenStreetMap, © CARTO' }
+        { maxZoom: 19, subdomains: 'abcd', errorTileUrl: BLANK_TILE, attribution: '© OpenStreetMap, © CARTO', noWrap: true }
     ).addTo(leafletMap);
 
     // Nautical detail: OpenSeaMap seamarks (buoys, lights, depth contours)
     _chartSeamarkLayer = L.tileLayer(
         'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
-        { maxZoom: 18, opacity: 0.85, pane: 'overlayPane', errorTileUrl: BLANK_TILE }
+        { maxZoom: 18, opacity: 0.85, pane: 'overlayPane', errorTileUrl: BLANK_TILE, noWrap: true }
     ).addTo(leafletMap);
     _chartLabelLayer = null;  // Positron already includes labels
 }
@@ -255,6 +253,7 @@ window.toggleAreaSelect = toggleAreaSelect;
 
 function _enterAreaSelectMode() {
     leafletAreaSelectActive = true;
+    _hideHazardHint();  // user understood — engaging the drag tool
     var btn = document.getElementById('leafletAreaSelectBtn');
     if (btn) btn.classList.add('active');
     var container = document.getElementById('leafletContainer');
@@ -575,7 +574,7 @@ function setMapMode(mode) {
         mapArea.classList.add('mode-2d');
 
         leafletMap.invalidateSize();
-        leafletMap.setView(REGION_VIEWS['east-asia'].center, REGION_VIEWS['east-asia'].zoom);
+        leafletMap.setView(REGION_VIEWS['korea'].center, REGION_VIEWS['korea'].zoom);
 
         buildRegionTabs('2d');
 
@@ -591,6 +590,7 @@ function setMapMode(mode) {
                 if (typeof syncShipsToLeaflet === 'function') syncShipsToLeaflet();
                 if (typeof syncProximityToLeaflet === 'function') syncProximityToLeaflet();
                 if (typeof syncSatellitesToLeaflet === 'function') syncSatellitesToLeaflet();
+                if (typeof renderWeatherOverlays === 'function') renderWeatherOverlays();
                 if (loadingEl) loadingEl.style.display = 'none';
             }, 0);
         });
@@ -623,11 +623,90 @@ function setMapMode(mode) {
         }
 
         clearLeafletLayers();
+        // 기상 오버레이를 3D(Cesium)용으로 다시 렌더 (2D 타일/마커 제거 + 3D 빌보드/이미지 복원)
+        if (typeof renderWeatherOverlays === 'function') renderWeatherOverlays();
 
         buildRegionTabs('3d');
     }
 }
 window.setMapMode = setMapMode;
+
+// ── 2D ship marker: heading-rotated, outlined arrow ──
+// Subclasses CircleMarker so it renders on the shared canvas renderer (same
+// performance as a dot — fine for the 30k global feed) and keeps all of
+// CircleMarker's plumbing: setLatLng, setStyle, bindTooltip, click hit-testing,
+// layerGroup add/remove. Only the canvas drawing is overridden: a chevron arrow
+// pointing to `heading` (0° = north, before rotation). Vessels with no heading
+// fall back to a small circle so a missing course isn't shown as "due north".
+if (typeof L !== 'undefined' && !L.ShipArrow) {
+    L.ShipArrow = L.CircleMarker.extend({
+        options: { heading: 0, headingKnown: true },
+
+        setHeading: function (heading, known) {
+            this.options.heading = heading || 0;
+            if (known !== undefined) this.options.headingKnown = known;
+            return this.redraw();
+        },
+
+        // Mirrors L.Canvas._updateCircle but paints an arrow instead of a disc.
+        _updatePath: function () {
+            var renderer = this._renderer;
+            if (!renderer._drawing || this._empty()) return;
+
+            var p = this._point, ctx = renderer._ctx, o = this.options;
+            var r = Math.max(this._radius, 2);
+            ctx.save();
+            ctx.translate(p.x, p.y);
+
+            if (o.headingKnown) {
+                ctx.rotate((o.heading || 0) * Math.PI / 180);
+                var w = r * 0.95;   // beam (half-width)
+                var f = r * 1.6;    // bow reach forward
+                var b = r * 1.15;   // stern corners aft
+                ctx.beginPath();
+                ctx.moveTo(0, -f);          // bow (north)
+                ctx.lineTo(w, b);           // starboard quarter
+                ctx.lineTo(0, b * 0.4);     // transom notch → chevron
+                ctx.lineTo(-w, b);          // port quarter
+                ctx.closePath();
+            } else {
+                ctx.beginPath();
+                ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2, false);
+            }
+
+            if (o.fill) {
+                ctx.globalAlpha = o.fillOpacity;
+                ctx.fillStyle = o.fillColor || o.color;
+                ctx.fill();
+            }
+            if (o.stroke && o.weight !== 0) {
+                ctx.globalAlpha = o.opacity;
+                ctx.lineWidth = o.weight;
+                ctx.strokeStyle = o.color;
+                ctx.lineJoin = 'round';
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+    });
+}
+
+// Factory used by both the full rebuild (syncShipsToLeaflet) and the live
+// incremental update path (websocket.js) so the marker style stays in one place.
+function makeShipArrowMarker(ship, color) {
+    var hasHeading = ship.heading != null && !isNaN(ship.heading);
+    return new L.ShipArrow([ship.lat, ship.lng], {
+        radius: 6,
+        heading: hasHeading ? ship.heading : 0,
+        headingKnown: hasHeading,
+        fillColor: color,
+        fillOpacity: 0.9,
+        color: 'rgba(8,12,20,0.65)',  // dark outline (테두리) reads on satellite
+        weight: 1,
+        opacity: 0.9
+    });
+}
+window.makeShipArrowMarker = makeShipArrowMarker;
 
 function syncShipsToLeaflet() {
     if (!leafletMap || currentMapMode !== '2d') return;
@@ -655,14 +734,7 @@ function syncShipsToLeaflet() {
 
         var color = SHIP_COLORS[type] || '#6b7280';
         ships.forEach(function(ship) {
-            var marker = L.circleMarker([ship.lat, ship.lng], {
-                radius: 4,
-                fillColor: color,
-                fillOpacity: 0.9,
-                color: color,
-                weight: 1,
-                opacity: 0.7
-            });
+            var marker = makeShipArrowMarker(ship, color);
 
             marker.bindTooltip(ship.name || 'Unknown', {
                 className: 'ship-tooltip-2d',
@@ -677,7 +749,7 @@ function syncShipsToLeaflet() {
             });
 
             lg.addLayer(marker);
-            leafletShipMarkers[ship.mmsi] = { marker: marker, type: type };
+            leafletShipMarkers[ship.mmsi] = { marker: marker, type: type, _prevHeading: ship.heading };
         });
 
         var checkbox = document.getElementById('filter-' + type);
@@ -795,20 +867,20 @@ function syncSatellitesToLeaflet() {
 
         var color = SAT_COLORS[mission] || '#94a3b8';
 
-        // Satellite marker with mission color
-        var iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">' +
-            '<circle cx="10" cy="10" r="4" fill="' + color + '" opacity="0.9"/>' +
-            '<circle cx="10" cy="10" r="7" fill="none" stroke="' + color + '" stroke-width="1.5" opacity="0.4"/>' +
-            '<line x1="3" y1="10" x2="7" y2="10" stroke="' + color + '" stroke-width="1.5" opacity="0.6"/>' +
-            '<line x1="13" y1="10" x2="17" y2="10" stroke="' + color + '" stroke-width="1.5" opacity="0.6"/>' +
-            '</svg>';
+        // Classic satellite icon — shared shape with the 3D billboard (_satBodySvg)
+        // so both maps render identically. Falls back to the old dot if the helper
+        // isn't loaded for any reason.
+        var iconSvg = (typeof _satBodySvg === 'function')
+            ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="28" height="28">' + _satBodySvg(color) + '</svg>'
+            : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">' +
+                '<circle cx="10" cy="10" r="4" fill="' + color + '" opacity="0.9"/></svg>';
 
         var marker = L.marker([lat, lng], {
             icon: L.divIcon({
                 className: 'sat-icon-2d',
                 html: iconSvg,
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
             }),
             zIndexOffset: 500
         }).addTo(leafletMap);
@@ -822,13 +894,7 @@ function syncSatellitesToLeaflet() {
             offset: [0, -12]
         });
 
-        marker.on('click', function() {
-            if (typeof _toggleSatFootprint === 'function') {
-                _toggleSatFootprint(satId);
-                syncSatellitesToLeaflet(); // refresh to show/hide footprint
-            }
-        });
-
+        // 관측 범위는 상단 '관측 범위' 토글이 전체 위성에 대해 제어 (클릭 토글 폐지)
         leafletSatMarkers[satId] = marker;
 
         // Ground track
@@ -861,9 +927,15 @@ function syncSatellitesToLeaflet() {
             var fpCoords = _computeFootprint(lat, lng, altKm, 36);
             if (fpCoords.length >= 6) {
                 var fpLatLngs = [];
+                var fpMinLng = 180, fpMaxLng = -180;
                 for (var j = 0; j < fpCoords.length; j += 2) {
                     fpLatLngs.push([fpCoords[j + 1], fpCoords[j]]); // [lat, lng]
+                    if (fpCoords[j] < fpMinLng) fpMinLng = fpCoords[j];
+                    if (fpCoords[j] > fpMaxLng) fpMaxLng = fpCoords[j];
                 }
+                // 날짜변경선(±180°)을 가로지르는 footprint는 2D에서 지도를 가로지르는
+                // 띠로 그려지므로 건너뛴다 (3D에서는 정상 표시됨)
+                if (fpMaxLng - fpMinLng > 180) { return; }
                 var footprint = L.polygon(fpLatLngs, {
                     color: color,
                     weight: 1,
@@ -1473,12 +1545,46 @@ function _finishHazardActivate() {
     leafletMap.setMaxBounds(KOREA_HAZARD_VIEW.bounds);
     leafletMap.setMinZoom(5);
     leafletMap.flyToBounds(KOREA_HAZARD_VIEW.bounds, { duration: 0.8, padding: [20, 20] });
+
+    _showHazardHint();
+}
+
+// Empty-state guidance shown on entering 사고 mode — tells the user to start an
+// area drag. Hidden once they enter area-select; removed on deactivate.
+function _showHazardHint() {
+    var area = document.getElementById('mapArea');
+    if (!area) return;
+    var el = document.getElementById('hazardEntryHint');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'hazardEntryHint';
+        el.className = 'hazard-entry-hint';
+        el.innerHTML =
+            '<div class="screen-empty-card">' +
+                '<i class="fa-solid fa-vector-square"></i>' +
+                '<div class="screen-empty-title">위험 해역 분석</div>' +
+                '<div class="screen-empty-sub">상단 <b>‘영역 분석’</b> 버튼을 누른 뒤<br>지도를 드래그하면 위험도 통계가 표시됩니다</div>' +
+            '</div>';
+        area.appendChild(el);
+    }
+    el.classList.add('active');
+}
+
+function _hideHazardHint() {
+    var el = document.getElementById('hazardEntryHint');
+    if (el) el.classList.remove('active');
+}
+
+function _removeHazardHint() {
+    var el = document.getElementById('hazardEntryHint');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
 }
 
 function deactivateHazardZones() {
     _hazardZonesActive = false;
     _applyHazardActiveClass(false);
     _removeHazardHUD();
+    _removeHazardHint();
 
     // Restore the home bottom stats bar
     var _bb = document.getElementById('bottomBar');

@@ -1,14 +1,13 @@
 // static/js/route-viewer.js
 // ── OVERWATCH 4D — Route Viewer ──
-// Dedicated screen for visualizing shipping routes on the Cesium globe.
-// Reuses existing Cesium viewer via DOM reparenting.
+// Dedicated screen for visualizing domestic customary shipping routes on a
+// self-contained 2D nautical map (Leaflet + CARTO Positron + OpenSeaMap),
+// independent of the home 3D globe.
 
 var RouteViewer = (function() {
 
     // ── State ──
     var active = false;
-    var routeDataSource = null;
-    var shipEntity = null;
     var routeCoords = [];       // [[lng, lat], ...] interpolated
     var totalDistanceKm = 0;
 
@@ -20,14 +19,157 @@ var RouteViewer = (function() {
     var playbackRate = 500;     // x1, x10, x100, x500, x2k
     var lastFrameTime = null;
 
+    // Ship size class (vessel length, m) — forwarded to the future depth-aware
+    // route model. Bigger ships draw deeper, so navigable waters differ by class.
+    var shipSizeClass = 'C';
+    var SHIP_SIZE_CLASSES = {
+        A: '1–20 m', B: '21–40 m', C: '41–80 m', D: '81–200 m', E: '201 m 이상'
+    };
+
+    // Curated major Korean ports — helps users who don't know port names pick
+    // visually (map markers) or from a focus suggestion list. { ko, lat, lng }.
+    var KR_PORTS = [
+        { ko: '부산',   lat: 35.10, lng: 129.04 },
+        { ko: '인천',   lat: 37.47, lng: 126.62 },
+        { ko: '울산',   lat: 35.50, lng: 129.38 },
+        { ko: '광양',   lat: 34.90, lng: 127.70 },
+        { ko: '여수',   lat: 34.75, lng: 127.75 },
+        { ko: '평택·당진', lat: 36.97, lng: 126.82 },
+        { ko: '목포',   lat: 34.78, lng: 126.38 },
+        { ko: '포항',   lat: 36.04, lng: 129.39 },
+        { ko: '군산',   lat: 35.98, lng: 126.60 },
+        { ko: '대산',   lat: 37.00, lng: 126.36 },
+        { ko: '마산',   lat: 35.20, lng: 128.58 },
+        { ko: '통영',   lat: 34.84, lng: 128.42 },
+        { ko: '제주',   lat: 33.52, lng: 126.54 },
+        { ko: '서귀포', lat: 33.24, lng: 126.56 },
+        { ko: '동해',   lat: 37.49, lng: 129.14 },
+        { ko: '속초',   lat: 38.21, lng: 128.60 },
+        { ko: '완도',   lat: 34.31, lng: 126.76 }
+    ];
+    var routePortMarkers = null;  // Leaflet layerGroup of KR port markers
+    var routePortMarkerList = [];  // [{ p, marker }] for per-port visibility control
+
+    // Assign a port to the from/to slot and sync its input/coord display.
+    function assignPort(slot, port) {
+        var inId = slot === 'from' ? 'routeFromInput' : 'routeToInput';
+        var coId = slot === 'from' ? 'routeFromCoord' : 'routeToCoord';
+        if (slot === 'from') fromPort = port; else toPort = port;
+        var input = document.getElementById(inId);
+        var coord = document.getElementById(coId);
+        if (input) input.value = port.name;
+        if (coord) coord.textContent = port.lat.toFixed(4) + ', ' + port.lng.toFixed(4);
+        updateSearchBtn();
+        // Only recenter when the point is off-screen — panning on every pick makes
+        // map clicking feel jumpy.
+        if (routeMap && !routeMap.getBounds().contains([port.lat, port.lng])) {
+            routeMap.panTo([port.lat, port.lng]);
+        }
+    }
+
+    // Which slot the next map/marker click will fill (clickMode wins, else the
+    // next empty slot; null once both are set).
+    function activeTargetSlot() {
+        if (clickMode === 'from' || clickMode === 'to') return clickMode;
+        if (!fromPort) return 'from';
+        if (!toPort) return 'to';
+        return null;
+    }
+
+    // Unified pick from a map click or a port marker. Fills the active slot and
+    // ignores stray clicks once both ends are set (re-arm via the crosshair btns).
+    function pickLocation(lat, lng, name) {
+        var slot = activeTargetSlot();
+        if (!slot) return false;
+        assignPort(slot, { name: name, lat: lat, lng: lng });
+        clickMode = null;
+        updateClickBtnStates();
+        return true;
+    }
+
+    function pickPort(p) {
+        pickLocation(p.lat, p.lng, p.ko);
+    }
+
+    function addKoreanPortMarkers() {
+        if (!routeMap || routePortMarkers) return;
+        routePortMarkers = L.layerGroup().addTo(routeMap);
+        // The map uses a canvas renderer (preferCanvas), where hit-testing small
+        // circle markers is unreliable. Render the port markers as SVG so hover
+        // and click are crisp.
+        var svgRenderer = L.svg({ padding: 0.5 });
+        KR_PORTS.forEach(function(p) {
+            var m = L.circleMarker([p.lat, p.lng], {
+                renderer: svgRenderer,
+                radius: 6,
+                color: '#ffffff',
+                weight: 1.5,
+                fillColor: '#38bdf8',
+                fillOpacity: 0.95,
+                bubblingMouseEvents: false  // don't also trigger the map click
+            });
+            m.bindTooltip(p.ko, {
+                permanent: true,
+                direction: 'right',
+                offset: [6, 0],
+                className: 'route-port-tip',
+                interactive: true  // clicking/hovering the name tag also selects the port
+            });
+            m.on('click', function() { pickPort(p); });
+            m.on('mouseover', function() {
+                // Preview the pick: green if this click sets 출발, red if 도착.
+                var slot = activeTargetSlot();
+                var c = slot === 'from' ? '#10b981' : slot === 'to' ? '#ef4444' : '#fbbf24';
+                m.setStyle({ radius: 8, fillColor: c });
+            });
+            m.on('mouseout', function() { m.setStyle({ radius: 6, fillColor: '#38bdf8' }); });
+            routePortMarkers.addLayer(m);
+            routePortMarkerList.push({ p: p, marker: m });
+        });
+        // Hide labels when zoomed out so they don't crowd.
+        var mapEl = document.getElementById('route-leaflet');
+        function syncLabelVisibility() {
+            if (mapEl) mapEl.classList.toggle('route-hide-port-labels', routeMap.getZoom() < 7);
+        }
+        routeMap.on('zoomend', syncLabelVisibility);
+        syncLabelVisibility();
+    }
+
+    // Hide the cyan KR port marker(s) that coincide with the current from/to ports
+    // while a route is drawn, so its name label doesn't duplicate the 출발/도착 pin.
+    function syncPortMarkerVisibility(hideSelected) {
+        if (!routePortMarkers) return;
+        var EPS = 0.05;
+        function near(port, p) {
+            return port && Math.abs(p.lat - port.lat) < EPS && Math.abs(p.lng - port.lng) < EPS;
+        }
+        routePortMarkerList.forEach(function(entry) {
+            var coincides = near(fromPort, entry.p) || near(toPort, entry.p);
+            var shouldShow = !(hideSelected && coincides);
+            var shown = routePortMarkers.hasLayer(entry.marker);
+            if (shouldShow && !shown) routePortMarkers.addLayer(entry.marker);
+            else if (!shouldShow && shown) routePortMarkers.removeLayer(entry.marker);
+        });
+    }
+
     // Search state
     var fromPort = null;        // { name, lat, lng }
     var toPort = null;
     var clickMode = null;       // 'from' | 'to' | null
-    var clickHandler = null;
 
-    // Layers to hide/restore
+    // Layers to hide/restore (legacy globe-mode helpers, retained but unused)
     var hiddenLayers = [];
+
+    // ── 2D route map (domestic customary-route view) ──
+    // Self-contained Leaflet instance living inside the route dedicated screen,
+    // with a nautical-chart basemap. Independent of the home map so the home
+    // globe stays untouched.
+    var routeMap = null;
+    var routeLine = null;
+    var routeFromMarker = null;
+    var routeToMarker = null;
+    var routeShipMarker = null;
+    var _routeMapClickBound = false;
 
     // UI built flag
     var uiBuilt = false;
@@ -37,6 +179,80 @@ var RouteViewer = (function() {
     // ── Constants ──
     var KTS_TO_KMH = 1.852;
     var ROUTE_ALT = 500;
+
+    // ── Route smoothing (Centripetal Catmull-Rom on the unit sphere) ──
+    // searoute returns sparse network vertices; drawing straight segments between
+    // them looks angular. We round the corners with a centripetal Catmull-Rom
+    // spline computed in 3D on the unit sphere, then renormalize each sample back
+    // onto the sphere. Working in 3D rather than lon/lat gives geodesic-like
+    // curvature on long legs for free and sidesteps antimeridian wrap entirely.
+    var SMOOTH_SEG_KM = 25;      // target spacing between sampled points (km)
+    var SMOOTH_MIN_PER_SEG = 3;  // min samples per original segment
+    var SMOOTH_MAX_PER_SEG = 80; // cap so very long legs stay bounded
+
+    function _lonLatToVec(c) {
+        var lng = c[0] * Math.PI / 180, lat = c[1] * Math.PI / 180;
+        var cl = Math.cos(lat);
+        return [cl * Math.cos(lng), cl * Math.sin(lng), Math.sin(lat)];
+    }
+    function _vecToLonLat(v) {
+        var len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) || 1;
+        var x = v[0] / len, y = v[1] / len, z = v[2] / len;
+        var lat = Math.asin(Math.max(-1, Math.min(1, z))) * 180 / Math.PI;
+        var lng = Math.atan2(y, x) * 180 / Math.PI;
+        return [round6(lng), round6(lat)];
+    }
+    function round6(n) { return Math.round(n * 1e6) / 1e6; }
+    function _vecDist(a, b) {
+        var dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2];
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+    // Approximate great-circle distance (km) between two unit vectors via chord length.
+    function _vecKm(a, b) { return 2 * 6371 * Math.asin(Math.min(1, _vecDist(a, b) / 2)); }
+
+    // Centripetal Catmull-Rom point for params t0..t3 at u, in 3D.
+    function _crPoint(p0, p1, p2, p3, t0, t1, t2, t3, u) {
+        function lerp(a, b, s) { return [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s]; }
+        var A1 = lerp(p0, p1, (u - t0) / (t1 - t0));
+        var A2 = lerp(p1, p2, (u - t1) / (t2 - t1));
+        var A3 = lerp(p2, p3, (u - t2) / (t3 - t2));
+        var B1 = lerp(A1, A2, (u - t0) / (t2 - t0));
+        var B2 = lerp(A2, A3, (u - t1) / (t3 - t1));
+        return lerp(B1, B2, (u - t1) / (t2 - t1));
+    }
+
+    function smoothRouteCoords(coords) {
+        if (!coords || coords.length < 3) return coords || [];
+        // Drop consecutive duplicates (zero-length segments break the parameterization).
+        var pts = [coords[0]];
+        for (var k = 1; k < coords.length; k++) {
+            var prev = pts[pts.length - 1];
+            if (Math.abs(coords[k][0] - prev[0]) > 1e-9 || Math.abs(coords[k][1] - prev[1]) > 1e-9) {
+                pts.push(coords[k]);
+            }
+        }
+        if (pts.length < 3) return pts;
+
+        var V = pts.map(_lonLatToVec);
+        // Pad endpoints by reflection so the curve reaches the first/last vertex.
+        var P = [V[0]].concat(V, [V[V.length - 1]]);
+        var alpha = 0.5; // centripetal
+        var out = [pts[0]];
+        for (var i = 1; i < P.length - 2; i++) {
+            var p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
+            var t0 = 0;
+            var t1 = t0 + Math.pow(_vecDist(p0, p1) || 1e-6, alpha);
+            var t2 = t1 + Math.pow(_vecDist(p1, p2) || 1e-6, alpha);
+            var t3 = t2 + Math.pow(_vecDist(p2, p3) || 1e-6, alpha);
+            var segKm = _vecKm(p1, p2);
+            var n = Math.max(SMOOTH_MIN_PER_SEG, Math.min(SMOOTH_MAX_PER_SEG, Math.ceil(segKm / SMOOTH_SEG_KM)));
+            for (var s = 1; s <= n; s++) {
+                var u = t1 + (t2 - t1) * (s / n);
+                out.push(_vecToLonLat(_crPoint(p0, p1, p2, p3, t0, t1, t2, t3, u)));
+            }
+        }
+        return out;
+    }
     var SHIP_ICON_URL = 'data:image/svg+xml,' + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">' +
         '<polygon points="16,2 28,28 16,22 4,28" fill="#eab308" stroke="#a16207" stroke-width="1.5"/>' +
@@ -101,7 +317,7 @@ var RouteViewer = (function() {
                     '<label>출발지</label>' +
                     '<div class="route-input-row">' +
                         '<input type="text" id="routeFromInput" placeholder="항구명 검색..." autocomplete="off">' +
-                        '<button id="routeFromClick" class="route-click-btn" title="지도에서 클릭"><i class="fa-solid fa-crosshairs"></i></button>' +
+                        '<button id="routeFromClick" class="route-click-btn" title="지도에서 직접 클릭(위경도 지정)"><i class="fa-solid fa-crosshairs"></i></button>' +
                     '</div>' +
                     '<div id="routeFromDropdown" class="route-dropdown"></div>' +
                     '<div id="routeFromCoord" class="route-coord-display"></div>' +
@@ -110,7 +326,7 @@ var RouteViewer = (function() {
                     '<label>도착지</label>' +
                     '<div class="route-input-row">' +
                         '<input type="text" id="routeToInput" placeholder="항구명 검색..." autocomplete="off">' +
-                        '<button id="routeToClick" class="route-click-btn" title="지도에서 클릭"><i class="fa-solid fa-crosshairs"></i></button>' +
+                        '<button id="routeToClick" class="route-click-btn" title="지도에서 직접 클릭(위경도 지정)"><i class="fa-solid fa-crosshairs"></i></button>' +
                     '</div>' +
                     '<div id="routeToDropdown" class="route-dropdown"></div>' +
                     '<div id="routeToCoord" class="route-coord-display"></div>' +
@@ -119,7 +335,21 @@ var RouteViewer = (function() {
                     '<label>속도: <span id="routeSpeedLabel">14</span> kts</label>' +
                     '<input type="range" id="routeSpeedSlider" min="5" max="30" value="14" step="1">' +
                 '</div>' +
-                '<button id="routeSearchBtn" class="route-search-btn" disabled>경로 검색</button>' +
+                '<div class="route-input-group">' +
+                    '<label>선박 크기 등급 <span class="route-size-hint">(길이)</span></label>' +
+                    '<div class="route-size-btns" id="routeSizeBtns">' +
+                        '<button class="route-size-btn" data-size="A" title="1–20 m">A</button>' +
+                        '<button class="route-size-btn" data-size="B" title="21–40 m">B</button>' +
+                        '<button class="route-size-btn active" data-size="C" title="41–80 m">C</button>' +
+                        '<button class="route-size-btn" data-size="D" title="81–200 m">D</button>' +
+                        '<button class="route-size-btn" data-size="E" title="201 m 이상">E</button>' +
+                    '</div>' +
+                    '<div class="route-size-range" id="routeSizeRange">C · 41–80 m</div>' +
+                '</div>' +
+                '<div class="route-action-row">' +
+                    '<button id="routeSearchBtn" class="route-search-btn" disabled>경로 검색</button>' +
+                    '<button id="routeResetBtn" class="route-reset-btn" title="출발·도착 초기화"><i class="fa-solid fa-rotate-left"></i> 초기화</button>' +
+                '</div>' +
                 '<div id="routeError" class="route-error"></div>' +
             '</div>';
         wrap.appendChild(searchPanel);
@@ -188,77 +418,26 @@ var RouteViewer = (function() {
             '</div>';
         wrap.appendChild(infoPanel);
 
+        // Empty-state guidance — shown before a route is generated so the cleared
+        // globe reads as "route mode awaiting input" rather than a broken home screen.
+        var emptyHint = document.createElement('div');
+        emptyHint.id = 'route-empty-hint';
+        emptyHint.className = 'route-empty-hint';
+        emptyHint.innerHTML =
+            '<div class="screen-empty-card">' +
+                '<i class="fa-solid fa-route"></i>' +
+                '<div class="screen-empty-title">관습 항로 추론</div>' +
+                '<div class="screen-empty-sub">출발 · 도착 항구를 선택해<br>항로를 생성하세요</div>' +
+            '</div>';
+        wrap.appendChild(emptyHint);
+
         container.appendChild(wrap);
     }
 
-    // ── Layer Management ──
-    function hideExistingLayers() {
-        hiddenLayers = [];
-
-        function hideIfVisible(layer) {
-            if (layer && layer.show) {
-                hiddenLayers.push(layer);
-                layer.show = false;
-            }
-        }
-
-        // Ship billboards & labels
-        if (typeof SHIP_TYPES !== 'undefined') {
-            SHIP_TYPES.forEach(function(type) {
-                hideIfVisible(shipBillboards[type]);
-                hideIfVisible(shipLabels[type]);
-            });
-        }
-
-        // COG lines
-        if (typeof shipCogLines !== 'undefined') hideIfVisible(shipCogLines);
-
-        // Hide 3D ship models
-        if (ship3dDataSource) hideIfVisible(ship3dDataSource);
-
-        // Satellite data source
-        if (typeof satDataSource !== 'undefined') hideIfVisible(satDataSource);
-
-        // Proximity layers
-        var proxLayers = [
-            typeof proximityDataSource !== 'undefined' ? proximityDataSource : null,
-            typeof proximityLines !== 'undefined' ? proximityLines : null,
-            typeof proximityLabels !== 'undefined' ? proximityLabels : null,
-            typeof proximityCogLines !== 'undefined' ? proximityCogLines : null,
-            typeof proximityCpaPoints !== 'undefined' ? proximityCpaPoints : null,
-            typeof proximityCpaLabels !== 'undefined' ? proximityCpaLabels : null,
-        ];
-        proxLayers.forEach(function(layer) {
-            hideIfVisible(layer);
-        });
-
-        // Ship data sources
-        if (typeof shipDataSources !== 'undefined') {
-            Object.keys(shipDataSources).forEach(function(type) {
-                var ds = shipDataSources[type];
-                hideIfVisible(ds);
-            });
-        }
-    }
-
-    function restoreExistingLayers() {
-        hiddenLayers.forEach(function(layer) {
-            layer.show = true;
-        });
-        hiddenLayers = [];
-    }
-
-    // ── Globe Reparenting ──
-    function setDedicatedTransparent(on) {
-        var ds = document.getElementById('dedicatedScreen');
-        if (!ds) return;
-        if (on) {
-            ds.style.background = 'transparent';
-            ds.style.pointerEvents = 'none';
-        } else {
-            ds.style.background = '';
-            ds.style.pointerEvents = '';
-        }
+    // Toggle the empty-state guidance.
+    function setEmptyHint(show) {
+        var el = document.getElementById('route-empty-hint');
+        if (el) el.classList.toggle('active', !!show);
     }
 
     // ── Port Search (client-side cached) ──
@@ -337,7 +516,9 @@ var RouteViewer = (function() {
                 if (slider) slider.focus();
             }
             updateSearchBtn();
+            updateClickHint();
             highlightIdx = -1;
+            if (routeMap) routeMap.panTo([port.lat, port.lng]);
         }
 
         function updateHighlight() {
@@ -364,10 +545,28 @@ var RouteViewer = (function() {
             updateHighlight();
         }
 
+        // Focus suggestions: when the field is empty, surface major Korean ports
+        // so users who don't know port names can pick without typing.
+        function renderKoreanSuggestions() {
+            dropdown.innerHTML =
+                '<div class="route-dropdown-head">주요 국내 항구</div>' +
+                KR_PORTS.map(function(p) {
+                    return '<div class="route-dropdown-item" data-name="' + p.ko + '" data-lat="' + p.lat + '" data-lng="' + p.lng + '" data-country="KR">' +
+                        '<strong>' + p.ko + '</strong> <span class="route-port-country">KR</span>' +
+                    '</div>';
+                }).join('');
+            dropdown.style.display = 'block';
+            highlightIdx = -1;
+        }
+
+        input.addEventListener('focus', function() {
+            if (input.value.trim().length < 1) renderKoreanSuggestions();
+        });
+
         input.addEventListener('input', function() {
             var q = input.value.trim();
             highlightIdx = -1;
-            if (q.length < 1) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; return; }
+            if (q.length < 1) { renderKoreanSuggestions(); return; }
             if (_portCache) {
                 renderResults(q);
             } else {
@@ -439,55 +638,109 @@ var RouteViewer = (function() {
         if (fromBtn) fromBtn.classList.toggle('active', clickMode === 'from');
         if (toBtn) toBtn.classList.toggle('active', clickMode === 'to');
 
-        // Change cursor
-        var cesiumEl = document.getElementById('cesiumContainer');
-        if (cesiumEl) {
-            cesiumEl.style.cursor = clickMode ? 'crosshair' : '';
+        // Change cursor on the route map
+        var mapEl = document.getElementById('route-leaflet');
+        if (mapEl) {
+            mapEl.style.cursor = clickMode ? 'crosshair' : '';
         }
+        updateClickHint();
     }
 
-    function setupGlobeClickHandler() {
-        if (typeof viewer === 'undefined') return;
+    // Floating banner telling the user whether the next click sets 출발 or 도착.
+    function updateClickHint() {
+        var slot = activeTargetSlot();
+        // Reflect the active slot on the map container so port name-tag hover
+        // colors (CSS) match the marker-dot hover preview.
+        var mapEl = document.getElementById('route-leaflet');
+        if (mapEl) {
+            mapEl.classList.remove('route-target-from', 'route-target-to');
+            if (slot) mapEl.classList.add('route-target-' + slot);
+        }
+        var el = document.getElementById('route-click-hint');
+        if (!el) return;
+        if (!slot) { el.classList.remove('active'); return; }
+        var isFrom = slot === 'from';
+        el.innerHTML =
+            '<span class="rp-tag ' + (isFrom ? 'rp-from' : 'rp-to') + '">' + (isFrom ? '출발' : '도착') + '</span>' +
+            '<i class="fa-solid fa-hand-pointer"></i> 지도에서 ' + (isFrom ? '출발' : '도착') + ' 항구를 클릭하세요';
+        el.className = 'route-click-hint active ' + (isFrom ? 'hint-from' : 'hint-to');
+    }
 
-        clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-        clickHandler.setInputAction(function(click) {
+    var ROUTE_BLANK_TILE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+    // Create (or re-show) the self-contained nautical 2D map for the route screen.
+    function initRouteMap() {
+        var container = document.getElementById('dedicated-route-inference');
+        if (!container || typeof L === 'undefined') return;
+
+        if (routeMap) {
+            // Already built \u2014 the dedicated view was just re-shown; recompute size
+            // (twice: once now, once after the screen's slide-in transition).
+            _refreshRouteMapSize();
+            return;
+        }
+
+        var mapEl = document.getElementById('route-leaflet');
+        if (!mapEl) {
+            mapEl = document.createElement('div');
+            mapEl.id = 'route-leaflet';
+            container.insertBefore(mapEl, container.firstChild);
+        }
+
+        routeMap = L.map(mapEl, {
+            center: [35.5, 128.5],   // Korean waters \u2014 domestic customary routes
+            zoom: 6,
+            minZoom: 3,
+            maxZoom: 18,
+            zoomControl: true,
+            attributionControl: false,
+            preferCanvas: true,
+            worldCopyJump: true
+        });
+        // Move zoom control clear of the top-left search panel.
+        if (routeMap.zoomControl) routeMap.zoomControl.setPosition('bottomright');
+
+        // Satellite basemap — same look/tone as the home 2D map (ArcGIS World
+        // Imagery + CARTO dark labels). The `basemap-satellite` class applies the
+        // shared dark tile-pane filter (main.css) for tonal consistency.
+        mapEl.classList.add('basemap-satellite');
+        L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            { maxZoom: 19, errorTileUrl: ROUTE_BLANK_TILE }
+        ).addTo(routeMap);
+        L.tileLayer(
+            'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+            { maxZoom: 19, subdomains: 'abcd', pane: 'overlayPane', errorTileUrl: ROUTE_BLANK_TILE }
+        ).addTo(routeMap);
+
+        setupRouteMapClick();
+        addKoreanPortMarkers();
+        _refreshRouteMapSize();
+    }
+
+    // Recompute Leaflet's size after the dedicated screen becomes visible /
+    // finishes its slide-in transition (it measures 0 while display:none).
+    function _refreshRouteMapSize() {
+        [60, 250, 480].forEach(function(ms) {
+            setTimeout(function() { if (routeMap) routeMap.invalidateSize(); }, ms);
+        });
+    }
+
+    function setupRouteMapClick() {
+        if (!routeMap || _routeMapClickBound) return;
+        _routeMapClickBound = true;
+        routeMap.on('click', function(e) {
+            // Arbitrary lat/lng picking only when the crosshair button is armed \u2014
+            // otherwise a click that just misses a port would select open water.
             if (!clickMode) return;
-
-            var ray = viewer.camera.getPickRay(click.position);
-            var cartesian = viewer.scene.globe.pick(ray, viewer.scene);
-            if (!cartesian) return;
-
-            var carto = Cesium.Cartographic.fromCartesian(cartesian);
-            var lat = Cesium.Math.toDegrees(carto.latitude);
-            var lng = Cesium.Math.toDegrees(carto.longitude);
-
-            var port = { name: lat.toFixed(2) + '\u00b0, ' + lng.toFixed(2) + '\u00b0', lat: lat, lng: lng };
-            var input, coordDisplay;
-
-            if (clickMode === 'from') {
-                fromPort = port;
-                input = document.getElementById('routeFromInput');
-                coordDisplay = document.getElementById('routeFromCoord');
-            } else {
-                toPort = port;
-                input = document.getElementById('routeToInput');
-                coordDisplay = document.getElementById('routeToCoord');
-            }
-
-            if (input) input.value = port.name;
-            if (coordDisplay) coordDisplay.textContent = lat.toFixed(4) + ', ' + lng.toFixed(4);
-
-            clickMode = null;
-            updateClickBtnStates();
-            updateSearchBtn();
-        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+            var lat = e.latlng.lat, lng = e.latlng.lng;
+            pickLocation(lat, lng, lat.toFixed(2) + '\u00b0, ' + lng.toFixed(2) + '\u00b0');
+        });
     }
 
     function destroyGlobeClickHandler() {
-        if (clickHandler) {
-            clickHandler.destroy();
-            clickHandler = null;
-        }
+        // Leaflet click handler lives with routeMap; nothing to tear down here.
+        clickMode = null;
     }
 
     // ── Route Search ──
@@ -512,8 +765,11 @@ var RouteViewer = (function() {
             btn.innerHTML = '<span class="route-btn-spinner"></span> 검색 중...';
             showError('');
 
+            // size_class is forward-compatible: the current searoute backend
+            // ignores unknown query params; the future depth-aware model will use it.
             var url = '/api/v1/route?from_lat=' + fromPort.lat + '&from_lng=' + fromPort.lng +
-                      '&to_lat=' + toPort.lat + '&to_lng=' + toPort.lng;
+                      '&to_lat=' + toPort.lat + '&to_lng=' + toPort.lng +
+                      '&size_class=' + shipSizeClass;
 
             console.time('[Route] total');
             console.time('[Route] fetch');
@@ -524,7 +780,14 @@ var RouteViewer = (function() {
                 })
                 .then(function(data) {
                     console.timeEnd('[Route] fetch');
-                    routeCoords = data.coordinates;
+                    // Smooth the sparse searoute vertices so the drawn line (and the
+                    // ship that plays back along it) follows a natural, rounded path.
+                    routeCoords = smoothRouteCoords(data.coordinates);
+                    // Anchor the path to the actually-selected ports. searoute snaps
+                    // origin/destination to its coarse (~0.1°) offshore network nodes,
+                    // so its endpoints can sit far out at sea; pin the line to the real
+                    // port coords instead so markers/ship don't float in open water.
+                    _anchorRouteEnds();
                     totalDistanceKm = data.distance_km;
                     console.time('[Route] render');
                     renderRoute();
@@ -552,142 +815,150 @@ var RouteViewer = (function() {
         if (el) el.textContent = msg;
     }
 
-    // ── Route Rendering on Cesium ──
+    // Clear the current selection + drawn route so the user can start a new one.
+    function resetRoute() {
+        fromPort = null;
+        toPort = null;
+        clickMode = null;
+        routeCoords = [];
+        totalDistanceKm = 0;
+        ['routeFromInput', 'routeToInput'].forEach(function(id) {
+            var e = document.getElementById(id); if (e) e.value = '';
+        });
+        ['routeFromCoord', 'routeToCoord'].forEach(function(id) {
+            var e = document.getElementById(id); if (e) e.textContent = '';
+        });
+        clearRoute();          // removes line/markers, restores cyan markers, empty hint
+        hidePlaybar();
+        showError('');
+        updateSearchBtn();
+        updateClickBtnStates();  // refreshes cursor + the 출발/도착 hint
+    }
+
+    function setupResetButton() {
+        var btn = document.getElementById('routeResetBtn');
+        if (btn) btn.addEventListener('click', resetRoute);
+    }
+
+    // Replace the searoute-snapped endpoints with the real selected port coords
+    // (skip if already within ~3km so we don't add a redundant point).
+    function _anchorRouteEnds() {
+        if (routeCoords.length < 2) return;
+        var EPS = 0.03;  // ~3km in degrees
+        if (fromPort) {
+            var f = routeCoords[0];
+            if (Math.abs(f[0] - fromPort.lng) > EPS || Math.abs(f[1] - fromPort.lat) > EPS) {
+                routeCoords.unshift([fromPort.lng, fromPort.lat]);
+            }
+        }
+        if (toPort) {
+            var l = routeCoords[routeCoords.length - 1];
+            if (Math.abs(l[0] - toPort.lng) > EPS || Math.abs(l[1] - toPort.lat) > EPS) {
+                routeCoords.push([toPort.lng, toPort.lat]);
+            }
+        }
+    }
+
+    // Teardrop pin image (shared by start/end markers)
+    function _routePinImage(fillColor) {
+        var c = document.createElement('canvas');
+        c.width = 32; c.height = 40;
+        var ctx = c.getContext('2d');
+        ctx.beginPath();
+        ctx.arc(16, 14, 10, Math.PI, 0, false);
+        ctx.quadraticCurveTo(26, 28, 16, 38);
+        ctx.quadraticCurveTo(6, 28, 6, 14);
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(16, 14, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        return c.toDataURL();
+    }
+
+    function _pinIcon(fillColor) {
+        return L.icon({
+            iconUrl: _routePinImage(fillColor),
+            iconSize: [28, 35],
+            iconAnchor: [14, 35],
+            tooltipAnchor: [0, -34]
+        });
+    }
+
+    // ── Route Rendering on the 2D nautical map ──
     function renderRoute() {
-        if (typeof viewer === 'undefined') return;
+        if (!routeMap) initRouteMap();
+        if (!routeMap || routeCoords.length < 2) return;
 
         clearRoute();
+        setEmptyHint(false);  // a route now exists
 
-        routeDataSource = new Cesium.CustomDataSource('Route');
-        viewer.dataSources.add(routeDataSource);
+        // [lng,lat] → Leaflet [lat,lng]
+        var latlngs = routeCoords.map(function(c) { return [c[1], c[0]]; });
 
-        // Route polyline
-        var positions = routeCoords.map(function(c) {
-            return Cesium.Cartesian3.fromDegrees(c[0], c[1]);
+        routeLine = L.polyline(latlngs, {
+            color: '#eab308',
+            weight: 4,
+            opacity: 0.95,
+            dashArray: '8,8',
+            lineCap: 'round',
+            lineJoin: 'round'
+        }).addTo(routeMap);
+
+        var first = latlngs[0];
+        var last = latlngs[latlngs.length - 1];
+
+        routeFromMarker = L.marker(first, { icon: _pinIcon('#10b981'), interactive: false })
+            .addTo(routeMap)
+            .bindTooltip('<span class="rp-tag rp-from">출발</span>' + (fromPort ? fromPort.name : 'Start'),
+                { permanent: true, direction: 'top', className: 'route-pin-label route-pin-from' });
+
+        routeToMarker = L.marker(last, { icon: _pinIcon('#ef4444'), interactive: false })
+            .addTo(routeMap)
+            .bindTooltip('<span class="rp-tag rp-to">도착</span>' + (toPort ? toPort.name : 'End'),
+                { permanent: true, direction: 'top', className: 'route-pin-label route-pin-to' });
+
+        // Animated ship marker — DivIcon with an inner element we can rotate
+        // (Leaflet uses the outer marker element's transform for positioning).
+        var shipIcon = L.divIcon({
+            className: 'route-ship-divicon',
+            html: '<div class="route-ship-ico">' +
+                  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28">' +
+                  '<polygon points="16,2 28,28 16,22 4,28" fill="#eab308" stroke="#a16207" stroke-width="1.5"/>' +
+                  '</svg></div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
         });
+        routeShipMarker = L.marker(first, { icon: shipIcon, interactive: false, zIndexOffset: 1000 }).addTo(routeMap);
 
-        var dashPositions = routeCoords.map(function(c) {
-            return Cesium.Cartesian3.fromDegrees(c[0], c[1], ROUTE_ALT);
-        });
-        routeDataSource.entities.add({
-            polyline: {
-                positions: dashPositions,
-                width: 5,
-                material: new Cesium.PolylineDashMaterialProperty({
-                    color: Cesium.Color.fromCssColorString('#eab308'),
-                    dashLength: 8,
-                }),
-                arcType: Cesium.ArcType.RHUMB,
-            }
-        });
-
-        // Pin marker generator (same shape as search marker)
-        function _routePinImage(fillColor) {
-            var c = document.createElement('canvas');
-            c.width = 32; c.height = 40;
-            var ctx = c.getContext('2d');
-            ctx.beginPath();
-            ctx.arc(16, 14, 10, Math.PI, 0, false);
-            ctx.quadraticCurveTo(26, 28, 16, 38);
-            ctx.quadraticCurveTo(6, 28, 6, 14);
-            ctx.fillStyle = fillColor;
-            ctx.fill();
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(16, 14, 4, 0, Math.PI * 2);
-            ctx.fillStyle = '#fff';
-            ctx.fill();
-            return c.toDataURL();
-        }
-
-        // Start marker
-        routeDataSource.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(routeCoords[0][0], routeCoords[0][1], ROUTE_ALT),
-            billboard: {
-                image: _routePinImage('#10b981'),
-                width: 28,
-                height: 35,
-                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            },
-            label: {
-                text: fromPort ? fromPort.name : 'Start',
-                font: '11px Pretendard Variable, Inter, sans-serif',
-                fillColor: Cesium.Color.fromCssColorString('#10b981'),
-                outlineColor: Cesium.Color.BLACK,
-                outlineWidth: 3,
-                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                pixelOffset: new Cesium.Cartesian2(0, -42),
-                disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            }
-        });
-
-        // End marker
-        var last = routeCoords[routeCoords.length - 1];
-        routeDataSource.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(last[0], last[1], ROUTE_ALT),
-            billboard: {
-                image: _routePinImage('#ef4444'),
-                width: 28,
-                height: 35,
-                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            },
-            label: {
-                text: toPort ? toPort.name : 'End',
-                font: '11px Pretendard Variable, Inter, sans-serif',
-                fillColor: Cesium.Color.fromCssColorString('#ef4444'),
-                outlineColor: Cesium.Color.BLACK,
-                outlineWidth: 3,
-                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                pixelOffset: new Cesium.Cartesian2(0, -42),
-                disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            }
-        });
-
-        // Ship entity (animated)
-        shipEntity = routeDataSource.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(routeCoords[0][0], routeCoords[0][1], ROUTE_ALT),
-            billboard: {
-                image: SHIP_ICON_URL,
-                width: 28,
-                height: 28,
-                verticalOrigin: Cesium.VerticalOrigin.CENTER,
-                rotation: 0,
-            }
-        });
+        // Avoid the duplicate port name: hide the cyan markers under the 출발/도착 pins.
+        syncPortMarkerVisibility(true);
 
         progress = 0;
-
-        // Force render to ensure route is visible immediately
-        if (viewer.scene) {
-            viewer.scene.requestRender();
-        }
+        updateShipPosition();
     }
 
     function clearRoute() {
         stopAnimation();
-        if (routeDataSource && typeof viewer !== 'undefined') {
-            viewer.dataSources.remove(routeDataSource, true);
+        if (routeMap) {
+            [routeLine, routeFromMarker, routeToMarker, routeShipMarker].forEach(function(lyr) {
+                if (lyr) routeMap.removeLayer(lyr);
+            });
         }
-        routeDataSource = null;
-        shipEntity = null;
+        routeLine = routeFromMarker = routeToMarker = routeShipMarker = null;
+        syncPortMarkerVisibility(false);  // restore all cyan port markers
         progress = 0;
+        if (active) setEmptyHint(true);  // back to awaiting-input state
     }
 
     function flyToRoute() {
-        if (typeof viewer === 'undefined' || routeCoords.length < 2) return;
-        var positions = routeCoords.map(function(c) {
-            return Cesium.Cartesian3.fromDegrees(c[0], c[1]);
-        });
-        viewer.camera.flyToBoundingSphere(
-            Cesium.BoundingSphere.fromPoints(positions),
-            { duration: 0.8, offset: new Cesium.HeadingPitchRange(0, -Math.PI / 2, 0) }
-        );
+        if (!routeMap || routeCoords.length < 2) return;
+        var latlngs = routeCoords.map(function(c) { return [c[1], c[0]]; });
+        routeMap.fitBounds(L.latLngBounds(latlngs), { padding: [60, 60], maxZoom: 12 });
     }
 
     // ── Animation ──
@@ -717,11 +988,15 @@ var RouteViewer = (function() {
     }
 
     function updateShipPosition() {
-        if (!shipEntity || routeCoords.length < 2) return;
-        var pos = getPositionAtProgress(progress);
-        var heading = getHeadingAtProgress(progress);
-        shipEntity.position = Cesium.Cartesian3.fromDegrees(pos[0], pos[1], ROUTE_ALT);
-        shipEntity.billboard.rotation = -heading;
+        if (!routeShipMarker || routeCoords.length < 2) return;
+        var pos = getPositionAtProgress(progress);       // [lng, lat]
+        var heading = getHeadingAtProgress(progress);    // radians, 0 = north
+        routeShipMarker.setLatLng([pos[1], pos[0]]);
+        var el = routeShipMarker.getElement();
+        if (el) {
+            var ico = el.querySelector('.route-ship-ico');
+            if (ico) ico.style.transform = 'rotate(' + (heading * 180 / Math.PI) + 'deg)';
+        }
 
         // Update progress bar
         var fill = document.getElementById('routeProgressFill');
@@ -896,6 +1171,21 @@ var RouteViewer = (function() {
         });
     }
 
+    function setupSizeSelector() {
+        var btns = document.getElementById('routeSizeBtns');
+        var rangeEl = document.getElementById('routeSizeRange');
+        if (!btns) return;
+        btns.addEventListener('click', function(e) {
+            var btn = e.target.closest('.route-size-btn');
+            if (!btn) return;
+            shipSizeClass = btn.dataset.size;
+            btns.querySelectorAll('.route-size-btn').forEach(function(b) {
+                b.classList.toggle('active', b === btn);
+            });
+            if (rangeEl) rangeEl.textContent = shipSizeClass + ' · ' + SHIP_SIZE_CLASSES[shipSizeClass];
+        });
+    }
+
     function setupPanelToggle() {
         var btn = document.getElementById('routePanelToggle');
         var body = document.getElementById('routePanelBody');
@@ -940,6 +1230,30 @@ var RouteViewer = (function() {
             document.getElementById('dedicated-route-inference').appendChild(bar);
         }
         bar.classList.add('active');
+
+        // Click-target hint banner (shows whether the next click sets 출발/도착)
+        if (!document.getElementById('route-click-hint')) {
+            var hint = document.createElement('div');
+            hint.id = 'route-click-hint';
+            hint.className = 'route-click-hint';
+            document.getElementById('dedicated-route-inference').appendChild(hint);
+        }
+        updateClickHint();
+
+        // One-shot entrance flash — gives the mode switch a clear "moment" so it's
+        // obvious the view changed even though the camera position is preserved.
+        var container = document.getElementById('dedicated-route-inference');
+        if (container) {
+            var oldFlash = document.getElementById('route-enter-flash');
+            if (oldFlash && oldFlash.parentNode) oldFlash.parentNode.removeChild(oldFlash);
+            var flash = document.createElement('div');
+            flash.id = 'route-enter-flash';
+            flash.className = 'route-enter-flash';
+            container.appendChild(flash);
+            setTimeout(function() {
+                if (flash && flash.parentNode) flash.parentNode.removeChild(flash);
+            }, 850);
+        }
     }
 
     function hideRouteOverlay() {
@@ -955,9 +1269,11 @@ var RouteViewer = (function() {
 
         buildUI();
         warmUpServer();
-        hideExistingLayers();
-        setDedicatedTransparent(true);
-        setupGlobeClickHandler();
+        // Close any open home-screen right panel (e.g. a ship info card) so it
+        // doesn't linger over the route screen.
+        if (window.LayoutManager && LayoutManager.closeRightPanel) LayoutManager.closeRightPanel();
+        // Opaque dedicated screen hosts its own nautical 2D map — no globe behind.
+        initRouteMap();
         showRouteOverlay();
 
         if (!eventsWired) {
@@ -966,19 +1282,24 @@ var RouteViewer = (function() {
             setupSearch('routeToInput', 'routeToDropdown', 'routeToCoord', 'to');
             setupClickMode();
             setupSearchButton();
+            setupResetButton();
             setupPlaybar();
             setupSpeedSlider();
+            setupSizeSelector();
             setupPanelToggle();
         }
 
         // Restore previous route if exists
-        if (routeCoords.length > 0 && !routeDataSource) {
+        if (routeCoords.length > 1 && !routeLine) {
             renderRoute();
             showPlaybar();
             updateInfoText();
-        } else if (routeDataSource) {
+        } else if (routeLine) {
             showPlaybar();
         }
+        // Guide the user when no route is loaded yet.
+        setEmptyHint(routeCoords.length < 2);
+        updateClickHint();
 
         // Restore input values
         if (fromPort) {
@@ -1003,18 +1324,9 @@ var RouteViewer = (function() {
         hideRouteOverlay();
         stopAnimation();
         hidePlaybar();
-        destroyGlobeClickHandler();
 
-        // Remove route visuals from viewer (will re-render on activate)
-        if (routeDataSource && typeof viewer !== 'undefined') {
-            viewer.dataSources.remove(routeDataSource, true);
-        }
-        routeDataSource = null;
-        shipEntity = null;
-
-        setDedicatedTransparent(false);
-        restoreExistingLayers();
-
+        // Route layers persist on the (now-hidden) 2D map so they're restored on
+        // re-entry. Just reset transient click state.
         clickMode = null;
         updateClickBtnStates();
     }

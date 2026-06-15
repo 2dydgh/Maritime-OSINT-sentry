@@ -2,95 +2,193 @@
 
 // Ship size based on actual vessel length (AIS dimension data)
 function getShipSize(lengthM, beamM) {
-    var len = lengthM || 50;
-    var bm = beamM || 10;
-    var h = Math.max(10, Math.min(30, 10 + (len / 400) * 20));
+    var len = lengthM || 70;
+    var bm = beamM || 12;
+    var h = Math.max(11, Math.min(34, 11 + (len / 400) * 23));
     // AIS dimension reports are often garbage (beam ≥ length, tiny length).
-    // Real-world beam/length stays under ~0.35 — clamp so icons never
-    // stretch into horizontal bars.
-    var ratio = Math.max(0.08, Math.min(0.35, bm / len));
-    var w = h * ratio * 2.5;
-    return { width: Math.max(8, Math.round(w)), height: Math.round(h) };
+    // Real-world beam/length stays under ~0.32 — clamp so icons stay sleek
+    // (long & narrow, like a real vessel) and never become horizontal bars.
+    var ratio = Math.max(0.08, Math.min(0.32, bm / len));
+    var w = h * ratio * 2.2;
+    return { width: Math.max(7, Math.round(w)), height: Math.round(h) };
 }
 window.getShipSize = getShipSize;
 
-// Ship icon SVG by type
+// Ship icon SVG by type.
+// Top-down silhouettes — pointed/raked bow up, parallel sides, transom stern,
+// rotated to heading by the caller. For a "2.5D" look each hull is filled with a
+// cross-beam gradient (dark edges → light centre = rounded-hull volume) plus a
+// soft drop shadow, and proportions are long & narrow like a real vessel.
+// Deck superstructure is drawn on top (outside the shadowed group).
+
+// Mix a hex colour toward white (pct>0) or black (pct<0) by |pct| (0..1).
+function _shipShade(hex, pct) {
+    var n = parseInt((hex || '').slice(1), 16);
+    if (isNaN(n)) return hex;
+    var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    var t = pct < 0 ? 0 : 255, p = Math.abs(pct);
+    r = Math.round((t - r) * p + r);
+    g = Math.round((t - g) * p + g);
+    b = Math.round((t - b) * p + b);
+    return '#' + (0x1000000 + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
 var _shipIconCache = {};
 function getShipIcon(colorHex, shipType) {
     var key = colorHex + '|' + (shipType || 'other');
     if (_shipIconCache[key]) return _shipIconCache[key];
 
     var c = colorHex;
-    var s = 'rgba(0,0,0,0.5)';
-    var glow = '';
+    var gid = c.slice(1) + (shipType || 'other');
+    // Keep the vivid base colour at the centre; only the edges darken for volume.
+    // (Lightening the centre toward white desaturates and looks washed-out.)
+    var sheen = _shipShade(c, 0.15);  // subtle deck highlight ridge
+    var dark = _shipShade(c, -0.24);  // gently shaded sides
+    var edge = _shipShade(c, -0.5);   // crisp outline
 
-    var hull;
+    var d, deck;
     switch (shipType) {
         case 'cargo':
-            hull = '<path d=\'M16,3 L24,10 L24,30 L22,34 L10,34 L8,30 L8,10 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
-                <rect x=\'10\' y=\'12\' width=\'12\' height=\'3.5\' rx=\'0.5\' fill=\'white\' opacity=\'0.3\'/>\
-                <rect x=\'10\' y=\'17\' width=\'12\' height=\'3.5\' rx=\'0.5\' fill=\'white\' opacity=\'0.25\'/>\
-                <rect x=\'10\' y=\'22\' width=\'12\' height=\'3.5\' rx=\'0.5\' fill=\'white\' opacity=\'0.2\'/>\
-                <rect x=\'13\' y=\'6\' width=\'6\' height=\'4\' rx=\'0.8\' fill=\'white\' opacity=\'0.4\'/>';
+            // Boxy bulk/container carrier: cargo hatches forward, deckhouse + funnel aft.
+            d = 'M16,2 C18.6,3.2 20.5,7 20.5,12 L20.5,38 L18.8,42 L13.2,42 L11.5,38 L11.5,12 C11.5,7 13.4,3.2 16,2 Z';
+            deck = '<rect x="12.6" y="13" width="6.8" height="3" rx="0.4" fill="#fff" opacity="0.3"/>'
+                + '<rect x="12.6" y="17.5" width="6.8" height="3" rx="0.4" fill="#fff" opacity="0.26"/>'
+                + '<rect x="12.6" y="22" width="6.8" height="3" rx="0.4" fill="#fff" opacity="0.22"/>'
+                + '<rect x="12.6" y="26.5" width="6.8" height="3" rx="0.4" fill="#fff" opacity="0.2"/>'
+                + '<rect x="12.4" y="33" width="7.2" height="5" rx="0.6" fill="#fff" opacity="0.5"/>'
+                + '<rect x="14.8" y="34.5" width="2.4" height="2" rx="0.3" fill="#fff" opacity="0.35"/>';
             break;
         case 'tanker':
-            hull = '<ellipse cx=\'16\' cy=\'20\' rx=\'9\' ry=\'15\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
-                <ellipse cx=\'16\' cy=\'14\' rx=\'5\' ry=\'3\' fill=\'white\' opacity=\'0.2\'/>\
-                <ellipse cx=\'16\' cy=\'22\' rx=\'5\' ry=\'3\' fill=\'white\' opacity=\'0.15\'/>\
-                <ellipse cx=\'16\' cy=\'29\' rx=\'4\' ry=\'2.5\' fill=\'white\' opacity=\'0.12\'/>\
-                <rect x=\'13\' y=\'6\' width=\'6\' height=\'3\' rx=\'1.5\' fill=\'white\' opacity=\'0.4\'/>';
+            // Full hull, rounded bow; centreline pipeline + tank domes, bridge aft.
+            d = 'M16,2.5 C18.8,3.6 20.5,7.5 20.5,13 L20.5,38 L18.8,42 L13.2,42 L11.5,38 L11.5,13 C11.5,7.5 13.2,3.6 16,2.5 Z';
+            deck = '<line x1="16" y1="13" x2="16" y2="32" stroke="#fff" stroke-width="1" opacity="0.3"/>'
+                + '<circle cx="16" cy="15" r="1.7" fill="#fff" opacity="0.24"/>'
+                + '<circle cx="16" cy="20" r="1.7" fill="#fff" opacity="0.21"/>'
+                + '<circle cx="16" cy="25" r="1.7" fill="#fff" opacity="0.18"/>'
+                + '<circle cx="16" cy="30" r="1.5" fill="#fff" opacity="0.16"/>'
+                + '<rect x="12.4" y="33.5" width="7.2" height="5" rx="0.6" fill="#fff" opacity="0.5"/>';
             break;
         case 'passenger':
-            hull = '<path d=\'M16,2 L26,12 L26,28 L23,34 L9,34 L6,28 L6,12 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
-                <rect x=\'8\' y=\'12\' width=\'16\' height=\'2\' rx=\'0.5\' fill=\'white\' opacity=\'0.35\'/>\
-                <rect x=\'8\' y=\'15.5\' width=\'16\' height=\'2\' rx=\'0.5\' fill=\'white\' opacity=\'0.3\'/>\
-                <rect x=\'8\' y=\'19\' width=\'16\' height=\'2\' rx=\'0.5\' fill=\'white\' opacity=\'0.25\'/>\
-                <rect x=\'8\' y=\'22.5\' width=\'16\' height=\'2\' rx=\'0.5\' fill=\'white\' opacity=\'0.2\'/>\
-                <rect x=\'11\' y=\'5\' width=\'10\' height=\'5\' rx=\'1.5\' fill=\'white\' opacity=\'0.35\'/>\
-                <circle cx=\'16\' cy=\'29\' r=\'2\' fill=\'white\' opacity=\'0.15\'/>';
+            // Cruise/ferry: wide hull, long superstructure + promenade lines, lifeboats.
+            d = 'M16,2 C19,3.2 21.5,8 21.5,14 L21.5,37 L19.8,42 L12.2,42 L10.5,37 L10.5,14 C10.5,8 13,3.2 16,2 Z';
+            deck = '<rect x="11.6" y="10" width="8.8" height="26" rx="1.5" fill="#fff" opacity="0.42"/>'
+                + '<line x1="12.4" y1="15" x2="19.6" y2="15" stroke="' + c + '" stroke-width="0.6" opacity="0.45"/>'
+                + '<line x1="12.4" y1="20" x2="19.6" y2="20" stroke="' + c + '" stroke-width="0.6" opacity="0.45"/>'
+                + '<line x1="12.4" y1="25" x2="19.6" y2="25" stroke="' + c + '" stroke-width="0.6" opacity="0.45"/>'
+                + '<line x1="12.4" y1="30" x2="19.6" y2="30" stroke="' + c + '" stroke-width="0.6" opacity="0.45"/>'
+                + '<circle cx="11" cy="16" r="0.9" fill="#fff" opacity="0.5"/><circle cx="21" cy="16" r="0.9" fill="#fff" opacity="0.5"/>'
+                + '<circle cx="11" cy="23" r="0.9" fill="#fff" opacity="0.5"/><circle cx="21" cy="23" r="0.9" fill="#fff" opacity="0.5"/>'
+                + '<circle cx="11" cy="30" r="0.9" fill="#fff" opacity="0.5"/><circle cx="21" cy="30" r="0.9" fill="#fff" opacity="0.5"/>';
             break;
         case 'fishing':
-            hull = '<path d=\'M16,6 L19,14 L19,28 L17,32 L15,32 L13,28 L13,14 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
-                <line x1=\'16\' y1=\'6\' x2=\'16\' y2=\'16\' stroke=\'white\' stroke-width=\'1.2\' opacity=\'0.6\'/>\
-                <line x1=\'16\' y1=\'10\' x2=\'5\' y2=\'18\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.9\'/>\
-                <line x1=\'16\' y1=\'10\' x2=\'27\' y2=\'18\' stroke=\'' + c + '\' stroke-width=\'1.5\' opacity=\'0.9\'/>\
-                <line x1=\'5\' y1=\'18\' x2=\'5\' y2=\'24\' stroke=\'' + c + '\' stroke-width=\'1\' opacity=\'0.7\'/>\
-                <line x1=\'27\' y1=\'18\' x2=\'27\' y2=\'24\' stroke=\'' + c + '\' stroke-width=\'1\' opacity=\'0.7\'/>\
-                <circle cx=\'5\' cy=\'25\' r=\'1\' fill=\'' + c + '\' opacity=\'0.6\'/>\
-                <circle cx=\'27\' cy=\'25\' r=\'1\' fill=\'' + c + '\' opacity=\'0.6\'/>';
+            // Small trawler: wheelhouse forward, outrigger booms amidships, reel aft.
+            d = 'M16,8 C17.5,8.8 18.8,10.8 18.8,14 L18.8,33 L17.4,36.5 L14.6,36.5 L13.2,33 L13.2,14 C13.2,10.8 14.5,8.8 16,8 Z';
+            deck = '<rect x="13.9" y="12" width="4.2" height="4" rx="0.6" fill="#fff" opacity="0.46"/>'
+                + '<line x1="16" y1="20" x2="5" y2="27" stroke="' + c + '" stroke-width="1.3" opacity="0.85"/>'
+                + '<line x1="16" y1="20" x2="27" y2="27" stroke="' + c + '" stroke-width="1.3" opacity="0.85"/>'
+                + '<circle cx="5" cy="27" r="1" fill="' + c + '" opacity="0.7"/>'
+                + '<circle cx="27" cy="27" r="1" fill="' + c + '" opacity="0.7"/>'
+                + '<rect x="14.3" y="30" width="3.4" height="2.4" rx="0.4" fill="#fff" opacity="0.3"/>';
             break;
         case 'military':
-            hull = '<path d=\'M16,0 L20,10 L21,18 L20,30 L18,36 L14,36 L12,30 L11,18 L12,10 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
-                <path d=\'M14,7 L18,7 L19,11 L13,11 Z\' fill=\'white\' opacity=\'0.3\'/>\
-                <circle cx=\'16\' cy=\'15\' r=\'1.8\' fill=\'white\' opacity=\'0.3\'/>\
-                <rect x=\'14\' y=\'20\' width=\'4\' height=\'1.5\' rx=\'0.5\' fill=\'white\' opacity=\'0.25\'/>\
-                <line x1=\'16\' y1=\'0\' x2=\'16\' y2=\'6\' stroke=\'white\' stroke-width=\'0.8\' opacity=\'0.6\'/>';
+            // Warship: slim, sharp bow; forward gun, midship bridge + mast, helideck aft.
+            d = 'M16,1 C16.8,3 17.8,7 17.8,13 L17.8,38 L16.9,42 L15.1,42 L14.2,38 L14.2,13 C14.2,7 15.2,3 16,1 Z';
+            deck = '<rect x="14.7" y="9.5" width="2.6" height="3" rx="0.3" fill="#fff" opacity="0.42"/>'
+                + '<rect x="14.3" y="15" width="3.4" height="7" rx="0.4" fill="#fff" opacity="0.38"/>'
+                + '<line x1="16" y1="18" x2="16" y2="13.5" stroke="#fff" stroke-width="0.8" opacity="0.6"/>'
+                + '<rect x="14.4" y="32" width="3.2" height="5" rx="0.3" fill="none" stroke="#fff" stroke-width="0.5" opacity="0.45"/>';
             break;
         case 'tug':
-            hull = '<path d=\'M16,12 L22,16 L22,28 L20,32 L12,32 L10,28 L10,16 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
-                <rect x=\'12\' y=\'15\' width=\'8\' height=\'6\' rx=\'1.5\' fill=\'white\' opacity=\'0.4\'/>\
-                <line x1=\'16\' y1=\'12\' x2=\'16\' y2=\'14\' stroke=\'white\' stroke-width=\'1\' opacity=\'0.5\'/>\
-                <rect x=\'13\' y=\'24\' width=\'6\' height=\'4\' rx=\'0.8\' fill=\'white\' opacity=\'0.2\'/>';
+            // Tug: short, beamy hull; large wheelhouse forward, aft towing deck + post.
+            d = 'M16,11 C18,11.8 20,14.5 20,18.5 L20,36 L18.4,40 L13.6,40 L12,36 L12,18.5 C12,14.5 14,11.8 16,11 Z';
+            deck = '<rect x="12.8" y="16" width="6.4" height="6" rx="1" fill="#fff" opacity="0.46"/>'
+                + '<rect x="13.2" y="26" width="5.6" height="4" rx="0.6" fill="#fff" opacity="0.2"/>'
+                + '<circle cx="16" cy="28" r="1.1" fill="#fff" opacity="0.42"/>';
             break;
         default:
-            hull = '<path d=\'M16,4 L21,12 L21,28 L19,33 L13,33 L11,28 L11,12 Z\' fill=\'' + c + '\' stroke=\'' + s + '\' stroke-width=\'0.6\'/>\
-                <rect x=\'13\' y=\'10\' width=\'6\' height=\'4\' rx=\'1\' fill=\'white\' opacity=\'0.35\'/>\
-                <line x1=\'16\' y1=\'4\' x2=\'16\' y2=\'9\' stroke=\'white\' stroke-width=\'0.7\' opacity=\'0.5\'/>';
+            // Generic vessel: medium hull, deckhouse aft, short bow mast.
+            d = 'M16,3 C18,4 19.8,7.5 19.8,12 L19.8,38 L18.2,42 L13.8,42 L12.2,38 L12.2,12 C12.2,7.5 14,4 16,3 Z';
+            deck = '<rect x="13" y="13" width="6" height="9" rx="0.6" fill="#fff" opacity="0.22"/>'
+                + '<rect x="13" y="33" width="6" height="5" rx="0.6" fill="#fff" opacity="0.42"/>'
+                + '<line x1="16" y1="3" x2="16" y2="8" stroke="#fff" stroke-width="0.7" opacity="0.5"/>';
     }
 
-    // 페이딩 방향 꼬리 (선미 뒤쪽 점들)
-    var trail = '<circle cx=\'16\' cy=\'43\' r=\'3\' fill=\'' + c + '\' opacity=\'0.6\'/>\
-        <circle cx=\'16\' cy=\'52\' r=\'2.6\' fill=\'' + c + '\' opacity=\'0.45\'/>\
-        <circle cx=\'16\' cy=\'60\' r=\'2.2\' fill=\'' + c + '\' opacity=\'0.32\'/>\
-        <circle cx=\'16\' cy=\'67\' r=\'1.8\' fill=\'' + c + '\' opacity=\'0.2\'/>\
-        <circle cx=\'16\' cy=\'73\' r=\'1.4\' fill=\'' + c + '\' opacity=\'0.1\'/>';
+    // Cross-beam gradient (volume) + soft drop shadow. IDs are per colour+type so
+    // cached icons don't collide. Filter ref uses a literal '#' (single-encoded
+    // by encodeURIComponent below) so it resolves once the browser decodes.
+    var defs = '<defs>'
+        + '<linearGradient id="hg-' + gid + '" x1="0" y1="0" x2="1" y2="0">'
+        +   '<stop offset="0" stop-color="' + dark + '"/>'
+        +   '<stop offset="0.42" stop-color="' + c + '"/>'
+        +   '<stop offset="0.5" stop-color="' + sheen + '"/>'
+        +   '<stop offset="0.58" stop-color="' + c + '"/>'
+        +   '<stop offset="1" stop-color="' + dark + '"/>'
+        + '</linearGradient>'
+        + '<filter id="sh-' + gid + '" x="-60%" y="-30%" width="220%" height="160%">'
+        +   '<feDropShadow dx="0" dy="0.5" stdDeviation="0.8" flood-color="#000" flood-opacity="0.45"/>'
+        + '</filter>'
+        + '</defs>';
 
-    var svg = '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'32\' height=\'78\' viewBox=\'0 0 32 78\'>' + glow + hull + trail + '</svg>';
+    // Fading wake astern (stern is toward +y, behind the hull).
+    var trail = '<circle cx="16" cy="47" r="3" fill="' + c + '" opacity="0.55"/>'
+        + '<circle cx="16" cy="56" r="2.6" fill="' + c + '" opacity="0.42"/>'
+        + '<circle cx="16" cy="64" r="2.2" fill="' + c + '" opacity="0.3"/>'
+        + '<circle cx="16" cy="71" r="1.8" fill="' + c + '" opacity="0.2"/>'
+        + '<circle cx="16" cy="77" r="1.4" fill="' + c + '" opacity="0.12"/>'
+        + '<circle cx="16" cy="82" r="1.1" fill="' + c + '" opacity="0.07"/>';
+
+    var hull = '<g filter="url(#sh-' + gid + ')">'
+        + '<path d="' + d + '" fill="url(#hg-' + gid + ')" stroke="' + edge + '" stroke-width="0.5" stroke-linejoin="round"/>'
+        + '</g>';
+
+    // viewBox is cropped to "4 0 24 88" (centred on x=16) instead of the full
+    // 0..32 so the hull fills far more of the icon — bigger and crisper on the
+    // 3D globe — while staying symmetric for heading rotation. Fishing booms
+    // (x5..27) still fit inside the 4..28 window.
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="88" viewBox="4 0 24 88">'
+        + defs + trail + hull + deck + '</svg>';
     var url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
     _shipIconCache[key] = url;
     return url;
 }
 window.getShipIcon = getShipIcon;
+
+// ── 3D ship marker: AIS-style arrowhead + fading wake tail ──
+// Matches the 2D arrow but keeps the wake behind it. Uniform size (no per-vessel
+// scaling) so it stays crisp and consistent at any zoom; coloured by type and
+// rotated to heading by the caller. Vessel position ≈ icon centre (arrow base).
+var SHIP_ARROW_W = 11, SHIP_ARROW_H = 22;
+var _shipArrowCache = {};
+function getShipArrowIcon(colorHex) {
+    if (_shipArrowCache[colorHex]) return _shipArrowCache[colorHex];
+    var c = colorHex;
+    var gid = c.slice(1);
+    var dark = _shipShade(c, -0.28);  // shaded edges (volume)
+    var edge = _shipShade(c, -0.55);  // outline (테두리)
+    // Cross-beam gradient + drop shadow give the flat arrow a bit of depth.
+    var defs = '<defs>'
+        + '<linearGradient id="ag-' + gid + '" x1="0" y1="0" x2="1" y2="0">'
+        +   '<stop offset="0" stop-color="' + dark + '"/>'
+        +   '<stop offset="0.5" stop-color="' + c + '"/>'
+        +   '<stop offset="1" stop-color="' + dark + '"/>'
+        + '</linearGradient>'
+        + '<filter id="af-' + gid + '" x="-60%" y="-60%" width="220%" height="220%">'
+        +   '<feDropShadow dx="0" dy="0.6" stdDeviation="0.7" flood-color="#000" flood-opacity="0.5"/>'
+        + '</filter>'
+        + '</defs>';
+    var trail = '<circle cx="12" cy="28" r="2.4" fill="' + c + '" opacity="0.5"/>'
+        + '<circle cx="12" cy="34" r="2" fill="' + c + '" opacity="0.34"/>'
+        + '<circle cx="12" cy="39" r="1.6" fill="' + c + '" opacity="0.22"/>'
+        + '<circle cx="12" cy="43" r="1.3" fill="' + c + '" opacity="0.12"/>'
+        + '<circle cx="12" cy="46" r="1" fill="' + c + '" opacity="0.07"/>';
+    var arrow = '<path d="M12,2 L20,22 L12,17 L4,22 Z" fill="url(#ag-' + gid + ')" stroke="' + edge + '" stroke-width="1.3" stroke-linejoin="round" filter="url(#af-' + gid + ')"/>';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="48" viewBox="0 0 24 48">'
+        + defs + trail + arrow + '</svg>';
+    var url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    _shipArrowCache[colorHex] = url;
+    return url;
+}
+window.getShipArrowIcon = getShipArrowIcon;
 
 // Aircraft icon SVG by type
 var _aircraftIconCache = {};
@@ -189,32 +287,29 @@ function refreshRainviewer() {
             if (!pastFrames || pastFrames.length === 0) return;
             var latestPath = pastFrames[pastFrames.length - 1].path;
             var host = data.host || 'https://tilecache.rainviewer.com';
+            var tileUrl = host + latestPath + '/256/{z}/{x}/{y}/2/1_1.png';
             var newProvider = new Cesium.UrlTemplateImageryProvider({
-                url: host + latestPath + '/256/{z}/{x}/{y}/2/1_1.png',
+                url: tileUrl,
                 maximumLevel: 6
             });
-            var _cl = document.getElementById('layer-clouds');
-            var wasVisible = cloudLayer ? cloudLayer.show : (_cl ? _cl.checked : false);
+            // 강수 레이더 가시성은 기상 칩 / wx-precipitation 토글이 관리 (기본 OFF)
+            var wasVisible = cloudLayer ? cloudLayer.show : false;
             if (cloudLayer) viewer.imageryLayers.remove(cloudLayer, true);
             cloudLayer = viewer.imageryLayers.addImageryProvider(newProvider);
             cloudLayer.alpha = 0.6;
             cloudLayer.show = wasVisible;
             weatherProvider = newProvider;
+            // 2D(Leaflet)용 강수 타일 URL 노출 + 표시 중이면 갱신
+            window._rainviewerTileUrl = tileUrl;
+            if (typeof renderPrecipitation === 'function') renderPrecipitation();
         })
         .catch(function(err) { console.warn("Rainviewer refresh failed:", err); });
 }
 refreshRainviewer();
 setInterval(refreshRainviewer, 10 * 60 * 1000);
 
-var _cloudsCheckbox = document.getElementById('layer-clouds');
-if (_cloudsCheckbox) {
-    _cloudsCheckbox.addEventListener('change', function(e) {
-        if (cloudLayer) {
-            cloudLayer.show = e.target.checked;
-            if (e.target.checked) viewer.imageryLayers.raiseToTop(cloudLayer);
-        }
-    });
-}
+// 강수 레이더(cloudLayer) 토글은 weather-overlay.js의 #wx-precipitation 핸들러와
+// ui-controls.js의 기상 칩 핸들러에서 관리한다. (옛 #layer-clouds 체크박스는 제거됨)
 
 function updateShipsLayer(ships) {
     var byType = {};
@@ -272,21 +367,24 @@ function updateShipsLayer(ships) {
                 var position = Cesium.Cartesian3.fromDegrees(ship.lng, ship.lat);
 
                 if (!entity) {
-                    var shipSize = getShipSize(ship.length, ship.beam);
+                    var hNormal = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(position);
                     ds.entities.add({
                         id: ship.mmsi,
                         name: ship.name,
                         position: position,
                         billboard: {
-                            image: getShipIcon(SHIP_COLORS[type], type),
-                            width: shipSize.width,
-                            height: shipSize.height,
-                            scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
+                            image: getShipArrowIcon(SHIP_COLORS[type] || '#6b7280'),
+                            width: SHIP_ARROW_W,
+                            height: SHIP_ARROW_H,
+                            rotation: Cesium.Math.toRadians(-(ship.heading || 0)),
+                            alignedAxis: hNormal,
+                            scaleByDistance: new Cesium.NearFarScalar(5e5, 1.9, 1.5e7, 0.9),
                             disableDepthTestDistance: 5e6
                         }
                     });
                 } else {
                     entity.position = position;
+                    entity.billboard.rotation = Cesium.Math.toRadians(-(ship.heading || 0));
                 }
             });
 
@@ -344,16 +442,15 @@ function updateShipsLayer(ships) {
                     }
                 }
             } else {
-                // 새 billboard 추가
-                var shipSize = getShipSize(ship.length, ship.beam);
+                // 새 billboard 추가 — 화살표 + 꼬리 (2D 화살표와 통일)
                 var bb = billboards.add({
                     position: position,
-                    image: getShipIcon(SHIP_COLORS[type], type),
-                    width: shipSize.width,
-                    height: shipSize.height,
+                    image: getShipArrowIcon(SHIP_COLORS[type] || '#6b7280'),
+                    width: SHIP_ARROW_W,
+                    height: SHIP_ARROW_H,
                     rotation: heading,
                     alignedAxis: surfaceNormal,
-                    scaleByDistance: new Cesium.NearFarScalar(5e5, 1.6, 1.5e7, 0.6),
+                    scaleByDistance: new Cesium.NearFarScalar(5e5, 1.9, 1.5e7, 0.9),
                     disableDepthTestDistance: 5e6
                 });
                 bb._mmsi = ship.mmsi;
@@ -414,16 +511,16 @@ function updateShipsLayer(ships) {
                     entry._prevLng = ship.lng;
                     entry.marker.setLatLng([ship.lat, ship.lng]);
                 }
+                // Re-point the arrow if the heading changed (setLatLng already
+                // redraws; only redraw separately when position held but course moved)
+                if (entry._prevHeading !== ship.heading && entry.marker.setHeading) {
+                    entry._prevHeading = ship.heading;
+                    var hk = ship.heading != null && !isNaN(ship.heading);
+                    entry.marker.setHeading(hk ? ship.heading : 0, hk);
+                }
             } else {
                 var color = SHIP_COLORS[type] || '#6b7280';
-                var marker = L.circleMarker([ship.lat, ship.lng], {
-                    radius: 4,
-                    fillColor: color,
-                    fillOpacity: 0.9,
-                    color: color,
-                    weight: 1,
-                    opacity: 0.7
-                });
+                var marker = makeShipArrowMarker(ship, color);
 
                 marker.bindTooltip(ship.name || 'Unknown', {
                     className: 'ship-tooltip-2d',
@@ -446,7 +543,7 @@ function updateShipsLayer(ships) {
                 }
                 if (!newMarkersByType[type]) newMarkersByType[type] = [];
                 newMarkersByType[type].push(marker);
-                leafletShipMarkers[ship.mmsi] = { marker: marker, type: type };
+                leafletShipMarkers[ship.mmsi] = { marker: marker, type: type, _prevLat: ship.lat, _prevLng: ship.lng, _prevHeading: ship.heading };
             }
         });
 
