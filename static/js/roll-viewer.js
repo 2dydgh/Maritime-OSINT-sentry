@@ -1548,6 +1548,21 @@ var RollViewer = (function () {
 
     // ── Canvas HUD overlay + Camera presets ──
     function buildCanvasOverlays(canvasWrap) {
+        var split = document.createElement('div');
+        split.className = 'rv-split-overlay';
+        split.innerHTML =
+            '<div class="rv-split-divider"></div>' +
+            '<div class="rv-split-side rv-split-left">' +
+            '<div class="rv-split-label">실제 REAL</div>' +
+            '<div class="rv-split-roll" id="rv-real-roll">0.0°</div>' +
+            '<div class="roll-gauge roll-gauge-safe" id="rv-real-gauge"><div class="roll-gauge-track"><div class="roll-gauge-fill" id="rv-real-fill"></div></div></div>' +
+            '</div>' +
+            '<div class="rv-split-side rv-split-right">' +
+            '<div class="rv-split-label">예측 PRED</div>' +
+            '<div class="rv-split-roll" id="rv-pred-roll">0.0°</div>' +
+            '<div class="roll-gauge roll-gauge-safe" id="rv-pred-gauge"><div class="roll-gauge-track"><div class="roll-gauge-fill" id="rv-pred-fill"></div></div></div>' +
+            '</div>';
+        canvasWrap.appendChild(split);
 
         // (Removed) Top-right SAFE/CAUTION badge — ROLL HUD value color already conveys the same level.
 
@@ -3871,6 +3886,8 @@ var RollViewer = (function () {
             var absRoll = Math.abs(smoothRoll);
             var absPitch = Math.abs(smoothPitch);
             updateGauge(absRoll, smoothRoll);
+            updateRollGaugeBy('rv-real-gauge', 'rv-real-fill', 'rv-real-roll', absRoll);
+            updateRollGaugeBy('rv-pred-gauge', 'rv-pred-fill', 'rv-pred-roll', Math.abs(smoothPredRoll));
             updatePitchGauge(absPitch, smoothPitch);
             updateCanvasHUD(absRoll, absPitch, smoothSpeed);
 
@@ -4091,6 +4108,22 @@ var RollViewer = (function () {
             '</div>';
 
         return panel;
+    }
+
+    // 임의의 게이지 세트를 갱신. (gaugeId, fillId, valueId, absRoll)
+    function updateRollGaugeBy(gaugeId, fillId, valueId, absRoll) {
+        var gauge = document.getElementById(gaugeId);
+        var fill = document.getElementById(fillId);
+        var valueEl = document.getElementById(valueId);
+        if (!gauge || !fill || !valueEl) return;
+        fill.style.width = Math.min(absRoll / 30 * 100, 100) + '%';
+        valueEl.textContent = absRoll.toFixed(1) + '°';
+        var level;
+        if (absRoll < 5) level = 'safe';
+        else if (absRoll < 10) level = 'caution';
+        else if (absRoll < 15) level = 'warning';
+        else level = 'danger';
+        gauge.className = 'roll-gauge roll-gauge-' + level;
     }
 
     // ── updateGauge(absRoll, signedRoll) ──
