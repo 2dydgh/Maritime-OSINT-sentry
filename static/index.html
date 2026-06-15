@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
 
     <!-- Application Styles -->
-    <link rel="stylesheet" href="css/main.css?v=85">
+    <link rel="stylesheet" href="css/main.css?v=88">
     <!-- ECharts for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <!-- Three.js for 3D visualization -->
@@ -110,16 +110,6 @@
         <div id="leafletContainer"></div>
 
         <div id="mapTopBar">
-            <!-- 3D/2D 토글 -->
-            <div id="mapModeToggle">
-                <button class="map-mode-btn active" data-mode="3d" onclick="setMapMode('3d')">
-                    <i class="fa-solid fa-globe"></i> 3D
-                </button>
-                <button class="map-mode-btn" data-mode="2d" onclick="setMapMode('2d')">
-                    <i class="fa-solid fa-map"></i> 2D
-                </button>
-            </div>
-
             <!-- 장소 검색 + 지역 프리셋 -->
             <div id="mapSearchWrap">
                 <i class="fa-solid fa-magnifying-glass" id="mapSearchIcon"></i>
@@ -133,7 +123,17 @@
 
         </div>
 
-        <!-- 레이어 필터 칩 — 지도 우측 세로 위젯 -->
+        <!-- 시점 컨트롤(2D/3D) — 지도 우상단, 레이어 칩 바로 위 -->
+        <div id="mapModeToggle">
+            <button class="map-mode-btn active" data-mode="3d" onclick="setMapMode('3d')">
+                <i class="fa-solid fa-globe"></i> 3D
+            </button>
+            <button class="map-mode-btn" data-mode="2d" onclick="setMapMode('2d')">
+                <i class="fa-solid fa-map"></i> 2D
+            </button>
+        </div>
+
+        <!-- 레이어 필터 칩 — 지도 우상단 세로 위젯 -->
         <div id="layerChips">
             <div class="layer-chip active" data-layer="ships" title="선박">
                 <i class="fa-solid fa-ship"></i><span class="chip-label">선박</span>
@@ -535,7 +535,8 @@
     <script src="js/model-registry.js?v=5"></script>
     <script src="js/ship-builders.js?v=2"></script>
     <script src="js/ship-preview-3d.js?v=2"></script>
-    <script src="js/roll-viewer.js?v=32"></script>
+    <script src="js/roll-prediction.js?v=1"></script>
+    <script src="js/roll-viewer.js?v=33"></script>
     <script src="js/route-viewer.js?v=16"></script>
     <script src="js/app.js?v=4"></script>
     <script src="js/map-cesium.js?v=6"></script>

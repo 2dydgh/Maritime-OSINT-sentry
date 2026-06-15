@@ -66,6 +66,12 @@ var RollViewer = (function () {
     var smoothSpeed = 12;                  // lerp-smoothed current speed
     var smoothRoll = 0;                    // lerp-smoothed roll angle
     var smoothPitch = 0;                   // lerp-smoothed pitch angle
+    var predRoll = 0;                       // 예측 roll (원시)
+    var predPitch = 0;                      // 예측 pitch (원시)
+    var smoothPredRoll = 0;                 // lerp-smoothed 예측 roll
+    var smoothPredPitch = 0;               // lerp-smoothed 예측 pitch
+    var predRollHistory = [];               // 예측 roll 이력 (실제와 동일 길이 유지)
+    var predPitchHistory = [];
 
     // ── Capsize scenario state ──
     // Real capsized ships often end up *lying on their side* (rolled ~90°,
@@ -3834,6 +3840,17 @@ var RollViewer = (function () {
                 }
             }
 
+            // ── 예측값 산출 (모델 seam) ──
+            if (window.RollPrediction) {
+                var _pred = RollPrediction.predictRoll(
+                    { roll: smoothRoll, pitch: smoothPitch },
+                    { seed: shipType, t: elapsed }
+                );
+                predRoll = _pred.roll;
+                predPitch = _pred.pitch;
+                smoothPredRoll += (predRoll - smoothPredRoll) * motionLerp;
+                smoothPredPitch += (predPitch - smoothPredPitch) * motionLerp;
+            }
             var absRoll = Math.abs(smoothRoll);
             var absPitch = Math.abs(smoothPitch);
             updateGauge(absRoll, smoothRoll);
@@ -3852,6 +3869,10 @@ var RollViewer = (function () {
             if (rollHistory.length > 60) rollHistory.shift();
             pitchHistory.push(absPitch);
             if (pitchHistory.length > 60) pitchHistory.shift();
+            predRollHistory.push(Math.abs(smoothPredRoll));
+            if (predRollHistory.length > 60) predRollHistory.shift();
+            predPitchHistory.push(Math.abs(smoothPredPitch));
+            if (predPitchHistory.length > 60) predPitchHistory.shift();
 
             // ── Camera roll sync — tilt camera with ship roll ──
             var camRollRad = smoothRoll * (Math.PI / 180) * 0.3;  // 30% of ship roll
