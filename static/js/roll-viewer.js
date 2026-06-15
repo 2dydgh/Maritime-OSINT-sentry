@@ -387,11 +387,24 @@ var RollViewer = (function () {
         });
         canvasWrap.appendChild(backBtn);
 
-        // Info panel (right 30%)
+        // 우측 슬라이드 드로우 (공유 입력: 선박/항해/기상/분석)
         var panel = buildInfoPanel(ship);
+        var drawer = document.createElement('div');
+        drawer.className = 'rv-drawer';
+        drawer.id = 'rv-drawer';
+        drawer.appendChild(panel);
+
+        var drawerToggle = document.createElement('button');
+        drawerToggle.className = 'rv-drawer-toggle';
+        drawerToggle.id = 'rv-drawer-toggle';
+        drawerToggle.innerHTML = '<i class="fa-solid fa-bars"></i>';
+        drawerToggle.addEventListener('click', function () {
+            drawer.classList.toggle('rv-drawer-open');
+        });
 
         layout.appendChild(canvasWrap);
-        layout.appendChild(panel);
+        layout.appendChild(drawer);
+        layout.appendChild(drawerToggle);
         container.appendChild(layout);
 
         // Build turn scenario UI overlay on canvas
@@ -415,14 +428,9 @@ var RollViewer = (function () {
         startAnimation();
     }
 
-    // The canvas extends under the glass info panel; shift the projection so the
-    // ship centers in the uncovered area. Panel width comes from the CSS var.
     function applyPanelViewOffset(w, h) {
-        var layoutEl = document.querySelector('.roll-viewer-layout');
-        var panelW = layoutEl
-            ? parseFloat(getComputedStyle(layoutEl).getPropertyValue('--rv-panel-w')) || 0
-            : 0;
-        camera.setViewOffset(w, h, panelW / 2, 0, w, h);
+        // 2분할 모드는 전체 캔버스를 쓰므로 패널 오프셋 불필요.
+        // (드로우는 캔버스 위에 떠 있는 오버레이)
     }
 
     // ── initScene(container) ──
@@ -1454,50 +1462,6 @@ var RollViewer = (function () {
 
         // (Bottom-left HUD removed — duplicated info that lives in the side panel and prediction modal.)
 
-        // Predicted-attitude modal (top-left, below back button) — shows ROLL & PITCH gauges,
-        // the SIMULATION OUTPUT separated from the right side panel which now holds REAL data only.
-        var prediction = document.createElement('div');
-        prediction.className = 'rv-prediction-modal';
-        prediction.id = 'rv-prediction-modal';
-        prediction.innerHTML =
-            '<div class="rv-prediction-header"><span>예상 자세 PREDICTION</span></div>' +
-            '<div class="rv-prediction-row">' +
-            '<div class="rv-tilt-indicator" id="rv-roll-tilt">' +
-            '<div class="rv-tilt-ring">' +
-            '<div class="rv-tilt-horizon" id="rv-roll-horizon"></div>' +
-            '<div class="rv-tilt-center"></div>' +
-            '</div>' +
-            '</div>' +
-            '<div class="rv-tilt-info">' +
-            '<div class="rv-tilt-value" id="rv-gauge-value">0.0°</div>' +
-            '<div class="rv-tilt-label">횡요각 ROLL</div>' +
-            '<div class="roll-gauge roll-gauge-safe" id="rv-gauge">' +
-            '<div class="roll-gauge-track">' +
-            '<div class="roll-gauge-fill" id="rv-gauge-fill"></div>' +
-            '<div class="roll-gauge-threshold"></div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-            '<div class="rv-prediction-row">' +
-            '<div class="rv-tilt-indicator rv-tilt-pitch" id="rv-pitch-tilt">' +
-            '<div class="rv-tilt-ring">' +
-            '<div class="rv-tilt-horizon" id="rv-pitch-horizon"></div>' +
-            '<div class="rv-tilt-center"></div>' +
-            '</div>' +
-            '</div>' +
-            '<div class="rv-tilt-info">' +
-            '<div class="rv-tilt-value" id="rv-pitch-value">0.0°</div>' +
-            '<div class="rv-tilt-label">종요각 PITCH</div>' +
-            '<div class="roll-gauge roll-gauge-safe" id="rv-pitch-gauge">' +
-            '<div class="roll-gauge-track">' +
-            '<div class="roll-gauge-fill" id="rv-pitch-fill"></div>' +
-            '<div class="roll-gauge-threshold" style="left:50%;"></div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-            '</div>';
-        canvasWrap.appendChild(prediction);
 
         // Top-right unified scenario status panel.
         // Shows when turn scenario is active OR any weather/speed/time override is set.
@@ -3885,10 +3849,8 @@ var RollViewer = (function () {
             }
             var absRoll = Math.abs(smoothRoll);
             var absPitch = Math.abs(smoothPitch);
-            updateGauge(absRoll, smoothRoll);
             updateRollGaugeBy('rv-real-gauge', 'rv-real-fill', 'rv-real-roll', absRoll);
             updateRollGaugeBy('rv-pred-gauge', 'rv-pred-fill', 'rv-pred-roll', Math.abs(smoothPredRoll));
-            updatePitchGauge(absPitch, smoothPitch);
             updateCanvasHUD(absRoll, absPitch, smoothSpeed);
 
             // Encounter period drifts with heading/speed — 2Hz is plenty for the panel
