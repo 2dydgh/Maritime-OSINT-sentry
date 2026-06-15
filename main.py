@@ -34,7 +34,6 @@ async def lifespan(app: FastAPI):
     global db_pool
     logger.info("Initializing database connection pool...")
     try:
-        
         db_pool = await asyncpg.create_pool(
             user=DB_USER,
             password=DB_PASSWORD,

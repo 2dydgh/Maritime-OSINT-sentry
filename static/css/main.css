@@ -2969,7 +2969,7 @@ body {
 }
 
 .layer-master:checked {
-    background: var(--primary);
+    background: linear-gradient(160deg, #60a5fa, var(--primary));
     border-color: var(--primary);
 }
 
@@ -4607,8 +4607,8 @@ body {
     left: 3px;
     width: calc((100% - 6px) / 2);
     border-radius: var(--radius-pill);
-    /* Solid pill matching the layer chips' active state + AI chat bubble */
-    background: var(--primary);
+    /* Gradient pill (matches the detail-panel accent gradient) */
+    background: linear-gradient(160deg, #60a5fa, var(--primary));
     box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
     transition: transform 0.3s cubic-bezier(0.45, 0.05, 0.2, 1);
     z-index: 0;
@@ -6502,6 +6502,11 @@ input[type="range"]#routeSpeedSlider {
 }
 
 #mapArea.hazard-active .hazard-legend-panel { display: flex; }
+
+/* Hide the map view/layer controls while in 사고(hazard) mode (same map, not a
+   dedicated screen, so the JS screen-hide doesn't apply). */
+#mapArea.hazard-active #mapModeToggle,
+#mapArea.hazard-active #layerChips { display: none !important; }
 
 /* While the chat panel is open it covers the bottom-left — fade the legend out */
 body:has(.chat-panel.chat-panel-open) .hazard-legend-panel {

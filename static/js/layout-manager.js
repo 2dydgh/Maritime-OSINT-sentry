@@ -229,6 +229,10 @@ var LayoutManager = (function() {
         var mapTopBar = document.getElementById('mapTopBar');
         var mapNav = document.getElementById('mapNavControls');
         var leafletZoom = document.getElementById('leafletZoomControls');
+        // 2D/3D toggle + layer widget now live on the map (not in the top bar),
+        // so they must be hidden/restored explicitly with the other map-only UI.
+        var modeToggle = document.getElementById('mapModeToggle');
+        var layerChips = document.getElementById('layerChips');
 
         if (panel) {
             var target = document.getElementById('dedicated-' + panel);
@@ -241,6 +245,8 @@ var LayoutManager = (function() {
             if (mapTopBar) mapTopBar.style.display = 'none';
             if (mapNav) mapNav.style.display = 'none';
             if (leafletZoom) leafletZoom.style.display = 'none';
+            if (modeToggle) modeToggle.style.display = 'none';
+            if (layerChips) layerChips.style.display = 'none';
         } else {
             ds.classList.remove('active');
             setTimeout(function() {
@@ -254,6 +260,8 @@ var LayoutManager = (function() {
             if (mapTopBar) mapTopBar.style.display = '';
             if (mapNav) mapNav.style.display = '';
             if (leafletZoom) leafletZoom.style.display = '';
+            if (modeToggle) modeToggle.style.display = '';
+            if (layerChips) layerChips.style.display = '';
         }
     }
 

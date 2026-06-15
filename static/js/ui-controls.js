@@ -69,75 +69,77 @@ document.addEventListener('DOMContentLoaded', function() {
     // Layer chip toggle (on/off) + dropdown
     var chips = document.getElementById('layerChips');
     if (chips) {
+        // Chip click (anywhere) → open that layer's detail panel.
+        // On/off is done inside the panel (master toggle), so a stray click
+        // never mass-toggles a whole layer by accident.
         chips.addEventListener('click', function(e) {
-            // Expand button → open dropdown
-            var expandBtn = e.target.closest('.chip-expand');
-            if (expandBtn) {
-                e.stopPropagation();
-                var ddId = expandBtn.dataset.dropdown;
-                var dd = document.getElementById(ddId);
-                if (!dd) return;
-                var willOpen = !dd.classList.contains('open');
-                // Close all dropdowns + reset all chevrons
-                document.querySelectorAll('.layer-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
-                document.querySelectorAll('.chip-expand.expanded').forEach(function(b) { b.classList.remove('expanded'); });
-                if (willOpen) {
-                    dd.classList.add('open');
-                    expandBtn.classList.add('expanded');
-                }
-                // Position dropdown below its parent chip
-                if (dd.classList.contains('open')) {
-                    var chip = expandBtn.closest('.layer-chip');
-                    var container = dd.offsetParent || document.body;
-                    if (chip && container) {
-                        var chipRect = chip.getBoundingClientRect();
-                        var containerRect = container.getBoundingClientRect();
-                        // Layer widget sits on the right edge → open the dropdown to
-                        // the LEFT of the chip, top-aligned with it.
-                        dd.style.right = (containerRect.right - chipRect.left + 8) + 'px';
-                        dd.style.top = (chipRect.top - containerRect.top) + 'px';
-                    }
+            var chip = e.target.closest('.layer-chip');
+            if (!chip) return;
+            // Right zone = layer on/off only (never opens the panel).
+            if (e.target.closest('.chip-toggle-zone')) {
+                if (!e.target.closest('.layer-master')) {
+                    // clicked the zone padding, not the input → flip it manually
+                    var m = chip.querySelector('.layer-master');
+                    if (m) { m.checked = !m.checked; m.dispatchEvent(new Event('change')); }
                 }
                 return;
             }
-            // Chip body → toggle layer
-            var chip = e.target.closest('.layer-chip');
-            if (!chip) return;
-            chip.classList.toggle('active');
-            var layer = chip.dataset.layer;
-            if (layer === 'ships') {
-                var checked = chip.classList.contains('active');
-                document.querySelectorAll('[id^="filter-"]').forEach(function(cb) {
-                    if (cb.type === 'checkbox' && !cb.id.startsWith('filter-ac-')) {
-                        cb.checked = checked; cb.dispatchEvent(new Event('change'));
-                    }
-                });
-            } else if (layer === 'aircraft') {
-                var acChecked = chip.classList.contains('active');
-                AIRCRAFT_TYPES.forEach(function(t) {
-                    var cb = document.getElementById('filter-ac-' + t);
-                    if (cb) { cb.checked = acChecked; cb.dispatchEvent(new Event('change')); }
-                });
-            } else if (layer === 'satellites') {
-                var satCb = document.getElementById('layer-sats');
-                if (satCb) { satCb.checked = chip.classList.contains('active'); satCb.dispatchEvent(new Event('change')); }
-            } else if (layer === 'weather') {
-                // 기상 = 단일 선택(라디오): 켜져 있으면 모두 끄고, 꺼져 있으면 기본(강수) 하나만 켬
-                var WX = ['wx-precipitation', 'wx-wave-height', 'wx-wind'];
-                var anyOn = WX.some(function(id) { var c = document.getElementById(id); return c && c.checked; });
-                if (anyOn) {
-                    WX.forEach(function(id) {
-                        var cb = document.getElementById(id);
-                        if (cb && cb.checked) { cb.checked = false; cb.dispatchEvent(new Event('change', { bubbles: true })); }
-                    });
-                } else {
-                    var def = document.getElementById('wx-precipitation');
-                    if (def) { def.checked = true; def.dispatchEvent(new Event('change', { bubbles: true })); }
-                }
+            // Left zone (icon/label) = open the detail panel.
+            var ddId = chip.dataset.dropdown;
+            var dd = ddId ? document.getElementById(ddId) : null;
+            if (!dd) return;
+            var willOpen = !dd.classList.contains('open');
+            document.querySelectorAll('.layer-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
+            if (willOpen) {
+                dd.classList.add('open');
+                // Layer widget sits on the right edge → open the dropdown to the
+                // LEFT of the chip, top-aligned with it.
+                var container = dd.offsetParent || document.body;
+                var chipRect = chip.getBoundingClientRect();
+                var containerRect = container.getBoundingClientRect();
+                dd.style.right = (containerRect.right - chipRect.left + 8) + 'px';
+                dd.style.top = (chipRect.top - containerRect.top) + 'px';
             }
-            _syncLayerChips();
         });
     }
+
+    // Turn an entire layer on/off — invoked by each panel's "전체 표시" master toggle.
+    function _setLayerAll(layer, on) {
+        if (layer === 'ships') {
+            document.querySelectorAll('[id^="filter-"]').forEach(function(cb) {
+                if (cb.type === 'checkbox' && !cb.id.startsWith('filter-ac-')) {
+                    cb.checked = on; cb.dispatchEvent(new Event('change'));
+                }
+            });
+        } else if (layer === 'aircraft') {
+            AIRCRAFT_TYPES.forEach(function(t) {
+                var cb = document.getElementById('filter-ac-' + t);
+                if (cb) { cb.checked = on; cb.dispatchEvent(new Event('change')); }
+            });
+        } else if (layer === 'satellites') {
+            var satCb = document.getElementById('layer-sats');
+            if (satCb) { satCb.checked = on; satCb.dispatchEvent(new Event('change')); }
+        } else if (layer === 'weather') {
+            // 기상: 끄면 전부 off, 켜면 기본(강수)만 on
+            var WX = ['wx-precipitation', 'wx-wave-height', 'wx-wind'];
+            if (!on) {
+                WX.forEach(function(id) {
+                    var cb = document.getElementById(id);
+                    if (cb && cb.checked) { cb.checked = false; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+                });
+            } else {
+                var def = document.getElementById('wx-precipitation');
+                if (def && !def.checked) { def.checked = true; def.dispatchEvent(new Event('change', { bubbles: true })); }
+            }
+        }
+        _syncLayerChips();
+    }
+    window._setLayerAll = _setLayerAll;
+
+    // Wire each panel's "전체 표시" master toggle.
+    document.querySelectorAll('.layer-master').forEach(function(m) {
+        m.addEventListener('change', function() { _setLayerAll(m.dataset.layer, m.checked); });
+    });
 
     // 하위 상세 토글 → 칩(전체) 표시 동기화
     //  하위 종류가 하나라도 켜져 있으면 칩 active (켜지면 무조건 솔리드, partial 없음).
@@ -146,15 +148,32 @@ document.addEventListener('DOMContentLoaded', function() {
         return Array.prototype.some.call(
             document.querySelectorAll(sel), function(cb) { return cb.checked; });
     }
-    function _setActive(layer, active) {
+    // Sync one layer's chip + master from its sub-filter states.
+    //  chip.active = ANY sub on (layer visible).
+    //  master: checked = ALL on, indeterminate = SOME on, unchecked = none.
+    //  `binary` layers (weather/satellites) have no all/partial concept → simple on/off.
+    function _syncOne(layer, sel, binary) {
+        var boxes = document.querySelectorAll(sel);
+        var total = boxes.length, on = 0;
+        Array.prototype.forEach.call(boxes, function(cb) { if (cb.checked) on++; });
+        var anyOn = on > 0;
+        var allOn = total > 0 && on === total;
         var chip = document.querySelector('.layer-chip[data-layer="' + layer + '"]');
-        if (chip) { chip.classList.toggle('active', !!active); chip.classList.remove('partial'); }
+        if (chip) { chip.classList.toggle('active', anyOn); chip.classList.remove('partial'); }
+        // Master toggle: on whenever any sub is on. For multi-select layers
+        // (ships/aircraft), show "indeterminate" when some—but not all—are on
+        // → signals "layer on, but filtered". Binary layers never go partial.
+        var master = document.querySelector('.layer-master[data-layer="' + layer + '"]');
+        if (master) {
+            master.checked = anyOn;
+            master.indeterminate = !binary && anyOn && !allOn;
+        }
     }
     function _syncLayerChips() {
-        _setActive('ships', _anyChecked('#shipFilter input[type="checkbox"]'));
-        _setActive('aircraft', _anyChecked('#aircraftFilter input[type="checkbox"]'));
-        _setActive('satellites', _anyChecked('#layer-sats'));
-        _setActive('weather', _anyChecked('#wx-precipitation, #wx-wave-height, #wx-wind'));
+        _syncOne('ships', '#shipFilter input[type="checkbox"]:not(.layer-master)', false);
+        _syncOne('aircraft', '#aircraftFilter input[type="checkbox"]:not(.layer-master)', false);
+        _syncOne('satellites', '#layer-sats', true);
+        _syncOne('weather', '#wx-precipitation, #wx-wave-height, #wx-wind', true);
     }
     window._syncLayerChips = _syncLayerChips;
 
@@ -190,7 +209,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Close dropdowns on outside click
     document.addEventListener('click', function(e) {
-        if (!e.target.closest('.layer-dropdown') && !e.target.closest('.chip-expand')) {
+        // Keep the panel open when the click is inside it OR on its chip (the
+        // whole chip toggles the panel now, not just the caret).
+        if (!e.target.closest('.layer-dropdown') && !e.target.closest('.layer-chip')) {
             document.querySelectorAll('.layer-dropdown.open').forEach(function(d) { d.classList.remove('open'); });
             document.querySelectorAll('.chip-expand.expanded').forEach(function(b) { b.classList.remove('expanded'); });
         }
@@ -1203,7 +1224,7 @@ function showShipInfo(entityOrMmsi) {
     // Key stats cards (status moved into the header → 3rd card shows draught)
     var draughtTxt = s.draught ? parseFloat(s.draught).toFixed(1) : '–';
     var statsHtml = '<div class="ship-stats-row">';
-    statsHtml += '<div class="ship-stat-card ship-stat-card--primary"><i class="fa-solid fa-gauge-high ship-stat-icon"></i><div class="ship-stat-label">SPEED</div><div class="ship-stat-value">' + speed + '</div><div class="ship-stat-unit">knots</div></div>';
+    statsHtml += '<div class="ship-stat-card"><i class="fa-solid fa-gauge-high ship-stat-icon"></i><div class="ship-stat-label">SPEED</div><div class="ship-stat-value">' + speed + '</div><div class="ship-stat-unit">knots</div></div>';
     statsHtml += '<div class="ship-stat-card"><i class="fa-solid fa-compass ship-stat-icon"></i><div class="ship-stat-label">COURSE</div><div class="ship-stat-value">' + course + '°</div><div class="ship-stat-unit">COG</div></div>';
     statsHtml += '<div class="ship-stat-card"><i class="fa-solid fa-water ship-stat-icon"></i><div class="ship-stat-label">DRAUGHT</div><div class="ship-stat-value">' + draughtTxt + '</div><div class="ship-stat-unit">m</div></div>';
     statsHtml += '</div>';
