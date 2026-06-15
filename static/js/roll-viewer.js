@@ -1470,15 +1470,16 @@ var RollViewer = (function () {
         // Top-right unified scenario status panel.
         // Shows when turn scenario is active OR any weather/speed/time override is set.
         // Holds: simulation badge, override list, turn state details — all in one place.
+        // 상시 표시되는 통합 시뮬레이션 패널 (상태 + 조작 버튼). 접기(×) 가능.
         var scenarioOverlay = document.createElement('div');
         scenarioOverlay.className = 'rv-canvas-hud-scenario';
         scenarioOverlay.id = 'rv-canvas-hud-scenario';
-        scenarioOverlay.hidden = true;
         scenarioOverlay.innerHTML =
             '<div class="rv-scenario-header">' +
             '<span>시뮬레이션</span>' +
-            '<button type="button" class="rv-scenario-clear-btn" id="rv-scenario-clear-btn" title="실제 관측값으로 복귀">초기화</button>' +
+            '<button type="button" class="rv-scenario-collapse" id="rv-scenario-collapse" title="접기/펼치기"><i class="fa-solid fa-xmark"></i></button>' +
             '</div>' +
+            '<div class="rv-scenario-body" id="rv-scenario-body">' +
             '<div class="rv-scenario-overrides" id="rv-scenario-overrides"></div>' +
             '<div class="rv-scenario-turn" id="rv-hud-turn-section" hidden>' +
             '<div class="rv-scenario-turn-row">' +
@@ -1498,17 +1499,31 @@ var RollViewer = (function () {
             '<div class="rv-turn-progress">' +
             '<div class="rv-turn-progress-fill" id="rv-turn-progress-fill"></div>' +
             '</div>' +
+            '</div>' +
+            '<div class="rv-scenario-actions">' +
+            '<button type="button" class="rv-action-btn" id="rv-act-turn">선회 시나리오</button>' +
+            '<button type="button" class="rv-action-btn" id="rv-act-capsize">전복</button>' +
+            '<button type="button" class="rv-action-btn" id="rv-act-clear">초기화</button>' +
+            '</div>' +
             '</div>';
         canvasWrap.appendChild(scenarioOverlay);
 
-        // Wire up the clear button (now always in DOM, even when panel is hidden)
-        var clearBtn = document.getElementById('rv-scenario-clear-btn');
-        if (clearBtn) {
-            clearBtn.addEventListener('click', function (e) {
+        // 접기 토글
+        var collapseBtn = document.getElementById('rv-scenario-collapse');
+        if (collapseBtn) {
+            collapseBtn.addEventListener('click', function (e) {
                 e.preventDefault();
-                clearScenarioOverride();
+                scenarioOverlay.classList.toggle('collapsed');
             });
         }
+
+        // 시나리오 조작 버튼 (선회 / 전복 / 초기화)
+        var actTurn = document.getElementById('rv-act-turn');
+        var actCapsize = document.getElementById('rv-act-capsize');
+        var actClear = document.getElementById('rv-act-clear');
+        if (actTurn) actTurn.addEventListener('click', function () { toggleTurnScenario(); });
+        if (actCapsize) actCapsize.addEventListener('click', function () { triggerCapsize(1, 0); });
+        if (actClear) actClear.addEventListener('click', function () { clearScenarioOverride(); });
 
         // Keep turnHudEl reference for toggle logic (still uses id="rv-hud-turn-section")
         turnHudEl = document.getElementById('rv-hud-turn-section');
@@ -1534,26 +1549,15 @@ var RollViewer = (function () {
 
         var compare = document.createElement('div');
         compare.className = 'rv-compare';
+        // 좌하단 미니 HUD: 예측 오차 지표 + 미니 스트리밍 차트 (조작 버튼은 우상단 시뮬레이션 패널로 이동)
         compare.innerHTML =
             '<div class="rv-compare-metrics">' +
+            '<div class="rv-metric"><span class="rv-metric-label">RMSE</span><span class="rv-metric-val" id="rv-rmse">0.0°</span></div>' +
             '<div class="rv-metric"><span class="rv-metric-label">Δ Roll</span><span class="rv-metric-val" id="rv-d-roll">0.0°</span></div>' +
             '<div class="rv-metric"><span class="rv-metric-label">Δ Pitch</span><span class="rv-metric-val" id="rv-d-pitch">0.0°</span></div>' +
-            '<div class="rv-metric"><span class="rv-metric-label">RMSE</span><span class="rv-metric-val" id="rv-rmse">0.0°</span></div>' +
-            '</div>' +
-            '<div class="rv-compare-actions">' +
-            '<button type="button" class="rv-action-btn" id="rv-act-turn">선회 시나리오</button>' +
-            '<button type="button" class="rv-action-btn" id="rv-act-capsize">전복</button>' +
-            '<button type="button" class="rv-action-btn" id="rv-act-clear">초기화</button>' +
             '</div>' +
             '<div class="rv-compare-chart" id="rv-roll-chart"></div>';
         canvasWrap.appendChild(compare);
-
-        var actTurn = document.getElementById('rv-act-turn');
-        var actCapsize = document.getElementById('rv-act-capsize');
-        var actClear = document.getElementById('rv-act-clear');
-        if (actTurn) actTurn.addEventListener('click', function () { toggleTurnScenario(); });
-        if (actCapsize) actCapsize.addEventListener('click', function () { triggerCapsize(1, 0); });
-        if (actClear) actClear.addEventListener('click', function () { clearScenarioOverride(); });
 
         // (Removed) Top-right SAFE/CAUTION badge — ROLL HUD value color already conveys the same level.
 
@@ -4211,52 +4215,32 @@ var RollViewer = (function () {
 
         rollChart = echarts.init(chartEl);
 
-        var xLabels = [];
-        for (var j = 0; j < 60; j++) {
-            xLabels.push(j % 15 === 0 ? (60 - j) + 's' : '');
-        }
-
+        // 미니 스파크라인 — 축/범례 없이 실제(파랑 실선) vs 예측(노랑 점선) 두 곡선만.
         var option = {
             animation: false,
-            grid: { top: 20, right: 12, bottom: 24, left: 36 },
+            grid: { top: 4, right: 4, bottom: 4, left: 4 },
             xAxis: {
                 type: 'category',
-                data: xLabels,
-                axisLabel: {
-                    color: '#52525b',
-                    fontSize: 10
-                },
-                axisLine: { lineStyle: { color: '#27272a' } },
-                axisTick: { show: false }
+                show: false,
+                boundaryGap: false,
+                data: rollHistory.map(function () { return ''; })
             },
             yAxis: {
                 type: 'value',
                 min: 0,
                 max: 20,
-                axisLabel: {
-                    color: '#52525b',
-                    fontSize: 10,
-                    formatter: '{value}°'
-                },
-                axisLine: { show: false },
-                splitLine: { lineStyle: { color: '#27272a', type: 'dashed' } }
-            },
-            legend: {
-                data: ['실제', '예측'],
-                right: 12, top: 0,
-                textStyle: { color: '#71717a', fontSize: 10 },
-                itemWidth: 12, itemHeight: 2
+                show: false
             },
             series: [
                 {
                     name: '실제', type: 'line', smooth: true, symbol: 'none',
                     data: rollHistory.slice(),
-                    lineStyle: { color: '#38bdf8', width: 2 }
+                    lineStyle: { color: '#38bdf8', width: 1.5 }
                 },
                 {
                     name: '예측', type: 'line', smooth: true, symbol: 'none',
                     data: predRollHistory.slice(),
-                    lineStyle: { color: '#fbbf24', width: 2, type: 'dashed' }
+                    lineStyle: { color: '#fbbf24', width: 1.5, type: 'dashed' }
                 }
             ]
         };
@@ -4484,10 +4468,7 @@ var RollViewer = (function () {
             (ov.wavePeriod !== undefined) || (ov.waveDirection !== undefined);
         var anyOverride = weatherOverride || (ov.shipSpeed !== undefined) || hasTimeScale;
 
-        // Top-right unified scenario panel: visible when override OR turn scenario is active
-        var hudScenario = document.getElementById('rv-canvas-hud-scenario');
-        var panelVisible = anyOverride || turnScenarioActive;
-        if (hudScenario) hudScenario.hidden = !panelVisible;
+        // 시뮬레이션 패널은 상시 표시 (조작 버튼이 들어있음). 내부 섹션만 상태에 따라 토글.
 
         // Override rows
         var overridesEl = document.getElementById('rv-scenario-overrides');

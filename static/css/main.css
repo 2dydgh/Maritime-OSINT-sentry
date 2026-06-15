@@ -2173,8 +2173,8 @@
 /* ── Camera Preset Buttons ── */
 .rv-cam-presets {
     position: absolute;
-    bottom: 200px; /* 하단 비교 스트립(차트+메트릭+버튼) 위로 올림 */
-    right: 12px; /* 드로우는 평소 숨김 → 전체 폭 사용 */
+    bottom: 16px; /* 미니 HUD가 좌하단이라 우하단 충돌 없음 */
+    right: 12px;
     z-index: 7;
     display: flex;
     flex-direction: column;
@@ -7135,24 +7135,37 @@ button, .btn, [class*="-btn"] {
 .rv-drawer-toggle.active { background: rgba(59,130,246,0.85); color: #fff;
   border-color: rgba(59,130,246,0.85); }
 
-/* ── Roll Viewer 하단 비교 영역 ── */
-.rv-compare { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
-  background: rgba(15,23,42,0.72); backdrop-filter: blur(6px);
-  border-top: 1px solid rgba(148,163,184,0.15); padding: 8px 12px;
-  pointer-events: none; }
-.rv-compare-metrics { display: flex; gap: 24px; justify-content: center; margin-bottom: 4px; }
+/* ── Roll Viewer 좌하단 미니 HUD (오차 지표 + 미니 스파크라인) ── */
+.rv-compare { position: absolute; left: 14px; bottom: 16px; z-index: 6;
+  display: flex; align-items: center; gap: 16px;
+  background: rgba(15,23,42,0.62); backdrop-filter: blur(16px) saturate(1.1);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid rgba(148,163,184,0.18); border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.4);
+  padding: 8px 14px; pointer-events: none; }
+.rv-compare-metrics { display: flex; gap: 16px; align-items: baseline; margin: 0; }
 .rv-metric { display: flex; gap: 6px; align-items: baseline; }
 .rv-metric-label { font-size: 11px; color: #94a3b8; }
-.rv-metric-val { font-size: 16px; font-weight: 700; color: #e2e8f0; }
+.rv-metric-val { font-size: 15px; font-weight: 700; color: #e2e8f0; }
 .rv-metric-val.rv-ok { color: #10b981; }
 .rv-metric-val.rv-warn { color: #eab308; }
 .rv-metric-val.rv-bad { color: #f43f5e; }
-.rv-compare-chart { height: 120px; width: 100%; }
+.rv-compare-chart { width: 150px; height: 40px; flex: none; }
 
-.rv-compare-actions { display: flex; gap: 8px; justify-content: center; margin: 4px 0;
-  pointer-events: auto; }
-.rv-action-btn { padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+/* 시나리오 조작 버튼 (우상단 패널 안) */
+.rv-action-btn { padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px;
   background: rgba(30,41,59,0.9); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.25); }
 .rv-action-btn:hover { background: rgba(51,65,85,0.95); }
 .rv-action-btn.active { background: rgba(59,130,246,0.9); color: #fff;
   border-color: rgba(59,130,246,0.9); }
+.rv-scenario-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.rv-scenario-actions .rv-action-btn { flex: 1 1 auto; font-size: 11.5px; padding: 5px 8px; }
+.rv-scenario-collapse { background: none; border: none; color: #94a3b8; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 2px 4px; }
+.rv-scenario-collapse:hover { color: #fff; }
+.rv-canvas-hud-scenario.collapsed .rv-scenario-body { display: none; }
+
+/* 상세 정보 인스펙터 스크롤바 — 앱 공통 스타일과 통일 (roll-ship-picker와 동일) */
+.rv-drawer::-webkit-scrollbar { width: 4px; }
+.rv-drawer::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 2px; }
+.rv-drawer::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
