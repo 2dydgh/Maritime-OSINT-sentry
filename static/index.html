@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
 
     <!-- Application Styles -->
-    <link rel="stylesheet" href="css/main.css?v=94">
+    <link rel="stylesheet" href="css/main.css?v=97">
     <!-- ECharts for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <!-- Three.js for 3D visualization -->
@@ -135,24 +135,40 @@
 
         <!-- 레이어 필터 칩 — 지도 우상단 세로 위젯 -->
         <div id="layerChips">
-            <div class="layer-chip active" data-layer="ships" data-dropdown="shipFilter" title="선박 — 토글로 표시 on/off, 클릭으로 상세">
-                <input type="checkbox" class="layer-master" data-layer="ships" checked title="선박 표시">
-                <i class="fa-solid fa-ship"></i><span class="chip-label">선박</span>
-                <span class="chip-count" id="chipShipCount">0</span>
+            <div class="layer-chip active" data-layer="ships" data-dropdown="shipFilter">
+                <span class="chip-open" title="선박 상세 필터">
+                    <i class="fa-solid fa-ship"></i><span class="chip-label">선박</span>
+                    <span class="chip-count" id="chipShipCount">0</span>
+                </span>
+                <span class="chip-toggle-zone" title="선박 표시 on/off">
+                    <input type="checkbox" class="layer-master" data-layer="ships" checked>
+                </span>
             </div>
-            <div class="layer-chip" data-layer="satellites" data-dropdown="satFilter" title="위성 — 토글로 표시 on/off, 클릭으로 상세">
-                <input type="checkbox" class="layer-master" data-layer="satellites" title="위성 표시">
-                <i class="fa-solid fa-satellite"></i><span class="chip-label">위성</span>
-                <span class="chip-count" id="chipSatCount">0</span>
+            <div class="layer-chip" data-layer="satellites" data-dropdown="satFilter">
+                <span class="chip-open" title="위성 상세 필터">
+                    <i class="fa-solid fa-satellite"></i><span class="chip-label">위성</span>
+                    <span class="chip-count" id="chipSatCount">0</span>
+                </span>
+                <span class="chip-toggle-zone" title="위성 표시 on/off">
+                    <input type="checkbox" class="layer-master" data-layer="satellites">
+                </span>
             </div>
-            <div class="layer-chip" data-layer="weather" data-dropdown="weatherFilter" title="기상 — 토글로 표시 on/off, 클릭으로 상세">
-                <input type="checkbox" class="layer-master" data-layer="weather" title="기상 표시">
-                <i class="fa-solid fa-cloud-sun"></i><span class="chip-label">기상</span>
+            <div class="layer-chip" data-layer="weather" data-dropdown="weatherFilter">
+                <span class="chip-open" title="기상 상세 필터">
+                    <i class="fa-solid fa-cloud-sun"></i><span class="chip-label">기상</span>
+                </span>
+                <span class="chip-toggle-zone" title="기상 표시 on/off">
+                    <input type="checkbox" class="layer-master" data-layer="weather">
+                </span>
             </div>
-            <div class="layer-chip" data-layer="aircraft" data-dropdown="aircraftFilter" title="항공 — 토글로 표시 on/off, 클릭으로 상세">
-                <input type="checkbox" class="layer-master" data-layer="aircraft" title="항공 표시">
-                <i class="fa-solid fa-plane"></i><span class="chip-label">항공</span>
-                <span class="chip-count" id="chipAircraftCount">0</span>
+            <div class="layer-chip" data-layer="aircraft" data-dropdown="aircraftFilter">
+                <span class="chip-open" title="항공 상세 필터">
+                    <i class="fa-solid fa-plane"></i><span class="chip-label">항공</span>
+                    <span class="chip-count" id="chipAircraftCount">0</span>
+                </span>
+                <span class="chip-toggle-zone" title="항공 표시 on/off">
+                    <input type="checkbox" class="layer-master" data-layer="aircraft">
+                </span>
             </div>
         </div>
 
@@ -536,7 +552,7 @@
     <script src="js/ship-builders.js?v=2"></script>
     <script src="js/ship-preview-3d.js?v=2"></script>
     <script src="js/roll-prediction.js?v=1"></script>
-    <script src="js/roll-viewer.js?v=36"></script>
+    <script src="js/roll-viewer.js?v=37"></script>
     <script src="js/route-viewer.js?v=16"></script>
     <script src="js/app.js?v=4"></script>
     <script src="js/map-cesium.js?v=6"></script>
@@ -547,7 +563,7 @@
     <script src="js/proximity.js?v=4"></script>
     <script src="js/collision.js?v=7"></script>
     <script src="js/websocket.js?v=19"></script>
-    <script src="js/ui-controls.js?v=22"></script>
+    <script src="js/ui-controls.js?v=24"></script>
     <script src="js/charts.js?v=5"></script>
     <script src="js/chat.js?v=4"></script>
     <script>

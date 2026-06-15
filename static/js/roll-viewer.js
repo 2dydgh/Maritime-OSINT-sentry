@@ -426,6 +426,8 @@ var RollViewer = (function () {
         buildSeaMarkers();
         buildRadarIndicator();
         startAnimation();
+        initRollChart();
+        startChartUpdates();
     }
 
     function applyPanelViewOffset(w, h) {
@@ -1527,6 +1529,17 @@ var RollViewer = (function () {
             '<div class="roll-gauge roll-gauge-safe" id="rv-pred-gauge"><div class="roll-gauge-track"><div class="roll-gauge-fill" id="rv-pred-fill"></div></div></div>' +
             '</div>';
         canvasWrap.appendChild(split);
+
+        var compare = document.createElement('div');
+        compare.className = 'rv-compare';
+        compare.innerHTML =
+            '<div class="rv-compare-metrics">' +
+            '<div class="rv-metric"><span class="rv-metric-label">Δ Roll</span><span class="rv-metric-val" id="rv-d-roll">0.0°</span></div>' +
+            '<div class="rv-metric"><span class="rv-metric-label">Δ Pitch</span><span class="rv-metric-val" id="rv-d-pitch">0.0°</span></div>' +
+            '<div class="rv-metric"><span class="rv-metric-label">RMSE</span><span class="rv-metric-val" id="rv-rmse">0.0°</span></div>' +
+            '</div>' +
+            '<div class="rv-compare-chart" id="rv-roll-chart"></div>';
+        canvasWrap.appendChild(compare);
 
         // (Removed) Top-right SAFE/CAUTION badge — ROLL HUD value color already conveys the same level.
 
@@ -3851,6 +3864,21 @@ var RollViewer = (function () {
             var absPitch = Math.abs(smoothPitch);
             updateRollGaugeBy('rv-real-gauge', 'rv-real-fill', 'rv-real-roll', absRoll);
             updateRollGaugeBy('rv-pred-gauge', 'rv-pred-fill', 'rv-pred-roll', Math.abs(smoothPredRoll));
+            if (window.RollPrediction) {
+                var _d = RollPrediction.computeDelta(
+                    { roll: smoothRoll, pitch: smoothPitch },
+                    { roll: smoothPredRoll, pitch: smoothPredPitch }
+                );
+                var dRollEl = document.getElementById('rv-d-roll');
+                var dPitchEl = document.getElementById('rv-d-pitch');
+                var rmseEl = document.getElementById('rv-rmse');
+                if (dRollEl) {
+                    dRollEl.textContent = Math.abs(_d.dRoll).toFixed(1) + '°';
+                    dRollEl.className = 'rv-metric-val ' + (Math.abs(_d.dRoll) < 2 ? 'rv-ok' : Math.abs(_d.dRoll) < 5 ? 'rv-warn' : 'rv-bad');
+                }
+                if (dPitchEl) dPitchEl.textContent = Math.abs(_d.dPitch).toFixed(1) + '°';
+                if (rmseEl) rmseEl.textContent = RollPrediction.computeRMSE(rollHistory, predRollHistory).toFixed(1) + '°';
+            }
             updateCanvasHUD(absRoll, absPitch, smoothSpeed);
 
             // Encounter period drifts with heading/speed — 2Hz is plenty for the panel
@@ -4156,6 +4184,9 @@ var RollViewer = (function () {
         rollHistory = [];
         pitchHistory = [];
         for (var i = 0; i < 60; i++) { rollHistory.push(0); pitchHistory.push(0); }
+        predRollHistory = [];
+        predPitchHistory = [];
+        for (var k = 0; k < 60; k++) { predRollHistory.push(0); predPitchHistory.push(0); }
 
         var chartEl = document.getElementById('rv-roll-chart');
         if (!chartEl || !window.echarts) return;
@@ -4193,58 +4224,21 @@ var RollViewer = (function () {
                 splitLine: { lineStyle: { color: '#27272a', type: 'dashed' } }
             },
             legend: {
-                data: ['Roll', 'Pitch'],
+                data: ['실제', '예측'],
                 right: 12, top: 0,
                 textStyle: { color: '#71717a', fontSize: 10 },
                 itemWidth: 12, itemHeight: 2
             },
             series: [
                 {
-                    name: 'Roll',
-                    type: 'line',
-                    smooth: true,
-                    symbol: 'none',
+                    name: '실제', type: 'line', smooth: true, symbol: 'none',
                     data: rollHistory.slice(),
-                    lineStyle: { color: '#a1a1aa', width: 2 },
-                    areaStyle: {
-                        color: {
-                            type: 'linear',
-                            x: 0, y: 0, x2: 0, y2: 1,
-                            colorStops: [
-                                { offset: 0, color: 'rgba(161,161,170,0.2)' },
-                                { offset: 1, color: 'rgba(161,161,170,0)' }
-                            ]
-                        }
-                    }
+                    lineStyle: { color: '#38bdf8', width: 2 }
                 },
                 {
-                    name: 'Pitch',
-                    type: 'line',
-                    smooth: true,
-                    symbol: 'none',
-                    data: pitchHistory.slice(),
-                    lineStyle: { color: '#71717a', width: 1.5, type: 'dashed' },
-                    areaStyle: {
-                        color: {
-                            type: 'linear',
-                            x: 0, y: 0, x2: 0, y2: 1,
-                            colorStops: [
-                                { offset: 0, color: 'rgba(113,113,122,0.1)' },
-                                { offset: 1, color: 'rgba(113,113,122,0)' }
-                            ]
-                        }
-                    }
-                },
-                {
-                    type: 'line',
-                    markLine: {
-                        silent: true,
-                        symbol: 'none',
-                        data: [{ yAxis: 15 }],
-                        lineStyle: { color: '#ef4444', type: 'dashed', width: 1 }
-                    },
-                    data: [],
-                    silent: true
+                    name: '예측', type: 'line', smooth: true, symbol: 'none',
+                    data: predRollHistory.slice(),
+                    lineStyle: { color: '#fbbf24', width: 2, type: 'dashed' }
                 }
             ]
         };
@@ -4259,7 +4253,7 @@ var RollViewer = (function () {
             rollChart.setOption({
                 series: [
                     { data: rollHistory.slice() },
-                    { data: pitchHistory.slice() }
+                    { data: predRollHistory.slice() }
                 ]
             });
         }, 1000);
