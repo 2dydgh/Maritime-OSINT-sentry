@@ -7150,7 +7150,9 @@ button, .btn, [class*="-btn"] {
 .rv-metric-val.rv-ok { color: #10b981; }
 .rv-metric-val.rv-warn { color: #eab308; }
 .rv-metric-val.rv-bad { color: #f43f5e; }
-.rv-compare-chart { width: 150px; height: 40px; flex: none; }
+.rv-compare-chart { width: 170px; height: 52px; flex: none;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(148,163,184,0.14);
+  border-radius: 8px; }
 
 /* 시나리오 조작 버튼 (우상단 패널 안) */
 .rv-action-btn { padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px;

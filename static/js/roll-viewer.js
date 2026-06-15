@@ -1454,15 +1454,9 @@ var RollViewer = (function () {
 
     // ── Turning scenario ──
     function buildTurnScenarioUI(canvasWrap) {
-        // Turn scenario play button — kept at top center for quick toggle
-        turnBtnEl = document.createElement('button');
-        turnBtnEl.className = 'rv-scenario-btn';
-        turnBtnEl.innerHTML = '<i class="fa-solid fa-ship"></i> 선회 시나리오';
-        turnBtnEl.title = '코너링 시 횡요각 변화 시뮬레이션';
-        turnBtnEl.addEventListener('click', function () {
-            toggleTurnScenario();
-        });
-        canvasWrap.appendChild(turnBtnEl);
+        // 상단 중앙 선회 버튼은 제거됨 — 조작은 우상단 시뮬레이션 패널의 버튼으로 통합.
+        // turnBtnEl은 null로 유지(모든 참조가 `if (turnBtnEl)` 가드라 안전).
+        turnBtnEl = null;
 
         // (Bottom-left HUD removed — duplicated info that lives in the side panel and prediction modal.)
 
@@ -1523,7 +1517,12 @@ var RollViewer = (function () {
         var actClear = document.getElementById('rv-act-clear');
         if (actTurn) actTurn.addEventListener('click', function () { toggleTurnScenario(); });
         if (actCapsize) actCapsize.addEventListener('click', function () { triggerCapsize(1, 0); });
-        if (actClear) actClear.addEventListener('click', function () { clearScenarioOverride(); });
+        // 초기화 = 완전 복귀: 선회 정지 + 전복 취소 + 날씨/속도 오버라이드 해제
+        if (actClear) actClear.addEventListener('click', function () {
+            setTurnScenario(false);
+            clearCapsize();
+            clearScenarioOverride();
+        });
 
         // Keep turnHudEl reference for toggle logic (still uses id="rv-hud-turn-section")
         turnHudEl = document.getElementById('rv-hud-turn-section');
@@ -4235,17 +4234,21 @@ var RollViewer = (function () {
                 {
                     name: '실제', type: 'line', smooth: true, symbol: 'none',
                     data: rollHistory.slice(),
-                    lineStyle: { color: '#38bdf8', width: 1.5 }
+                    lineStyle: { color: '#38bdf8', width: 1.8 },
+                    areaStyle: { color: 'rgba(56,189,248,0.18)' }
                 },
                 {
                     name: '예측', type: 'line', smooth: true, symbol: 'none',
                     data: predRollHistory.slice(),
-                    lineStyle: { color: '#fbbf24', width: 1.5, type: 'dashed' }
+                    lineStyle: { color: '#fbbf24', width: 1.8, type: 'dashed' },
+                    areaStyle: { color: 'rgba(251,191,36,0.12)' }
                 }
             ]
         };
 
         rollChart.setOption(option);
+        // 패널 레이아웃이 늦게 잡혀 0×0로 init되는 경우 대비 — 다음 프레임에 한 번 리사이즈
+        requestAnimationFrame(function () { if (rollChart) rollChart.resize(); });
     }
 
     // ── startChartUpdates() ──
