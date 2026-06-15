@@ -7138,3 +7138,9 @@ button, .btn, [class*="-btn"] {
 .rv-metric-val.rv-warn { color: #eab308; }
 .rv-metric-val.rv-bad { color: #f43f5e; }
 .rv-compare-chart { height: 120px; width: 100%; }
+
+.rv-compare-actions { display: flex; gap: 8px; justify-content: center; margin: 4px 0;
+  pointer-events: auto; }
+.rv-action-btn { padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+  background: rgba(30,41,59,0.9); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.25); }
+.rv-action-btn:hover { background: rgba(51,65,85,0.95); }

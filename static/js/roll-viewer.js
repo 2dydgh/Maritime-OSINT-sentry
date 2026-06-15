@@ -1538,8 +1538,20 @@ var RollViewer = (function () {
             '<div class="rv-metric"><span class="rv-metric-label">Δ Pitch</span><span class="rv-metric-val" id="rv-d-pitch">0.0°</span></div>' +
             '<div class="rv-metric"><span class="rv-metric-label">RMSE</span><span class="rv-metric-val" id="rv-rmse">0.0°</span></div>' +
             '</div>' +
+            '<div class="rv-compare-actions">' +
+            '<button type="button" class="rv-action-btn" id="rv-act-turn">선회 시나리오</button>' +
+            '<button type="button" class="rv-action-btn" id="rv-act-capsize">전복</button>' +
+            '<button type="button" class="rv-action-btn" id="rv-act-clear">초기화</button>' +
+            '</div>' +
             '<div class="rv-compare-chart" id="rv-roll-chart"></div>';
         canvasWrap.appendChild(compare);
+
+        var actTurn = document.getElementById('rv-act-turn');
+        var actCapsize = document.getElementById('rv-act-capsize');
+        var actClear = document.getElementById('rv-act-clear');
+        if (actTurn) actTurn.addEventListener('click', function () { toggleTurnScenario(); });
+        if (actCapsize) actCapsize.addEventListener('click', function () { triggerCapsize(1, 0); });
+        if (actClear) actClear.addEventListener('click', function () { clearScenarioOverride(); });
 
         // (Removed) Top-right SAFE/CAUTION badge — ROLL HUD value color already conveys the same level.
 
