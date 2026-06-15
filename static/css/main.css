@@ -2173,9 +2173,9 @@
 /* ── Camera Preset Buttons ── */
 .rv-cam-presets {
     position: absolute;
-    bottom: 12px;
+    bottom: 200px; /* 하단 비교 스트립(차트+메트릭+버튼) 위로 올림 */
     right: 12px; /* 드로우는 평소 숨김 → 전체 폭 사용 */
-    z-index: 5;
+    z-index: 7;
     display: flex;
     flex-direction: column;
     gap: 4px;
