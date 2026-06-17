@@ -9,10 +9,16 @@ var RollViewer = (function () {
     var camera = null;
     var renderer = null;
     var controls = null;
+    var _resizeObserver = null;            // 무대 컨테이너 크기 변화 감지 (하단 시뮬 패널 리플로우 동기화)
 
     var shipGroup = null;
     var shipGroupPred = null;              // 예측 선박 (실제 선박의 클론)
-    var splitView = true;                  // 좌우 2분할 on/off
+    var splitView = false;                 // false=고스트 겹쳐보기(기본) · true=좌우 나눠보기
+    var _predGhostMats = [];               // 예측 선박 전용(클론된) 머티리얼 — 고스트 처리 대상
+    var _predGhostReady = false;
+    var heelRefGroup = null;               // 수평(0°) 기준선 — 선박 위치만 따라가고 롤은 따라가지 않음
+    var _HEEL = { deckY: 5.0, half: 8.5 }; // 횡요 사다리 끝점 좌표(라벨 투영용)
+    var _setRightPanel = null;             // 우측 패널(시뮬레이션/상세) 상호배타 토글 — load()에서 배선
     var waterMesh = null;
     var gltfModelCache = {};   // { type: THREE.Group }
     var gltfLoader = null;
@@ -20,6 +26,8 @@ var RollViewer = (function () {
     var composer = null;
     var mainDirLight = null;
     var waterNormals = null;
+    var _waves = [];               // current Gerstner wave specs (Gerstner.buildWaves)
+    var _waterPatched = false;     // true once Water vertex shader has the Gerstner injection
 
     var animFrameId = null;
     var clockStart = null;
@@ -370,48 +378,68 @@ var RollViewer = (function () {
         weather = Object.assign({}, _baseWeather);
         waterFlowOffset = { x: 0, z: 0 };
 
-        // Build layout DOM
+        // Build layout DOM — Composition B: 제목줄 / 3D 무대 / 하단 계기 콘솔
         var layout = document.createElement('div');
-        layout.className = 'roll-viewer-layout';
+        layout.className = 'roll-viewer-layout rv-layout-b';
+
+        var titlebar = buildTitleBar(ship);
 
         var canvasWrap = document.createElement('div');
         canvasWrap.className = 'roll-viewer-canvas-wrap';
 
-        // Back button overlay
-        var backBtn = document.createElement('button');
-        backBtn.className = 'roll-viewer-back';
-        backBtn.innerHTML = '<i class="fa-solid fa-arrow-left"></i> <span>지구본으로</span>';
-        backBtn.addEventListener('click', function () {
-            if (window.LayoutManager) {
-                LayoutManager.closeDedicatedPanel();
-            }
-        });
-        canvasWrap.appendChild(backBtn);
+        var consoleEl = buildConsole();
 
-        // 우측 슬라이드 드로우 (공유 입력: 선박/항해/기상/분석)
+        // 상세 정보 슬라이드 드로어 (선박/항해/기상/분석)
         var panel = buildInfoPanel(ship);
         var drawer = document.createElement('div');
         drawer.className = 'rv-drawer';
         drawer.id = 'rv-drawer';
         drawer.appendChild(panel);
 
-        var drawerToggle = document.createElement('button');
-        drawerToggle.className = 'rv-drawer-toggle';
-        drawerToggle.id = 'rv-drawer-toggle';
-        drawerToggle.innerHTML = '<i class="fa-solid fa-circle-info"></i> <span>상세 정보</span>';
-        drawerToggle.addEventListener('click', function () {
-            var open = drawer.classList.toggle('rv-drawer-open');
-            drawerToggle.classList.toggle('active', open);
-        });
-
+        layout.appendChild(titlebar);
         layout.appendChild(canvasWrap);
+        layout.appendChild(consoleEl);
         layout.appendChild(drawer);
-        layout.appendChild(drawerToggle);
         container.appendChild(layout);
 
-        // Build turn scenario UI overlay on canvas
-        buildTurnScenarioUI(canvasWrap);
-        buildCanvasOverlays(canvasWrap);
+        // AI 챗 FAB는 전역 유지하되, 하단 콘솔과 겹치지 않게 무대 좌하단으로 올린다.
+        var _cb = document.getElementById('chat-bubble');
+        if (_cb) _cb.classList.add('rv-chat-shift');
+
+        // 시뮬레이션 제어 패널 (하단 슬라이드업, 기본 숨김) — 무대와 콘솔 사이에 in-flow로 끼워
+        // 열리면 3D 무대를 위로 밀어 올린다 (오른쪽 오버레이로 화면을 덮지 않음).
+        buildTurnScenarioUI(layout);
+        var _simPanel = document.getElementById('rv-canvas-hud-scenario');
+        if (_simPanel && consoleEl && consoleEl.parentNode === layout) {
+            layout.insertBefore(_simPanel, consoleEl);
+        }
+
+        // 제목줄 토글 배선
+        var simBtn = document.getElementById('rv-tb-sim');
+        var scenarioEl = document.getElementById('rv-canvas-hud-scenario');
+        if (simBtn && scenarioEl) {
+            simBtn.addEventListener('click', function () {
+                var open = !scenarioEl.classList.contains('rv-sim-open');
+                _setRightPanel(open ? 'sim' : null);
+            });
+        }
+        var detailBtn = document.getElementById('rv-tb-detail');
+        if (detailBtn) {
+            detailBtn.addEventListener('click', function () {
+                var open = !drawer.classList.contains('rv-drawer-open');
+                _setRightPanel(open ? 'detail' : null);
+            });
+        }
+        // 우측 패널은 상호 배타 — 시뮬레이션/상세 중 하나만 열린다 (겹침 방지).
+        _setRightPanel = function (which) {
+            var simOn = which === 'sim', detOn = which === 'detail';
+            if (scenarioEl) scenarioEl.classList.toggle('rv-sim-open', simOn);
+            drawer.classList.toggle('rv-drawer-open', detOn);
+            if (simBtn) simBtn.classList.toggle('active', simOn);
+            if (detailBtn) detailBtn.classList.toggle('active', detOn);
+        };
+
+        buildCanvasOverlays(canvasWrap);   // 카메라 프리셋 (무대에 떠 있음)
 
         // Init Three.js
         initScene(canvasWrap);
@@ -423,6 +451,11 @@ var RollViewer = (function () {
         if (shipGroup) {
             shipGroupPred = shipGroup.clone(true);
             scene.add(shipGroupPred);
+            // 선체 위 attitude 사다리(가로선)는 제거함 — 정밀 각도는 하단 클리노미터가 담당하고,
+            // 3D 무대는 선체가 직접 기우는 모습 + 단일 수평 기준선만으로 깔끔하게 비교한다.
+            _buildHeelHorizon();   // 수평 0° 기준선 (유일하게 남는 가로 기준)
+            // 기본은 고스트 겹쳐보기 — 예측 선박을 반투명 하늘색으로 처리한다.
+            setShipViewMode(!splitView);
         }
 
         buildSeaMarkers();
@@ -517,6 +550,12 @@ var RollViewer = (function () {
         };
         window.addEventListener('resize', _resizeHandler);
         renderer._rollViewerResizeHandler = _resizeHandler;
+        // 컨테이너 자체 크기 변화(하단 시뮬 패널이 열리며 무대를 위로 밀어낼 때 등)도 감지해
+        // 렌더러/카메라를 동기화한다 — window resize 만으론 flex 리플로우를 못 잡는다.
+        if (window.ResizeObserver) {
+            _resizeObserver = new ResizeObserver(function () { _resizeHandler(); });
+            _resizeObserver.observe(container);
+        }
 
         // ── Post-processing ──
         var renderPass = new THREE.RenderPass(scene, camera);
@@ -1472,17 +1511,45 @@ var RollViewer = (function () {
         var _wv = (weather && weather.waveHeight != null) ? weather.waveHeight : 2.5;
         var _wp = (weather && weather.wavePeriod != null) ? weather.wavePeriod : 8;
         var _sp = (shipSpeed != null) ? shipSpeed : 10;
+        // 4-컬럼 오퍼레이터 레이아웃 — 하단 풀폭 바에 가로로 펼친다.
+        // 모든 컨트롤 id는 유지되므로 아래 바인딩 코드는 그대로 동작한다.
         scenarioOverlay.innerHTML =
             '<div class="rv-scenario-header">' +
             '<span>시뮬레이션</span>' +
-            '<button type="button" class="rv-scenario-collapse" id="rv-scenario-collapse" title="접기/펼치기"><i class="fa-solid fa-xmark"></i></button>' +
+            '<button type="button" class="rv-scenario-collapse" id="rv-scenario-collapse" title="접기/펼치기"><i class="fa-solid fa-chevron-up"></i></button>' +
             '</div>' +
             '<div class="rv-scenario-body" id="rv-scenario-body">' +
-            '<div class="rv-sim-row"><label>파고</label><input type="range" id="rv-sim-wave" min="0.5" max="8" step="0.1" value="' + _wv + '"><span class="rv-sim-val" id="rv-sim-wave-val">' + _wv.toFixed(1) + ' m</span></div>' +
+
+            // ── 1. 해상 상태 (sea state — drives the roll) ──
+            '<div class="rv-sim-group">' +
+            '<div class="rv-sim-eyebrow">해상 상태<span class="rv-sea-state" id="rv-sea-state" data-level="safe">—</span></div>' +
+            '<div class="rv-sim-row"><label>파고</label><input type="range" id="rv-sim-wave" min="0.5" max="8" step="0.1" data-warn="5" data-danger="6.5" value="' + _wv + '"><span class="rv-sim-val" id="rv-sim-wave-val">' + _wv.toFixed(1) + ' m</span></div>' +
             '<div class="rv-sim-row"><label>파주기</label><input type="range" id="rv-sim-period" min="4" max="16" step="0.5" value="' + _wp + '"><span class="rv-sim-val" id="rv-sim-period-val">' + _wp.toFixed(1) + ' s</span></div>' +
+            '</div>' +
+
+            // ── 2. 선박·침로 (vessel + heading) ──
+            '<div class="rv-sim-group">' +
+            '<div class="rv-sim-eyebrow">선박·침로</div>' +
             '<div class="rv-sim-row"><label>속도</label><input type="range" id="rv-sim-speed" min="0" max="25" step="0.5" value="' + _sp + '"><span class="rv-sim-val" id="rv-sim-speed-val">' + _sp.toFixed(1) + ' kt</span></div>' +
-            '<div class="rv-sim-row"><label>선회</label><div class="rv-sim-dir"><button type="button" class="rv-sim-dir-btn" id="rv-sim-dir-port">좌현</button><button type="button" class="rv-sim-dir-btn" id="rv-sim-dir-stbd">우현</button></div></div>' +
-            '<div class="rv-sim-row"><label>타각</label><input type="range" id="rv-sim-rudder" min="5" max="35" step="1" value="35"><span class="rv-sim-val" id="rv-sim-rudder-val">35°</span></div>' +
+            '<div class="rv-sim-row"><label>방향</label><div class="rv-sim-dir"><button type="button" class="rv-sim-dir-btn" id="rv-sim-dir-port">좌현</button><button type="button" class="rv-sim-dir-btn" id="rv-sim-dir-stbd">우현</button></div></div>' +
+            '</div>' +
+
+            // ── 3. 조타 (rudder input only) ──
+            '<div class="rv-sim-group">' +
+            '<div class="rv-sim-eyebrow">조타</div>' +
+            '<div class="rv-sim-row"><label>타각</label><input type="range" id="rv-sim-rudder" min="5" max="35" step="1" data-warn="25" data-danger="32" value="35"><span class="rv-sim-val" id="rv-sim-rudder-val">35°</span></div>' +
+            '</div>' +
+
+            // ── 4. 시나리오 (조작 + 실행 상태) — 상태는 조작 입력이 아니라 출력이라 이 칸에 둔다 ──
+            '<div class="rv-sim-group rv-sim-group-actions">' +
+            '<div class="rv-sim-eyebrow">시나리오</div>' +
+            '<div class="rv-scenario-actions">' +
+            '<button type="button" class="rv-action-btn rv-action-primary" id="rv-act-turn">선회 시작</button>' +
+            '<div class="rv-sim-utilrow">' +
+            '<button type="button" class="rv-action-btn" id="rv-act-capsize">전복</button>' +
+            '<button type="button" class="rv-action-btn" id="rv-act-clear">초기화</button>' +
+            '</div>' +
+            '</div>' +
             '<div class="rv-scenario-turn" id="rv-hud-turn-section" hidden>' +
             '<div class="rv-scenario-turn-row">' +
             '<div class="rv-scenario-turn-item"><span class="rv-scenario-turn-label">상태</span><span class="rv-scenario-turn-val" id="rv-turn-phase">직진</span></div>' +
@@ -1491,11 +1558,8 @@ var RollViewer = (function () {
             '</div>' +
             '<div class="rv-turn-progress"><div class="rv-turn-progress-fill" id="rv-turn-progress-fill"></div></div>' +
             '</div>' +
-            '<div class="rv-scenario-actions">' +
-            '<button type="button" class="rv-action-btn" id="rv-act-turn">선회 시작</button>' +
-            '<button type="button" class="rv-action-btn" id="rv-act-capsize">전복</button>' +
-            '<button type="button" class="rv-action-btn" id="rv-act-clear">초기화</button>' +
             '</div>' +
+
             '</div>';
         canvasWrap.appendChild(scenarioOverlay);
 
@@ -1510,24 +1574,48 @@ var RollViewer = (function () {
                     if (scenarioOverlay.classList.contains('collapsed')) {
                         icon.className = 'fa-solid fa-chevron-down';
                     } else {
-                        icon.className = 'fa-solid fa-xmark';
+                        icon.className = 'fa-solid fa-chevron-up';
                     }
                 }
             });
         }
 
         // 슬라이더 바인딩 — 입력 시 라벨 갱신 + 시뮬레이션 오버라이드 적용
+        function _simFill(el) {
+            var min = parseFloat(el.min) || 0, max = parseFloat(el.max) || 100;
+            var val = parseFloat(el.value);
+            el.style.setProperty('--rv-sim-fill', ((val - min) / (max - min) * 100) + '%');
+            // 슬라이더 fill은 항상 --primary로 통일한다. 위험 구간 빨강/주황 틴트는 제거 —
+            // 기본 타각 35°가 곧장 빨강으로 보여 오해를 샀고, 위험도는 해상상태 배지·선회상태가 따로 표시한다.
+            el.style.setProperty('--rv-sim-fill-color', 'var(--primary)');
+        }
+        // Douglas sea-state label from wave height — context for the 해상 상태 group.
+        function _updateSeaState(h) {
+            var el = document.getElementById('rv-sea-state');
+            if (!el) return;
+            var grade, label, level;
+            if (h < 1.25)      { grade = 3; label = '약한 너울'; level = 'safe'; }
+            else if (h < 2.5)  { grade = 4; label = '약간 거침'; level = 'safe'; }
+            else if (h < 4)    { grade = 5; label = '거침';      level = 'caution'; }
+            else if (h < 6)    { grade = 6; label = '매우 거침'; level = 'warning'; }
+            else               { grade = 7; label = '높은 파도'; level = 'danger'; }
+            el.textContent = grade + ' · ' + label;
+            el.dataset.level = level;
+        }
         function _bindSimSlider(id, valId, fmt, apply) {
             var el = document.getElementById(id);
             var vEl = document.getElementById(valId);
             if (!el) return;
+            _simFill(el);   // initial fill for the default value
             el.addEventListener('input', function () {
                 var v = parseFloat(el.value);
                 if (vEl) vEl.textContent = fmt(v);
+                _simFill(el);
                 apply(v);
             });
         }
-        _bindSimSlider('rv-sim-wave', 'rv-sim-wave-val', function (v) { return v.toFixed(1) + ' m'; }, function (v) { setScenarioOverride({ waveHeight: v }); });
+        _bindSimSlider('rv-sim-wave', 'rv-sim-wave-val', function (v) { return v.toFixed(1) + ' m'; }, function (v) { setScenarioOverride({ waveHeight: v }); _updateSeaState(v); });
+        _updateSeaState(parseFloat((document.getElementById('rv-sim-wave') || {}).value) || _wv);   // initial sea-state label
         _bindSimSlider('rv-sim-period', 'rv-sim-period-val', function (v) { return v.toFixed(1) + ' s'; }, function (v) { setScenarioOverride({ wavePeriod: v }); });
         _bindSimSlider('rv-sim-speed', 'rv-sim-speed-val', function (v) { return v.toFixed(1) + ' kt'; }, function (v) { setScenarioOverride({ shipSpeed: v }); });
         _bindSimSlider('rv-sim-rudder', 'rv-sim-rudder-val', function (v) { return v.toFixed(0) + '°'; }, function (v) { _turnMaxRudder = v; });
@@ -1548,7 +1636,7 @@ var RollViewer = (function () {
         function _resetSim(id, valId, val, fmt) {
             var el = document.getElementById(id);
             var vEl = document.getElementById(valId);
-            if (el) el.value = val;
+            if (el) { el.value = val; _simFill(el); }
             if (vEl) vEl.textContent = fmt(val);
         }
 
@@ -1575,35 +1663,70 @@ var RollViewer = (function () {
         turnHudEl = document.getElementById('rv-hud-turn-section');
     }
 
-    // ── Canvas HUD overlay + Camera presets ──
-    function buildCanvasOverlays(canvasWrap) {
-        var split = document.createElement('div');
-        split.className = 'rv-split-overlay';
-        split.innerHTML =
-            '<div class="rv-split-divider"></div>' +
-            '<div class="rv-split-side rv-split-left">' +
-            '<div class="rv-split-label">실제 REAL</div>' +
-            _metroSvg('rv-metroL') +
-            '<div class="rv-split-roll" id="rv-real-roll">0.0°</div>' +
+    // ── Title bar (top): back · ship identity · view-mode + control toggles ──
+    function buildTitleBar(ship) {
+        var name = (ship && ship.name && ship.name !== 'UNKNOWN') ? _escHtml(ship.name) : ('MMSI ' + (ship && ship.mmsi || '—'));
+        var typeKo = SHIP_TYPE_KO[getShipTypeKey(ship)] || '기타';
+        var lenTxt = (ship && parseFloat(ship.length)) ? Math.round(parseFloat(ship.length)) + 'm' : '';
+        var bar = document.createElement('div');
+        bar.className = 'rv-titlebar';
+        bar.innerHTML =
+            '<button class="rv-tb-back" id="rv-tb-back" title="지구본으로"><i class="fa-solid fa-arrow-left"></i><span>지구본</span></button>' +
+            '<div class="rv-tb-id">' +
+                '<span class="rv-tb-name">' + name + '</span>' +
+                '<span class="rv-tb-meta">' + typeKo + (lenTxt ? ' · ' + lenTxt : '') + '</span>' +
             '</div>' +
-            '<div class="rv-split-side rv-split-right">' +
-            '<div class="rv-split-label">예측 PRED</div>' +
-            _metroSvg('rv-metroR') +
-            '<div class="rv-split-roll" id="rv-pred-roll">0.0°</div>' +
+            '<div class="rv-tb-actions">' +
+                '<div class="rv-viewseg" role="group" aria-label="3D 보기 방식">' +
+                    '<button class="rv-viewseg-btn active" id="rv-view-overlay" title="실측·예측을 겹쳐서 비교"><i class="fa-solid fa-clone"></i><span>겹쳐보기</span></button>' +
+                    '<button class="rv-viewseg-btn" id="rv-view-split" title="실측·예측을 좌우로 나눠보기"><i class="fa-solid fa-table-columns"></i><span>나눠보기</span></button>' +
+                '</div>' +
+                '<button class="rv-tb-btn" id="rv-tb-sim" title="시뮬레이션 제어"><i class="fa-solid fa-sliders"></i><span>시뮬레이션</span></button>' +
+                '<button class="rv-tb-btn" id="rv-tb-detail" title="상세 정보"><i class="fa-solid fa-circle-info"></i><span>상세</span></button>' +
             '</div>';
-        canvasWrap.appendChild(split);
+        bar.querySelector('#rv-tb-back').addEventListener('click', function () {
+            if (window.LayoutManager) LayoutManager.closeDedicatedPanel();
+        });
+        bar.querySelector('#rv-view-overlay').addEventListener('click', function () { setShipViewMode(true); });
+        bar.querySelector('#rv-view-split').addEventListener('click', function () { setShipViewMode(false); });
+        return bar;
+    }
 
-        // Real-time Prediction HUD (Error metrics)
-        var errorHud = document.createElement('div');
-        errorHud.className = 'rv-prediction-hud';
-        errorHud.innerHTML =
-            '<div class="rv-pred-hud-title">실시간 예측 오차 ERROR METRICS</div>' +
-            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">RMSE</span><span class="rv-pred-hud-val" id="rv-rmse">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-rmse-bar"></i></span></div>' +
-            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">Δ Roll</span><span class="rv-pred-hud-val" id="rv-d-roll">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-d-roll-bar"></i></span></div>' +
-            '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">Δ Pitch</span><span class="rv-pred-hud-val" id="rv-d-pitch">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-d-pitch-bar"></i></span></div>';
-        canvasWrap.appendChild(errorHud);
+    // ── Bottom instrument console — three labelled modules in a centred rack ──
+    function buildConsole() {
+        var consoleEl = document.createElement('div');
+        consoleEl.className = 'rv-console';
+        consoleEl.innerHTML =
+            '<div class="rv-console-rack">' +
+                // module 1 — clinometer gauge
+                '<section class="rv-mod rv-mod-clino">' +
+                    '<span class="rv-mod-eyebrow">횡경사계</span>' +
+                    '<div class="rv-clino-wrap">' + _clinoSvg() + '</div>' +
+                '</section>' +
+                // module 2 — heel readouts
+                '<section class="rv-mod rv-mod-heel">' +
+                    '<span class="rv-mod-eyebrow">횡요각</span>' +
+                    '<div class="rv-clino-readout">' +
+                        '<div class="rv-clino-cell rv-clino-cell-real"><span class="rv-clino-tag">실측</span><span class="rv-clino-val" id="rv-real-roll">0.0°</span></div>' +
+                        '<div class="rv-clino-gap"><span class="rv-clino-gap-tag">오차</span><span class="rv-clino-gap-val rv-roll-safe" id="rv-clino-gap">0.0°</span></div>' +
+                        '<div class="rv-clino-cell rv-clino-cell-pred"><span class="rv-clino-tag">예측</span><span class="rv-clino-val" id="rv-pred-roll">0.0°</span></div>' +
+                    '</div>' +
+                '</section>' +
+                // module 3 — prediction accuracy metrics
+                '<section class="rv-mod rv-mod-error">' +
+                    '<span class="rv-mod-eyebrow">예측 정확도</span>' +
+                    '<div class="rv-console-metrics">' +
+                        '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">RMSE</span><span class="rv-pred-hud-val" id="rv-rmse">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-rmse-bar"></i></span></div>' +
+                        '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">Δ Roll</span><span class="rv-pred-hud-val" id="rv-d-roll">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-d-roll-bar"></i></span></div>' +
+                        '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">Δ Pitch</span><span class="rv-pred-hud-val" id="rv-d-pitch">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-d-pitch-bar"></i></span></div>' +
+                    '</div>' +
+                '</section>' +
+            '</div>';
+        return consoleEl;
+    }
 
-        // Camera preset buttons (bottom-right)
+    // ── Camera presets (float in the 3D stage) ──
+    function buildCanvasOverlays(canvasWrap) {
         var camGroup = document.createElement('div');
         camGroup.className = 'rv-cam-presets';
 
@@ -1625,6 +1748,21 @@ var RollViewer = (function () {
             camGroup.appendChild(btn);
         });
         canvasWrap.appendChild(camGroup);
+
+        // 실측/예측 화면 라벨 — 겹쳐보기=중앙 범례, 나눠보기=좌/우 분할 위에 표시
+        canvasWrap.classList.add(splitView ? 'rv-stage--split' : 'rv-stage--overlay');
+        var labels = document.createElement('div');
+        labels.className = 'rv-stage-labels';
+        labels.innerHTML =
+            '<span class="rv-vlabel rv-vlabel-real" id="rv-vlabel-real"><i class="rv-vlabel-dot"></i>실측</span>' +
+            '<span class="rv-vlabel rv-vlabel-pred" id="rv-vlabel-pred"><i class="rv-vlabel-dot"></i>예측</span>';
+        canvasWrap.appendChild(labels);
+
+        // 예측 오차(Δ) — 두 사다리 사이 벌어진 지점에 단일 라벨 (겹쳐보기 전용)
+        var deg = document.createElement('div');
+        deg.className = 'rv-deg-labels';
+        deg.innerHTML = '<span class="rv-deg rv-deg-err" id="rv-deg-err" style="display:none">Δ 0.0°</span>';
+        canvasWrap.appendChild(deg);
     }
 
     function animateCameraToPreset(targetPos) {
@@ -2597,7 +2735,7 @@ var RollViewer = (function () {
         var canvas = document.createElement('canvas');
         canvas.width = 128; canvas.height = 32;
         var ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#3b82f6';
+        ctx.fillStyle = '#2f6fed';
         ctx.font = "700 20px 'Wanted Sans Variable', 'Pretendard Variable', 'Inter', sans-serif";
         ctx.textAlign = 'center';
         ctx.fillText('WAVE ' + Math.round(weather.waveDirection) + '°', 64, 22);
@@ -2722,7 +2860,7 @@ var RollViewer = (function () {
     function buildWater() {
         var THREE = window.THREE;
 
-        var waterGeometry = new THREE.PlaneGeometry(2000, 2000);
+        var waterGeometry = new THREE.PlaneGeometry(2000, 2000, 200, 200);
 
         var loader = new THREE.TextureLoader();
         waterNormals = loader.load(
@@ -2748,6 +2886,66 @@ var RollViewer = (function () {
         waterMesh.rotation.x = -Math.PI / 2;
         waterMesh.position.y = 0;
         scene.add(waterMesh);
+
+        // ── Gerstner displacement injection ──
+        // Reuse THREE.Water's reflection/refraction; patch its vertex shader to
+        // displace vertices. Ship heave samples the same wave field (heightAt).
+        _waves = (window.Gerstner) ? Gerstner.buildWaves(weather) : [];
+        _waterPatched = false;
+        if (window.Gerstner) {
+            try {
+                var wmat = waterMesh.material;
+                var vs = wmat.vertexShader;
+                if (vs.indexOf('gerstnerDisplace') === -1) {
+                    vs = vs.replace(
+                        'uniform float time;',
+                        'uniform float time;\n' + Gerstner.GLSL_SNIPPET
+                    );
+                    vs = vs.replace(
+                        'void main() {',
+                        'void main() {\n\tvec3 gPos = position + gerstnerDisplace( position.xy );'
+                    );
+                    vs = vs.replace('modelMatrix * vec4( position, 1.0 )', 'modelMatrix * vec4( gPos, 1.0 )');
+                    vs = vs.replace('modelViewMatrix * vec4( position, 1.0 )', 'modelViewMatrix * vec4( gPos, 1.0 )');
+                    wmat.vertexShader = vs;
+
+                    var dirArr = [], parArr = [];
+                    for (var wi = 0; wi < Gerstner.MAX_WAVES; wi++) {
+                        dirArr.push(new THREE.Vector2());
+                        parArr.push(new THREE.Vector4());
+                    }
+                    wmat.uniforms.uTime = { value: 0 };
+                    wmat.uniforms.uWaveCount = { value: 0 };
+                    wmat.uniforms.uWaveDir = { value: dirArr };
+                    wmat.uniforms.uWaveParams = { value: parArr };
+                    wmat.needsUpdate = true;
+                    _waterPatched = true;
+                    _applyWavesToWater();
+                }
+            } catch (e) {
+                console.warn('[roll-viewer] Gerstner water patch failed, using flat water:', e);
+                _waterPatched = false;
+            }
+        }
+    }
+
+    // Push current _waves into the patched Water shader uniforms.
+    function _applyWavesToWater() {
+        if (!_waterPatched || !waterMesh || !waterMesh.material) return;
+        var u = waterMesh.material.uniforms;
+        if (!u || !u.uWaveDir) return;
+        var max = Gerstner.MAX_WAVES;
+        for (var i = 0; i < max; i++) {
+            var w = _waves[i];
+            if (w) {
+                u.uWaveDir.value[i].set(w.dirX, w.dirY);
+                u.uWaveParams.value[i].set(w.k, w.A, w.omega, w.Q);
+            } else {
+                u.uWaveDir.value[i].set(0, 0);
+                u.uWaveParams.value[i].set(0, 0, 0, 0);
+            }
+        }
+        u.uWaveCount.value = Math.min(_waves.length, max);
     }
 
     // ── animateWater(time) — update Water shader uniforms ──
@@ -3771,6 +3969,11 @@ var RollViewer = (function () {
             // Advance simulated wave time (separate from elapsed so timeScale only affects waves, not clouds/water)
             simWaveTime += dt * _timeScale;
 
+            // Gerstner surface time — same value the ship heave samples below (kept in sync)
+            if (_waterPatched && waterMesh && waterMesh.material.uniforms.uTime) {
+                waterMesh.material.uniforms.uTime.value = simWaveTime;
+            }
+
             // Roll & Pitch calculation — scaled by wave height (2m baseline)
             var waveScale = Math.max(weather.waveHeight / 2.0, 0.3);
             var freqScale = weather.wavePeriod ? (8 / weather.wavePeriod) : 1;
@@ -3849,7 +4052,13 @@ var RollViewer = (function () {
             if (shipGroup) {
                 shipGroup.position.x = shipWorldPos.x;
                 shipGroup.position.z = shipWorldPos.z;
-                shipGroup.position.y = -0.8 + weather.waveHeight * 0.1 * Math.sin(elapsed * 0.8) + capsizeSinkY;
+                // Heave: ride the actual wave surface. Water plane is centred on the
+                // ship, so sample at its local origin (0,0). Falls back to the old
+                // sin bob only when the Gerstner module is unavailable.
+                var heaveY = (window.Gerstner && _waves.length)
+                    ? Gerstner.heightAt(_waves, 0, 0, simWaveTime)
+                    : weather.waveHeight * 0.1 * Math.sin(elapsed * 0.8);
+                shipGroup.position.y = -0.8 + heaveY + capsizeSinkY;
                 shipGroup.rotation.y = headingRad;
                 shipGroup.rotation.x = smoothRoll * (Math.PI / 180);
                 shipGroup.rotation.z = smoothPitch * (Math.PI / 180);
@@ -3858,6 +4067,11 @@ var RollViewer = (function () {
                     shipGroupPred.rotation.y = headingRad;
                     shipGroupPred.rotation.x = smoothPredRoll * (Math.PI / 180);
                     shipGroupPred.rotation.z = smoothPredPitch * (Math.PI / 180);
+                }
+                // 수평 기준선은 위치만 따라가고 자세(롤/피치)는 따라가지 않는다 → 항상 수평.
+                if (heelRefGroup) {
+                    heelRefGroup.position.copy(shipGroup.position);
+                    heelRefGroup.rotation.y = headingRad;
                 }
             }
 
@@ -3928,6 +4142,7 @@ var RollViewer = (function () {
             var absRoll = Math.abs(smoothRoll);
             var absPitch = Math.abs(smoothPitch);
             updateMetronomes(smoothRoll, smoothPredRoll);
+            _updateHeelLabels(smoothRoll, smoothPredRoll);
             _setRollValue('rv-real-roll', absRoll);
             _setRollValue('rv-pred-roll', Math.abs(smoothPredRoll));
             if (window.RollPrediction) {
@@ -4109,7 +4324,7 @@ var RollViewer = (function () {
 
         panel.innerHTML =
             '<div class="roll-viewer-section">' +
-            '<div class="roll-viewer-section-title">선박 정보 SHIP INFO</div>' +
+            '<div class="roll-viewer-section-title">선박 정보</div>' +
             '<div class="rv-info-row"><span class="rv-info-label">선명</span><span class="rv-info-value">' + (ship.name || 'UNKNOWN') + '</span></div>' +
             '<div class="rv-info-row"><span class="rv-info-label">MMSI</span><span class="rv-info-value">' + (ship.mmsi || currentMmsi) + '</span></div>' +
             '<div class="rv-info-row"><span class="rv-info-label">선종</span><span class="rv-info-value">' + typeLabel + '</span></div>' +
@@ -4117,7 +4332,7 @@ var RollViewer = (function () {
             '<div class="rv-info-row"><span class="rv-info-label">침로</span><span class="rv-info-value">' + hdgVal + '</span></div>' +
             '</div>' +
             '<div class="roll-viewer-section">' +
-            '<div class="roll-viewer-section-title">항해 정보 VOYAGE</div>' +
+            '<div class="roll-viewer-section-title">항해 정보</div>' +
             '<div class="rv-info-row"><span class="rv-info-label">목적지</span><span class="rv-info-value">' + destination + '</span></div>' +
             '<div class="rv-info-row"><span class="rv-info-label">ETA</span><span class="rv-info-value">' + eta + '</span></div>' +
             '<div class="rv-info-row"><span class="rv-info-label">상태</span><span class="rv-info-value">' + statusLabel + '</span></div>' +
@@ -4127,14 +4342,14 @@ var RollViewer = (function () {
             // ROLL/PITCH sections relocated to the prediction modal on the canvas — they are
             // simulation OUTPUT, not real data. The side panel keeps only observed values.
             '<div class="roll-viewer-section">' +
-            '<div class="roll-viewer-section-title">기상 WEATHER</div>' +
+            '<div class="roll-viewer-section-title">기상</div>' +
             '<div class="rv-info-row"><span class="rv-info-label">풍속</span><span class="rv-info-value" id="rv-weather-wind">' + weather.windSpeed + ' kt</span></div>' +
             '<div class="rv-info-row"><span class="rv-info-label">파고</span><span class="rv-info-value" id="rv-weather-wave">' + weather.waveHeight + ' m</span></div>' +
             '<div class="rv-info-row"><span class="rv-info-label">주기</span><span class="rv-info-value" id="rv-weather-period">' + weather.wavePeriod + ' s</span></div>' +
             '<div class="rv-info-row"><span class="rv-info-label">파향</span><span class="rv-info-value" id="rv-weather-direction">' + Math.round(weather.waveDirection) + '°</span></div>' +
             '</div>' +
             '<div class="roll-viewer-section">' +
-            '<div class="roll-viewer-section-title">횡요각 분석 ANALYSIS</div>' +
+            '<div class="roll-viewer-section-title">횡요각 분석</div>' +
             '<div class="rv-info-row"><span class="rv-info-label">고유 횡요주기</span><span class="rv-info-value">' + naturalPeriod.toFixed(1) + ' s</span></div>' +
             '<div class="rv-info-row"><span class="rv-info-label">파주기</span><span class="rv-info-value">' + (wavePeriodObs ? wavePeriodObs.toFixed(0) + ' s' : '-') + '</span></div>' +
             '<div class="rv-info-row"><span class="rv-info-label">조우주기</span><span class="rv-info-value" id="rv-an-te">' + (encounterT ? (isFinite(encounterT) ? encounterT.toFixed(1) + ' s' : '∞') : '-') + '</span></div>' +
@@ -4161,85 +4376,106 @@ var RollViewer = (function () {
         return panel;
     }
 
-    // ── 메트로놈(가위바늘) 게이지 ──
-    // 부채꼴 눈금 위에 실측(파란 굵은 바늘)·예측(노랑 점선 바늘)을 띄우고,
-    // 두 바늘 사이를 빨간 부채꼴로 채워 오차를 한눈에 보여준다. ±35° 범위.
-    var _METRO = { cx: 60, cy: 66, R: 54, L: 50, range: 35 };
+    // ── 클리노미터(경사계) 계기 ──
+    // 하나의 부채꼴 눈금 위에 실측(인광 청록 바늘)과 예측(황동 바늘)을 겹쳐 표시한다.
+    // 두 바늘 사이의 빨간 부채꼴이 곧 예측 오차다. ±40° 범위, 위험 임계 15°.
+    var _CLINO = { cx: 160, cy: 158, R: 140, Lr: 134, Lp: 120, range: 40, caution: 10, danger: 15 };
 
-    function _metroPt(deg, r) {
+    function _cpt(deg, r) {
         var a = deg * Math.PI / 180;
-        return [(_METRO.cx + r * Math.sin(a)), (_METRO.cy - r * Math.cos(a))];
+        return [(_CLINO.cx + r * Math.sin(a)), (_CLINO.cy - r * Math.cos(a))];
+    }
+    function _arc(d0, d1, r) {
+        var s = _cpt(d0, r), e = _cpt(d1, r);
+        return 'M ' + s[0].toFixed(2) + ' ' + s[1].toFixed(2) +
+            ' A ' + r + ' ' + r + ' 0 0 1 ' + e[0].toFixed(2) + ' ' + e[1].toFixed(2);
     }
 
-    // 정적 SVG(눈금 아크 + 눈금선) + 동적 요소(바늘 2 + 빨간 부채꼴) 생성
-    function _metroSvg(prefix) {
-        var s = _metroPt(-_METRO.range, _METRO.R), e = _metroPt(_METRO.range, _METRO.R);
-        var midArcRadius = _METRO.R - 10;
-        var sm = _metroPt(-_METRO.range, midArcRadius), em = _metroPt(_METRO.range, midArcRadius);
-        var subArc = '<path class="rv-metro-subarc" d="M ' + sm[0].toFixed(2) + ' ' + sm[1].toFixed(2) +
-            ' A ' + midArcRadius + ' ' + midArcRadius + ' 0 0 1 ' + em[0].toFixed(2) + ' ' + em[1].toFixed(2) + '"/>';
-        var ticks = '';
-        [-35, -25, -15, 0, 15, 25, 35].forEach(function (d) {
-            var a = _metroPt(d, _METRO.R - 4), b = _metroPt(d, _METRO.R + 1);
-            ticks += '<line x1="' + a[0].toFixed(2) + '" y1="' + a[1].toFixed(2) +
-                '" x2="' + b[0].toFixed(2) + '" y2="' + b[1].toFixed(2) + '" class="rv-metro-tick"/>';
+    // 정적 계기면(등급 부채꼴 + 눈금 림 + 눈금선 + 라벨) + 동적 바늘 2 + 오차 부채꼴
+    function _clinoSvg() {
+        var C = _CLINO, R = C.R, band = R - 5;
+        // Etched severity sectors — calm recedes, danger is the only loud step.
+        var sectors =
+            '<path class="rv-clino-band rv-clino-band-safe" d="' + _arc(-C.caution, C.caution, band) + '"/>' +
+            '<path class="rv-clino-band rv-clino-band-caution" d="' + _arc(-C.danger, -C.caution, band) + '"/>' +
+            '<path class="rv-clino-band rv-clino-band-caution" d="' + _arc(C.caution, C.danger, band) + '"/>' +
+            '<path class="rv-clino-band rv-clino-band-danger" d="' + _arc(-C.range, -C.danger, band) + '"/>' +
+            '<path class="rv-clino-band rv-clino-band-danger" d="' + _arc(C.danger, C.range, band) + '"/>';
+        var rim = '<path class="rv-clino-rim" d="' + _arc(-C.range, C.range, R) + '"/>';
+        var ticks = '', labels = '';
+        for (var d = -C.range; d <= C.range; d += 5) {
+            var major = (d % 10 === 0);
+            var a = _cpt(d, R - (major ? 9 : 5)), b = _cpt(d, R + 1);
+            ticks += '<line class="rv-clino-tick' + (major ? ' rv-clino-tick-major' : '') + '" x1="' +
+                a[0].toFixed(2) + '" y1="' + a[1].toFixed(2) + '" x2="' + b[0].toFixed(2) + '" y2="' + b[1].toFixed(2) + '"/>';
+            if (major && Math.abs(d) <= 30) {
+                var t = _cpt(d, R - 21);
+                labels += '<text class="rv-clino-num" x="' + t[0].toFixed(2) + '" y="' + (t[1] + 3).toFixed(2) + '">' + Math.abs(d) + '</text>';
+            }
+        }
+        // Danger-threshold ticks (±15°) emphasised — the heel angle that matters.
+        var thr = '';
+        [-C.danger, C.danger].forEach(function (dd) {
+            var a = _cpt(dd, R - 11), b = _cpt(dd, R + 3);
+            thr += '<line class="rv-clino-thr" x1="' + a[0].toFixed(2) + '" y1="' + a[1].toFixed(2) +
+                '" x2="' + b[0].toFixed(2) + '" y2="' + b[1].toFixed(2) + '"/>';
         });
-        var cx = _METRO.cx, cy = _METRO.cy, topY = (_METRO.cy - _METRO.L);
-        return '<svg class="rv-metro" viewBox="0 0 120 74" preserveAspectRatio="xMidYMid meet">' +
-            '<path class="rv-metro-arc" d="M ' + s[0].toFixed(2) + ' ' + s[1].toFixed(2) +
-            ' A ' + _METRO.R + ' ' + _METRO.R + ' 0 0 1 ' + e[0].toFixed(2) + ' ' + e[1].toFixed(2) + '"/>' +
-            subArc +
-            ticks +
-            '<polygon class="rv-metro-wedge" id="' + prefix + '-wedge" points="' + cx + ',' + cy + '"/>' +
-            '<line class="rv-metro-pred" id="' + prefix + '-pred" x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + topY + '"/>' +
-            '<line class="rv-metro-real" id="' + prefix + '-real" x1="' + cx + '" y1="' + cy + '" x2="' + cx + '" y2="' + topY + '"/>' +
-            '<circle class="rv-metro-pivot" cx="' + cx + '" cy="' + cy + '" r="3"/>' +
+        var plumbTop = _cpt(0, R - 2);
+        var plumb = '<line class="rv-clino-plumb" x1="' + C.cx + '" y1="' + C.cy + '" x2="' + C.cx + '" y2="' + plumbTop[1].toFixed(2) + '"/>';
+        // Needles are drawn pointing up at 0° and rotated about the pivot each frame.
+        var realNeedle =
+            '<g class="rv-clino-real" id="rv-clino-real" transform="rotate(0 ' + C.cx + ' ' + C.cy + ')">' +
+                '<line x1="' + C.cx + '" y1="' + C.cy + '" x2="' + C.cx + '" y2="' + (C.cy - C.Lr) + '"/>' +
+                '<circle cx="' + C.cx + '" cy="' + (C.cy - C.Lr) + '" r="4.5"/>' +
+            '</g>';
+        var predNeedle =
+            '<g class="rv-clino-pred" id="rv-clino-pred" transform="rotate(0 ' + C.cx + ' ' + C.cy + ')">' +
+                '<line x1="' + C.cx + '" y1="' + C.cy + '" x2="' + C.cx + '" y2="' + (C.cy - C.Lp) + '"/>' +
+                '<polygon points="' + C.cx + ',' + (C.cy - C.Lp - 7) + ' ' + (C.cx - 5) + ',' + (C.cy - C.Lp) +
+                    ' ' + C.cx + ',' + (C.cy - C.Lp + 7) + ' ' + (C.cx + 5) + ',' + (C.cy - C.Lp) + '"/>' +
+            '</g>';
+        return '<svg class="rv-clino" viewBox="0 0 320 178" preserveAspectRatio="xMidYMid meet">' +
+            sectors + rim + ticks + thr + labels + plumb +
+            '<polygon class="rv-clino-wedge" id="rv-clino-wedge" points="' + C.cx + ',' + C.cy + '"/>' +
+            predNeedle + realNeedle +
+            '<circle class="rv-clino-hub" cx="' + C.cx + '" cy="' + C.cy + '" r="6"/>' +
             '</svg>';
     }
 
-    // mode: 'real' = 실측 바늘만, 'pred' = 예측 바늘만, 'both' = 둘 다 + 빨간 오차 부채꼴
-    function _setMetro(prefix, realDeg, predDeg, mode) {
-        mode = mode || 'both';
-        var clamp = function (d) { return Math.max(-_METRO.range, Math.min(_METRO.range, d)); };
-        var r = _metroPt(clamp(realDeg), _METRO.L), p = _metroPt(clamp(predDeg), _METRO.L);
-        var realEl = document.getElementById(prefix + '-real');
-        var predEl = document.getElementById(prefix + '-pred');
-        var wedgeEl = document.getElementById(prefix + '-wedge');
-        var showReal = mode === 'both' || mode === 'real';
-        var showPred = mode === 'both' || mode === 'pred';
-        var showWedge = mode === 'both';
-        if (realEl) {
-            realEl.style.display = showReal ? '' : 'none';
-            if (showReal) { realEl.setAttribute('x2', r[0].toFixed(2)); realEl.setAttribute('y2', r[1].toFixed(2)); }
-        }
-        if (predEl) {
-            predEl.style.display = showPred ? '' : 'none';
-            if (showPred) { predEl.setAttribute('x2', p[0].toFixed(2)); predEl.setAttribute('y2', p[1].toFixed(2)); }
-        }
-        if (wedgeEl) {
-            wedgeEl.style.display = showWedge ? '' : 'none';
-            if (showWedge) {
-                wedgeEl.setAttribute('points', _METRO.cx + ',' + _METRO.cy + ' ' +
-                    r[0].toFixed(2) + ',' + r[1].toFixed(2) + ' ' + p[0].toFixed(2) + ',' + p[1].toFixed(2));
-                var err = Math.min(Math.abs(realDeg - predDeg) / 8, 1);   // 8° 이상이면 최대 강도
-                wedgeEl.setAttribute('fill', 'rgba(244,63,94,' + (0.1 + 0.55 * err).toFixed(3) + ')');
-            }
-        }
-    }
-
-    // 좌=실측 선박(실측 바늘만), 우=예측 선박(예측 바늘만)
+    // 실측·예측 바늘을 동일 눈금 위에서 회전시키고, 두 바늘 사이를 오차 부채꼴로 채운다.
     function updateMetronomes(realDeg, predDeg) {
-        _setMetro('rv-metroL', realDeg, predDeg, 'real');
-        _setMetro('rv-metroR', realDeg, predDeg, 'pred');
+        var C = _CLINO;
+        var clamp = function (dv) { return Math.max(-C.range, Math.min(C.range, dv)); };
+        var rc = clamp(realDeg), pc = clamp(predDeg);
+        var realEl = document.getElementById('rv-clino-real');
+        var predEl = document.getElementById('rv-clino-pred');
+        var wedgeEl = document.getElementById('rv-clino-wedge');
+        if (realEl) realEl.setAttribute('transform', 'rotate(' + rc.toFixed(2) + ' ' + C.cx + ' ' + C.cy + ')');
+        if (predEl) predEl.setAttribute('transform', 'rotate(' + pc.toFixed(2) + ' ' + C.cx + ' ' + C.cy + ')');
+        if (wedgeEl) {
+            var r = _cpt(rc, C.Lp), p = _cpt(pc, C.Lp);
+            wedgeEl.setAttribute('points', C.cx + ',' + C.cy + ' ' + r[0].toFixed(2) + ',' + r[1].toFixed(2) +
+                ' ' + p[0].toFixed(2) + ',' + p[1].toFixed(2));
+            var err = Math.min(Math.abs(realDeg - predDeg) / 8, 1);   // 8° 이상이면 최대 강도
+            wedgeEl.setAttribute('opacity', (0.12 + 0.5 * err).toFixed(3));
+        }
+        // 오차 수치 = |실측 − 예측|
+        var gapEl = document.getElementById('rv-clino-gap');
+        if (gapEl) {
+            var gap = Math.abs(realDeg - predDeg);
+            gapEl.textContent = gap.toFixed(1) + '°';
+            var glvl = gap < 2 ? 'safe' : gap < 4 ? 'caution' : gap < 8 ? 'warning' : 'danger';
+            gapEl.className = 'rv-clino-gap-val rv-roll-' + glvl;
+        }
     }
 
-    // 분할 라벨 아래 수치값 갱신 (색상 코딩)
+    // 클리노미터 하단 실측/예측 수치 갱신 (심각도 색상)
     function _setRollValue(id, absRoll) {
         var el = document.getElementById(id);
         if (!el) return;
         el.textContent = absRoll.toFixed(1) + '°';
         var level = absRoll < 5 ? 'safe' : absRoll < 10 ? 'caution' : absRoll < 15 ? 'warning' : 'danger';
-        el.className = 'rv-split-roll rv-roll-' + level;
+        el.className = 'rv-clino-val rv-roll-' + level;
     }
 
     // 오차 지표 1줄 갱신: 숫자 + 막대 길이(오차/스케일) + 색(녹/황/적)
@@ -4365,8 +4601,8 @@ var RollViewer = (function () {
                 {
                     name: '실제', type: 'line', smooth: true, symbol: 'none',
                     data: rollHistory.slice(),
-                    lineStyle: { color: '#3b82f6', width: 1.8 },
-                    areaStyle: { color: 'rgba(59,130,246,0.18)' }
+                    lineStyle: { color: '#2f6fed', width: 1.8 },
+                    areaStyle: { color: 'rgba(47, 111, 237,0.18)' }
                 },
                 {
                     name: '예측', type: 'line', smooth: true, symbol: 'none',
@@ -4438,8 +4674,153 @@ var RollViewer = (function () {
         camera.updateProjectionMatrix();
     }
 
+    // ── 횡요 HUD 수평계(attitude ladder) ──
+    // 두꺼운 판 대신, 갑판 위 선폭(로컬 Z축)을 가로지르는 가느다란 발광 라인 + 눈금 +
+    // 가운데 ^자세 마커 + 끝단 핍으로 구성된 항공 HUD 스타일 인디케이터. 선박 롤을
+    // 그대로 물려받아 기운다. 실측=primary 파랑, 예측=하늘색. 두 사다리의 사이각이 오차.
+    function _addHeelPlane(group, hexColor, ghost) {
+        var THREE = window.THREE;
+        if (!group || !THREE) return null;
+        var beam = 17, half = beam / 2, deckY = 5.0, gap = 2.2;
+        var g = new THREE.Group();
+        g.userData._heelMast = true;   // 고스트 처리 제외 플래그
+        var mat = new THREE.LineBasicMaterial({
+            color: hexColor, transparent: true, opacity: ghost ? 0.85 : 1.0,
+            depthTest: false, depthWrite: false
+        });
+        var V = function (y, z) { return new THREE.Vector3(0, deckY + y, z); };
+        var P = [];
+        // 메인 바 — 가운데 갭을 둔 좌/우 두 날개
+        P.push(V(0, -half), V(0, -gap));
+        P.push(V(0, gap), V(0, half));
+        // 눈금 — 2.5 간격 아래 방향(끝단은 길게)
+        for (var z = -half; z <= half + 0.01; z += 2.5) {
+            if (Math.abs(z) < gap) continue;
+            var major = Math.abs(z) >= half - 0.01;
+            P.push(V(0, z), V(major ? -1.2 : -0.5, z));
+        }
+        // 가운데 자세 마커 — 위를 향한 ^ 셰브런 (롤 축 표시)
+        P.push(V(0, -1.0), V(0.95, 0));
+        P.push(V(0.95, 0), V(0, 1.0));
+        var seg = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(P), mat);
+        seg.userData._heelMast = true; seg.renderOrder = 999;
+        g.add(seg);
+        // 끝단 발광 핍 — 디지털 터미네이터
+        [-half, half].forEach(function (z) {
+            var pip = new THREE.Mesh(
+                new THREE.SphereGeometry(ghost ? 0.22 : 0.26, 10, 10),
+                new THREE.MeshBasicMaterial({ color: hexColor, transparent: true,
+                    opacity: ghost ? 0.9 : 1.0, depthTest: false, depthWrite: false }));
+            pip.position.set(0, deckY, z); pip.userData._heelMast = true; pip.renderOrder = 999;
+            g.add(pip);
+        });
+        group.add(g);
+        return g;
+    }
+
+    // ── 수평(0°) 기준선 ──
+    // 선박 위치만 따라가고 롤은 따라가지 않는 '항상 수평'인 기준선. 이 선 대비 두 사다리가
+    // 몇 도 기울었는지를 눈으로 비교하게 해준다 (인공 수평의 horizon 역할).
+    function _buildHeelHorizon() {
+        var THREE = window.THREE;
+        if (!THREE || !scene) return;
+        heelRefGroup = new THREE.Group();
+        var W = 11, deckY = _HEEL.deckY;
+        var mat = new THREE.LineDashedMaterial({
+            color: 0x9fb2c8, transparent: true, opacity: 0.5, dashSize: 0.7, gapSize: 0.5,
+            depthTest: false, depthWrite: false
+        });
+        var line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, deckY, -W), new THREE.Vector3(0, deckY, W)]), mat);
+        line.computeLineDistances(); line.renderOrder = 998;
+        heelRefGroup.add(line);
+        // 작은 수평 기준 핍(중앙)
+        scene.add(heelRefGroup);
+    }
+
+    // 사다리 끝점(월드)→화면 투영 후, 각 선박의 횡요각을 라벨로 표시 (겹쳐보기에서만).
+    function _projTip(group, z) {
+        var THREE = window.THREE;
+        var v = new THREE.Vector3(0, _HEEL.deckY, z);
+        group.localToWorld(v); v.project(camera);
+        var el = renderer.domElement;
+        return { x: (v.x * 0.5 + 0.5) * el.clientWidth, y: (-v.y * 0.5 + 0.5) * el.clientHeight, infront: v.z < 1 };
+    }
+    // 가장 중요한 값 = 오차. 두 사다리 사이 벌어진 지점(같은 현 끝점의 중점)에 Δ 하나만 표시.
+    function _updateHeelLabels(realDeg, predDeg) {
+        var el = document.getElementById('rv-deg-err');
+        if (!el) return;
+        if (splitView || !shipGroup || !shipGroupPred || !camera) { el.style.display = 'none'; return; }
+        var rp = _projTip(shipGroup, _HEEL.half);        // 실측 우현 끝
+        var pp = _projTip(shipGroupPred, _HEEL.half);    // 예측 우현 끝 (같은 현 → 수직 간격이 곧 오차)
+        if (!rp.infront || !pp.infront) { el.style.display = 'none'; return; }
+        var gap = Math.abs(realDeg - predDeg);
+        el.textContent = 'Δ ' + gap.toFixed(1) + '°';
+        el.style.left = ((rp.x + pp.x) / 2 + 14) + 'px';
+        el.style.top = ((rp.y + pp.y) / 2) + 'px';
+        el.style.display = '';
+        var lvl = gap < 2 ? 'safe' : gap < 4 ? 'caution' : gap < 8 ? 'warning' : 'danger';
+        el.className = 'rv-deg rv-deg-err rv-roll-' + lvl;
+    }
+
+    // ── 고스트 겹쳐보기 / 나눠보기 ──
+    // 예측 선박(클론)의 머티리얼을 한 번만 자체 복제해 둔다 (실측 선박과 공유 방지).
+    function _prepGhostMaterials() {
+        _predGhostMats = [];
+        if (!shipGroupPred) return;
+        shipGroupPred.traverse(function (o) {
+            if (!o.isMesh || !o.material) return;
+            if (o.userData && o.userData._heelMast) return;   // 피뢰침 마스트는 고스트 처리 제외
+            if (Array.isArray(o.material)) {
+                o.material = o.material.map(function (m) { var c = m.clone(); _predGhostMats.push(c); return c; });
+            } else {
+                o.material = o.material.clone();
+                _predGhostMats.push(o.material);
+            }
+        });
+        _predGhostReady = true;
+    }
+
+    // 예측 선박을 '명확한 하늘색 홀로그램 고스트'로 만든다. 선체 형태/색을 통일된
+    // 하늘색 반투명으로 덮어, 다채로운 실측 선박과 한눈에 구분된다. 겹쳐보기·나눠보기
+    // 모두에서 항상 고스트로 유지한다 (solid=실측, ghost=예측 의미를 일관되게).
+    function _setGhost() {
+        _predGhostMats.forEach(function (m) {
+            m.transparent = true;
+            m.opacity = 0.42;
+            m.depthWrite = false;
+            if (m.color) m.color.setHex(0x6fb4ff);              // 통일된 하늘색 홀로그램
+            if (m.emissive) { m.emissive.setHex(0x2f6fed); m.emissiveIntensity = 0.5; }
+            if ('metalness' in m) m.metalness = 0.0;
+            if ('roughness' in m) m.roughness = 1.0;
+            if ('map' in m) m.map = null;                       // 텍스처 제거 → 홀로그램 느낌
+            m.needsUpdate = true;
+        });
+    }
+
+    // overlay=true → 겹쳐보기, false → 좌우 나눠보기(스시저 분할 렌더).
+    // 어느 모드든 예측 선박은 항상 고스트로 유지한다.
+    function setShipViewMode(overlay) {
+        splitView = !overlay;
+        if (shipGroupPred && !_predGhostReady) _prepGhostMaterials();
+        _setGhost();
+        var btnO = document.getElementById('rv-view-overlay');
+        var btnS = document.getElementById('rv-view-split');
+        if (btnO) btnO.classList.toggle('active', overlay);
+        if (btnS) btnS.classList.toggle('active', !overlay);
+        var stage = document.querySelector('.rv-layout-b .roll-viewer-canvas-wrap');
+        if (stage) {
+            stage.classList.toggle('rv-stage--overlay', overlay);
+            stage.classList.toggle('rv-stage--split', !overlay);
+        }
+    }
+
     // ── dispose() ──
     function dispose() {
+        // AI 챗 FAB 위치 원복
+        var _cb = document.getElementById('chat-bubble');
+        if (_cb) _cb.classList.remove('rv-chat-shift');
+
         // Stop animation loop
         if (animFrameId !== null) {
             cancelAnimationFrame(animFrameId);
@@ -4462,6 +4843,10 @@ var RollViewer = (function () {
         if (_resizeHandler) {
             window.removeEventListener('resize', _resizeHandler);
             _resizeHandler = null;
+        }
+        if (_resizeObserver) {
+            _resizeObserver.disconnect();
+            _resizeObserver = null;
         }
 
         // Clear texture caches
@@ -4567,6 +4952,9 @@ var RollViewer = (function () {
 
         // 예측 선박/이력 정리
         shipGroupPred = null;
+        heelRefGroup = null;
+        _predGhostMats = [];
+        _predGhostReady = false;
         predRollHistory = [];
         predPitchHistory = [];
         smoothPredRoll = 0;
@@ -4644,6 +5032,7 @@ var RollViewer = (function () {
             shipSpeed = Math.max(0, Math.min(35, params.shipSpeed));
         }
         _refreshWeatherDisplay();
+        if (window.Gerstner) { _waves = Gerstner.buildWaves(weather); _applyWavesToWater(); }
         return true;
     }
 
@@ -4654,6 +5043,7 @@ var RollViewer = (function () {
         if (_baseShipSpeed !== null) shipSpeed = _baseShipSpeed;
         Object.assign(weather, _baseWeather);
         _refreshWeatherDisplay();
+        if (window.Gerstner) { _waves = Gerstner.buildWaves(weather); _applyWavesToWater(); }
         return true;
     }
 
