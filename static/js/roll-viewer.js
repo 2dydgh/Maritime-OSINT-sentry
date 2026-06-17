@@ -2932,6 +2932,7 @@ var RollViewer = (function () {
     // Push current _waves into the patched Water shader uniforms.
     function _applyWavesToWater() {
         if (!_waterPatched || !waterMesh || !waterMesh.material) return;
+        if (!window.Gerstner) return;
         var u = waterMesh.material.uniforms;
         if (!u || !u.uWaveDir) return;
         var max = Gerstner.MAX_WAVES;
@@ -3970,7 +3971,7 @@ var RollViewer = (function () {
             simWaveTime += dt * _timeScale;
 
             // Gerstner surface time — same value the ship heave samples below (kept in sync)
-            if (_waterPatched && waterMesh && waterMesh.material.uniforms.uTime) {
+            if (_waterPatched && waterMesh && waterMesh.material.uniforms && waterMesh.material.uniforms.uTime) {
                 waterMesh.material.uniforms.uTime.value = simWaveTime;
             }
 
