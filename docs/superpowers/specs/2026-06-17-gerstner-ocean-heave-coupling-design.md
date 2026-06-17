@@ -50,11 +50,15 @@ window.Gerstner = {
 #### 파동 스펙 도출 — `buildWaves(weather)`
 
 입력: `{ waveHeight, wavePeriod, waveDirection }`.
-심해 파동 분산 관계를 사용한다:
 
-- 파장 `L = g·T² / (2π)`  (g=9.81, T=wavePeriod)
-- 위상 속도 `c = √(g·L / (2π))` = `g·T/(2π)`
+씬은 실제 축척이 압축돼 있어(선체 길이 ~16 유닛) 물리 분산식을 그대로 쓰면 시각 파장이
+안 맞는다. 대신 **시간 주기는 `wavePeriod`에 고정**(heave 주기 = 파주기 → roll 모델의 공진
+로직과 일관), **공간 파장은 씬 유닛 기준 튜닝값**으로 분리한다:
+
 - 주 진폭 `A = waveHeight / 2`  (waveHeight는 파고=마루-골 전체이므로 진폭은 절반)
+- 주 공간 파장 `L0 = BASE_WAVELENGTH · (T/8)`  (BASE_WAVELENGTH=시각 튜닝 상수, 긴 주기→긴 스웰)
+- 각 파동: 파수 `k = 2π/L`, 각진동수 `ω = 2π/T_i`. 위상 `φ = k·(dir·p) − ω·t`.
+- 주 스웰의 `T_i = wavePeriod` → (0,0)에서 heave 주기 = 파주기.
 
 3~4개 파동을 합성:
 - **주 스웰 1개**: `waveDirection` 방향, 파장 L, 진폭 A.
@@ -66,14 +70,16 @@ window.Gerstner = {
 
 #### 높이 샘플링 — `heightAt(waves, x, z, t)`
 
-표준 Gerstner 합:
+표준 Gerstner 합(수직 성분):
 
 ```
-y = Σ_i  A_i · cos( k_i·(dir_i · (x,z)) - c_i·k_i·t )
+y = Σ_i  A_i · cos( k_i·(dir_i · p) - ω_i·t )
 ```
 
 (변위 중 수직 성분만; 수평 변위는 시각 효과라 heave엔 불필요.)
-배 1점(중심)만 매 프레임 샘플 → CPU 비용 무시 가능.
+**물 평면이 항상 배 중심에 위치**(`waterMesh.position = shipWorldPos`)하므로 배는 물 평면의
+로컬 원점 (0,0)에 있다 → heave는 `heightAt(waves, 0, 0, simWaveTime)` 한 점만 매 프레임 샘플.
+CPU 비용 무시 가능.
 
 #### GPU 스니펫 — `GLSL_SNIPPET`
 
