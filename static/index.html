@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@700;900&family=Rajdhani:wght@600;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@700;900&family=Rajdhani:wght@600;700&family=B612:wght@400;700&family=B612+Mono:wght@400;700&display=swap"
         rel="stylesheet">
     <!-- Pretendard Variable — provides Korean glyphs for the font-family fallback chain. -->
     <link rel="stylesheet" as="style" crossorigin
@@ -30,7 +30,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
 
     <!-- Application Styles -->
-    <link rel="stylesheet" href="css/main.css?v=118">
+    <link rel="stylesheet" href="css/main.css?v=199">
     <!-- ECharts for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <!-- Three.js for 3D visualization -->
@@ -76,26 +76,35 @@
     <div id="mainContent">
     <!-- Left Sidebar -->
     <div id="leftSidebar">
-        <!-- Icon Rail (always visible) -->
+        <!-- Icon Rail — left nav. 48px icon-only, expands to a drawer on hover
+             revealing labels. 3 bands: 라이브(뷰) · 라이브 도구(충돌/피드) · 모델,
+             각 밴드는 .rail-divider로 구분. 맨 아래 설정. -->
         <div class="icon-rail">
-            <span class="rail-group-title">MONITOR</span>
-            <button class="rail-icon" data-panel="collision" data-action="right-panel" title="충돌 분석">
-                <i class="fa-solid fa-triangle-exclamation"></i>
-                <span class="rail-label">충돌</span>
-                <span class="rail-badge rail-badge-danger" id="collisionBadge" style="display:none;">0</span>
+            <button class="rail-icon active" data-panel="live" data-action="home" aria-label="라이브 뷰">
+                <i class="fa-solid fa-earth-asia"></i>
+                <span class="rail-label">라이브</span>
             </button>
-            <button class="rail-icon" data-panel="feed" data-action="right-panel" title="Live Feed">
+
+            <!-- 라이브(뷰) ↔ 라이브 도구(충돌/피드) 구분 -->
+            <div class="rail-divider"></div>
+
+            <button class="rail-icon" data-panel="feed" data-action="right-panel" aria-label="실시간 피드">
                 <i class="fa-solid fa-tower-broadcast"></i>
                 <span class="rail-label">피드</span>
                 <span class="rail-badge" id="slimAlertCount" style="display:none;">0</span>
             </button>
+            <button class="rail-icon" data-panel="collision" data-action="right-panel" aria-label="충돌 분석">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span class="rail-label">충돌</span>
+                <span class="rail-badge rail-badge-danger" id="collisionBadge" style="display:none;">0</span>
+            </button>
 
-            <div class="rail-separator"></div>
-            <span class="rail-group-title rail-group-title-models">MODELS</span>
+            <!-- divider also anchors where ModelRegistry inserts model buttons -->
+            <div class="rail-divider rail-group-title-models"></div>
             <!-- Model buttons are generated dynamically by ModelRegistry -->
 
             <div class="rail-spacer"></div>
-            <button class="rail-icon" data-panel="settings" data-action="right-panel" title="설정">
+            <button class="rail-icon" data-panel="settings" data-action="right-panel" aria-label="설정">
                 <i class="fa-solid fa-gear"></i>
                 <span class="rail-label">설정</span>
             </button>
@@ -322,10 +331,6 @@
                     <div class="har-stat-label">최고 위험도</div>
                     <div class="har-stat-val" id="harMaxScore">--</div>
                 </div>
-                <div class="har-stat">
-                    <div class="har-stat-label">위험 해역</div>
-                    <div class="har-stat-val" id="harCount">--</div>
-                </div>
             </div>
             <!-- 환경 요약 (드래그 후 셀별 subscores가 있을 때만 표시) -->
             <div class="har-env-summary" id="harEnvSummary" style="display:none;">
@@ -339,7 +344,7 @@
                 <div class="har-env-title">정적 위험구역</div>
                 <div id="harStaticList" class="har-static-list"></div>
             </div>
-            <div class="har-list-title">위험 해역 목록</div>
+            <div class="har-list-title">위험 해역 목록<span class="har-list-count" id="harCount">--</span></div>
             <div class="har-list" id="harList"></div>
         </div>
 
@@ -507,11 +512,11 @@
             <span class="stat-card-loc" id="bottomWaveLoc"></span>
         </div>
         <div class="bottom-sep"></div>
-        <div class="bottom-stat" id="statFlag">
+        <div class="bottom-stat" id="statFlag" title="선적국 — 전체 국적 수 · 깃발은 상위 5개국 (클릭: 전체 분포)">
             <span class="bottom-label">FLAG</span>
             <span class="stat-card-value bottom-val" id="bottomFlagCount">0</span>
+            <span class="flag-top5-tag">TOP5</span>
             <span class="flag-emojis" id="flagEmojis"></span>
-            <span class="flag-top-label">TOP 5</span>
         </div>
     </div>
 
@@ -538,34 +543,60 @@
         </div>
     </div>
 
-    <!-- Centered Loader -->
-    <div id="loading" class="glass-panel">
-        <i class="fa-solid fa-circle-notch fa-spin"></i> <span id="loading-text">서버 연결 중...</span>
+    <!-- Centered Loader. Radar-scope version kept below for comparison — to swap
+         back, delete the .ld-minimal block and uncomment this one.
+    <div id="loading">
+        <div class="ld-scope" aria-hidden="true">
+            <span class="ld-ring ld-ring-1"></span>
+            <span class="ld-ring ld-ring-2"></span>
+            <span class="ld-ring ld-ring-3"></span>
+            <span class="ld-cross ld-cross-v"></span>
+            <span class="ld-cross ld-cross-h"></span>
+            <span class="ld-sweep"></span>
+            <span class="ld-core"></span>
+        </div>
+        <div class="ld-readout" role="status" aria-live="polite">
+            <span class="ld-eyebrow">AIS FEED</span>
+            <span id="loading-text">서버 연결 중...</span>
+        </div>
+    </div>
+    -->
+    <div id="loading" class="ld-minimal ld-row">
+        <div class="ld-ping" aria-hidden="true">
+            <span class="ld-ping-wave"></span>
+            <span class="ld-ping-wave"></span>
+            <span class="ld-ping-core"></span>
+        </div>
+        <div class="ld-readout" role="status" aria-live="polite">
+            <span class="ld-eyebrow">AIS FEED</span>
+            <span id="loading-text">서버 연결 중...</span>
+        </div>
     </div>
 
     <!-- Application Scripts (load order matters) -->
     <script src="js/event-bus.js?v=1"></script>
     <script src="js/data-service.js?v=1"></script>
-    <script src="js/sparkline.js?v=1"></script>
-    <script src="js/layout-manager.js?v=6"></script>
-    <script src="js/model-registry.js?v=5"></script>
-    <script src="js/ship-builders.js?v=2"></script>
-    <script src="js/ship-preview-3d.js?v=2"></script>
+    <script src="js/sparkline.js?v=3"></script>
+    <script src="js/layout-manager.js?v=12"></script>
+    <script src="js/model-registry.js?v=7"></script>
+    <script src="js/ship-builders.js?v=3"></script>
+    <script src="js/ship-preview-3d.js?v=3"></script>
     <script src="js/roll-prediction.js?v=1"></script>
-    <script src="js/roll-viewer.js?v=53"></script>
-    <script src="js/route-viewer.js?v=16"></script>
-    <script src="js/app.js?v=4"></script>
+    <script src="js/gerstner.js?v=1"></script>
+    <script src="js/roll-viewer.js?v=65"></script>
+    <script src="js/route-viewer.js?v=26"></script>
+    <script src="js/app.js?v=7"></script>
     <script src="js/map-cesium.js?v=6"></script>
     <script src="js/ship-models-3d.js?v=2"></script>
-    <script src="js/map-leaflet.js?v=31"></script>
-    <script src="js/weather-overlay.js?v=4"></script>
+    <script src="js/map-leaflet.js?v=34"></script>
+    <script src="js/weather-overlay.js?v=5"></script>
     <script src="js/satellite.js?v=8"></script>
-    <script src="js/proximity.js?v=4"></script>
-    <script src="js/collision.js?v=7"></script>
-    <script src="js/websocket.js?v=19"></script>
-    <script src="js/ui-controls.js?v=25"></script>
-    <script src="js/charts.js?v=5"></script>
-    <script src="js/chat.js?v=4"></script>
+    <script src="js/proximity.js?v=7"></script>
+    <script src="js/collision.js?v=13"></script>
+    <script src="js/websocket.js?v=22"></script>
+    <script src="js/ui-controls.js?v=31"></script>
+    <script src="js/charts.js?v=6"></script>
+    <script src="js/chat.js?v=5"></script>
     <script>
         // ── 앱 부트스트랩 ──
         document.addEventListener('DOMContentLoaded', function() {
