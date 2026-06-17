@@ -59,6 +59,11 @@ test('steepness invariant: sum(Q*k*A) <= 1 (no looping crests)', () => {
   assert.ok(s <= 1 + 1e-9, `steepness sum ${s} > 1`);
 });
 
+test('non-zero wave height yields positive steepness Q on every component', () => {
+  const waves = G.buildWaves(WX);
+  for (const w of waves) assert.ok(w.Q > 0, `Q must be > 0, got ${w.Q}`);
+});
+
 test('GLSL_SNIPPET exposes the shared symbols', () => {
   assert.equal(typeof G.GLSL_SNIPPET, 'string');
   assert.match(G.GLSL_SNIPPET, /gerstnerDisplace/);

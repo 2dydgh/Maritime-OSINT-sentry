@@ -18,7 +18,8 @@
   function buildWaves(weather) {
     var waveHeight = Math.max(0, (weather && weather.waveHeight) || 0);
     var T = Math.max(1, (weather && weather.wavePeriod) || 8);
-    var dirRad = ((weather && weather.waveDirection) || 0) * Math.PI / 180;
+    var dirDeg = (weather && weather.waveDirection != null) ? weather.waveDirection : 0;
+    var dirRad = dirDeg * Math.PI / 180;
     var A0 = waveHeight / 2;                 // amplitude = half of crest-to-trough
     var L0 = BASE_WAVELENGTH * (T / 8);      // longer period -> longer swell
 
