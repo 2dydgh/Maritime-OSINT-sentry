@@ -1,14 +1,51 @@
-version: '3.8'
+# Maritime OSINT Sentry — 단일 명령 전체 스택 기동
+#   docker compose up -d --build
+# 다른 분석서버 배포: git clone → .env 작성(.env.example 참고) → 위 명령.
+# (모니터링까지: -f docker-compose.yml -f docker-compose.monitoring.yml up -d)
 
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: osint_4d_app
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      # --- 서비스명으로 내부 통신 (컨테이너 네트워크 DNS) ---
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-db_user}
+      DB_PASSWORD: ${DB_PASSWORD:-db_password}
+      DB_NAME: ${DB_NAME:-osint_4d}
+      REDIS_URL: redis://redis:6379
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+      COLLISION_MODEL_URL: http://collision-model:5000
+      # --- 외부 API 키 (.env에서 주입) ---
+      AIS_API_KEY: ${AIS_API_KEY:-}
+      OPENSKY_USERNAME: ${OPENSKY_USERNAME:-}
+      OPENSKY_PASSWORD: ${OPENSKY_PASSWORD:-}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+      ollama:
+        condition: service_started
+      collision-model:
+        condition: service_started
+
   db:
     image: postgis/postgis:15-3.3
     container_name: osint_4d_db
     restart: always  # 재부팅해도 자동 실행
     environment:
-      POSTGRES_USER: db_user
-      POSTGRES_PASSWORD: db_password
-      POSTGRES_DB: osint_4d
+      POSTGRES_USER: ${DB_USER:-db_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-db_password}
+      POSTGRES_DB: ${DB_NAME:-osint_4d}
     ports:
       - "5432:5432"
     volumes:
@@ -39,6 +76,40 @@ services:
       retries: 3
       start_period: 15s
 
+  # AI 챗(LLM) — Ollama. 최초 기동 시 모델을 자동 pull 한 뒤 서비스.
+  # 모델 태그(OLLAMA_MODEL)는 ollama 레지스트리에 존재하는 유효한 태그여야 함.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: osint_4d_ollama
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:9b}
+    # serve를 띄운 뒤 모델을 pull (이미 받았으면 즉시 통과)
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama serve &
+        pid=$$!
+        echo "[ollama] waiting for server..."
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        echo "[ollama] pulling $${OLLAMA_MODEL}..."
+        ollama pull "$${OLLAMA_MODEL}" || echo "[ollama] pull failed — 태그 확인 필요"
+        wait $$pid
+    # ▼▼▼ NVIDIA GPU가 있는 서버라면 아래 주석을 해제 (nvidia-container-toolkit 설치 전제) ▼▼▼
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    # ▲▲▲ GPU 사용 시 ▲▲▲
+
 volumes:
   postgis_data:
   redis_data:
+  ollama_data:
