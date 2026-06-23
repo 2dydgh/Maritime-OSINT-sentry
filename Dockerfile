@@ -45,4 +45,5 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 EXPOSE 8001
 
-CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8001"]
+# Render/Cloud Run 등은 런타임에 $PORT를 주입한다. shell 폼으로 받아 쓰고, 없으면 8001 fallback.
+CMD python -m uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8001}

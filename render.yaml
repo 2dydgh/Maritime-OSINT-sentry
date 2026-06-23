@@ -1,0 +1,20 @@
+# Render Blueprint — Maritime OSINT Sentry (데모용 단일 컨테이너 배포)
+# FastAPI가 백엔드 API·WebSocket·static 프론트를 한 번에 서빙하므로 서비스 1개면 충분.
+# 무료 등급: 15분 무요청 시 인스턴스 sleep → 다음 접속 시 콜드스타트(수십 초). 가끔 보여주는 데모에 적합.
+# DB/Redis/Ollama/충돌ML 은 env 미설정 시 graceful degrade (실시간 AIS·지도·WS만 동작).
+services:
+  - type: web
+    name: maritime-osint-sentry
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    branch: feat/aircraft-tracking
+    region: oregon
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # 실제 AIS 키는 커밋하지 말 것. Render 대시보드 > Environment 에서 직접 입력.
+      - key: AIS_API_KEY
+        sync: false
+      - key: PYTHONUNBUFFERED
+        value: "1"
