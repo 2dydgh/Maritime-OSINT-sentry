@@ -6,13 +6,18 @@
 
   var MAX_WAVES = 6;            // must equal #define MAX_WAVES in GLSL_SNIPPET
   var BASE_WAVELENGTH = 60;     // scene-unit wavelength of the primary swell at T=8s (visual tuning)
+  var STEEPNESS = 0.95;         // crest sharpness, 0..1. Higher = pointier crests; >1 loops/pinches. Visual tuning.
 
   // Component table: [angleOffsetDeg, wavelengthScale, amplitudeScale, periodScale]
+  // 6-방향 스펙트럼 — 넓은 각도 스프레드(−70..+108°) + 더 많은 옥타브로 교차파(cross-sea)
+  // 표면을 자연스럽게. MAX_WAVES=6 와 동수. CPU(heightAt)·GPU(snippet) 가 같은 표를 공유.
   var COMPONENTS = [
-    [0,    1.00, 1.00, 1.00],   // primary swell — period == wavePeriod
-    [22,   0.55, 0.42, 0.65],
-    [-38,  0.38, 0.28, 0.50],
-    [58,   0.26, 0.16, 0.38]
+    [0,    1.00, 1.00,  1.00],   // primary swell — period == wavePeriod
+    [18,   0.60, 0.46,  0.68],
+    [-32,  0.42, 0.30,  0.52],
+    [52,   0.30, 0.20,  0.42],
+    [-70,  0.22, 0.13,  0.34],
+    [108,  0.15, 0.085, 0.27]
   ];
 
   function buildWaves(weather) {
@@ -40,10 +45,10 @@
       });
     }
 
-    // Steepness clamp: keep sum(Q*k*A) <= 1 so crests don't loop/pinch.
+    // Steepness clamp: keep sum(Q*k*A) <= STEEPNESS (<=1) so crests don't loop/pinch.
     var denom = 0;
     for (var j = 0; j < waves.length; j++) denom += waves[j].k * waves[j].A;
-    var Q = denom > 0 ? (0.75 / denom) : 0;
+    var Q = denom > 0 ? (STEEPNESS / denom) : 0;
     for (var m = 0; m < waves.length; m++) waves[m].Q = Q;
 
     return waves;
@@ -84,6 +89,30 @@
     '    acc.z  += A * cos( phase );',
     '  }',
     '  return acc;',
+    '}',
+    '// Analytic surface normal — exact derivative of the Gerstner sum. Lets lighting',
+    '// follow the real wave shape instead of a flat normal-map texture.',
+    'vec3 gerstnerNormal( vec2 p ) {',
+    '  float nx = 0.0;',
+    '  float ny = 0.0;',
+    '  float nz = 1.0;',
+    '  for ( int i = 0; i < MAX_WAVES; i++ ) {',
+    '    if ( i >= uWaveCount ) break;',
+    '    vec2 d = uWaveDir[ i ];',
+    '    float k = uWaveParams[ i ].x;',
+    '    float A = uWaveParams[ i ].y;',
+    '    float w = uWaveParams[ i ].z;',
+    '    float Q = uWaveParams[ i ].w;',
+    '    float phase = k * dot( d, p ) - w * uTime;',
+    '    float C = cos( phase );',
+    '    float S = sin( phase );',
+    '    float WA = k * A;',
+    '    nx -= d.x * WA * C;',
+    '    ny -= d.y * WA * C;',
+    '    nz -= Q * WA * S;',
+    '  }',
+    '  // local plane normal (z-up) -> world via the mesh model rotation',
+    '  return normalize( mat3( modelMatrix ) * vec3( nx, ny, nz ) );',
     '}'
   ].join('\n');
 

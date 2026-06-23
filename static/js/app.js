@@ -2,6 +2,21 @@
 // Shared global state declarations. All variables use `var` or `window.x`
 // so they are accessible across all script files loaded via <script> tags.
 
+// ── Shared severity palette (single source = CSS --sev-* tokens) ──
+// Read once at load so JS-driven colors (map markers, Cesium, badges) track the
+// SAME tokens as CSS. To retint danger/warning/caution, edit :root --sev-* once
+// and both CSS and JS update together.
+var SEV = (function () {
+    var cs = getComputedStyle(document.documentElement);
+    function v(name, fallback) { return (cs.getPropertyValue(name) || '').trim() || fallback; }
+    return {
+        danger:  v('--sev-danger',  '#ef4444'),
+        warning: v('--sev-warning', '#ec7a2c'),
+        caution: v('--sev-caution', '#d9a441'),
+    };
+})();
+window.SEV = SEV;
+
 var currentMapMode = '3d';
 var leafletMap = null;
 var viewer = null; // set in map-cesium.js
@@ -48,7 +63,7 @@ var SAT_COLORS = {
     sar: '#f97316',
     sigint: '#eab308',
     navigation: '#10b981',
-    early_warning: '#3b82f6',
+    early_warning: '#2f6fed',
     space_station: '#002878',
     commercial_imaging: '#94a3b8',
 };
@@ -89,9 +104,9 @@ var PROXIMITY_THROTTLE_MS = 2000;
 
 // ML risk colors and labels (shared between collision and proximity)
 var ML_RISK_COLORS = {
-    3: '#f43f5e',
-    2: '#f97316',
-    1: '#eab308',
+    3: SEV.danger,
+    2: SEV.warning,
+    1: SEV.caution,
     0: '#10b981',
 };
 var ML_RISK_LABELS = { 3: '위험', 2: '경고', 1: '주의' };

@@ -25,9 +25,9 @@ var LayoutManager = (function() {
         document.querySelectorAll('.right-panel-close').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 closeRightPanel();
-                deactivateAllIcons();
                 activePanel = null;
                 activeAction = null;
+                highlightIcon('live');
             });
         });
 
@@ -47,16 +47,16 @@ var LayoutManager = (function() {
                         openRightPanel(prevPanel);
                     } else {
                         closeRightPanel();
-                        deactivateAllIcons();
                         activePanel = null;
                         activeAction = null;
+                        highlightIcon('live');
                     }
                     prevPanel = null;
                 } else {
                     closeRightPanel();
-                    deactivateAllIcons();
                     activePanel = null;
                     activeAction = null;
+                    highlightIcon('live');
                 }
             });
         }
@@ -75,6 +75,17 @@ var LayoutManager = (function() {
             return;
         }
 
+        // Live/home — exit any active mode/panel and return to the default live
+        // view. 'live' is the rail's resting/default highlight.
+        if (action === 'home') {
+            if (activePanel) deactivate(activePanel, activeAction);
+            closeRightPanel();
+            activePanel = null;
+            activeAction = null;
+            highlightIcon('live');
+            return;
+        }
+
         // Same panel clicked again
         if (panel === activePanel) {
             // For dedicated-screen models, check if MMSI changed → re-activate
@@ -90,10 +101,11 @@ var LayoutManager = (function() {
                     return;
                 }
             }
-            // Otherwise toggle off
+            // Otherwise toggle off → back to the default live view
             deactivate(panel, action);
             activePanel = null;
             activeAction = null;
+            highlightIcon('live');
             return;
         }
 
@@ -152,6 +164,14 @@ var LayoutManager = (function() {
             if (window.ModelRegistry && ModelRegistry.isModel(panel)) {
                 ModelRegistry.activateModel(panel);
             }
+        }
+
+        // 패널(피드/충돌/설정)은 라이브 지도 '위에' 얹히는 토글이라 라이브를 떠난 게
+        // 아님 → 라이브 불 유지(둘 다 켜짐). 반면 글로브 레이어(사고/다크쉽)와 풀스크린
+        // (항로/횡요각)은 하나의 '탭'처럼 느끼게 하려고 라이브를 끄고 해당 탭만 켠다.
+        if (action === 'right-panel') {
+            var liveIcon = document.querySelector('.rail-icon[data-panel="live"]');
+            if (liveIcon) liveIcon.classList.add('active');
         }
     }
 

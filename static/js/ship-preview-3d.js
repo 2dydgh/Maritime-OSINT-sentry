@@ -319,7 +319,7 @@ var ShipPreview3D = (function () {
         var canvas = document.createElement('canvas');
         var ctx = canvas.getContext('2d');
         var pad = 10;
-        ctx.font = 'bold ' + fontSize + 'px "JetBrains Mono", monospace';
+        ctx.font = 'bold ' + fontSize + 'px "B612 Mono", "JetBrains Mono", "Pretendard Variable", monospace';
         var tw = ctx.measureText(text).width + pad * 2;
         var th = fontSize * 1.3 + pad * 2;
         canvas.width = Math.ceil(tw);
@@ -328,12 +328,12 @@ var ShipPreview3D = (function () {
         ctx.fillStyle = 'rgba(10,21,32,0.85)';
         _rr(ctx, 0, 0, canvas.width, canvas.height, 5);
         ctx.fill();
-        ctx.strokeStyle = 'rgba(56,189,248,0.35)';
+        ctx.strokeStyle = 'rgba(77, 155, 255,0.35)';
         ctx.lineWidth = 2;
         _rr(ctx, 1, 1, canvas.width - 2, canvas.height - 2, 5);
         ctx.stroke();
 
-        ctx.font = 'bold ' + fontSize + 'px "JetBrains Mono", monospace';
+        ctx.font = 'bold ' + fontSize + 'px "B612 Mono", "JetBrains Mono", "Pretendard Variable", monospace';
         ctx.fillStyle = '#7dd3fc';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';

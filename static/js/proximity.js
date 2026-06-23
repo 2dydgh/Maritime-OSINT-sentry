@@ -258,7 +258,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
     var closestMmsi = nearbyVessels[0].mmsi;
     var _linesAdded = 0;
 
-    var DIST_SEV_COLORS = { danger: '#f43f5e', caution: '#f97316', warning: '#eab308' };
+    var DIST_SEV_COLORS = { danger: SEV.danger, caution: '#ec7a2c', warning: '#d9a441' };
 
     nearbyVessels.forEach(function(nv) {
         var isCollisionTarget = collisionTargetMmsi != null && (nv.mmsi == collisionTargetMmsi);
@@ -270,10 +270,10 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
         if (isMlPair) {
             color = mlRiskColor(nv.mlRiskLevel);
         } else if (isDistPair) {
-            var dc = DIST_SEV_COLORS[nv.distSeverity] || '#f97316';
+            var dc = DIST_SEV_COLORS[nv.distSeverity] || '#ec7a2c';
             color = { css: dc, cesium: Cesium.Color.fromCssColorString(dc) };
         } else if (isCollisionTarget) {
-            color = { css: '#f43f5e', cesium: Cesium.Color.fromCssColorString('#f43f5e') };
+            color = { css: SEV.danger, cesium: Cesium.Color.fromCssColorString(SEV.danger) };
         } else {
             color = proximityColor(nv.distance);
         }
@@ -309,7 +309,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
                 (sel.lat + tgt.lat) / 2
             ),
             text: prefix + dist.toFixed(1) + ' nm',
-            font: isCollisionTarget ? 'bold 14px JetBrains Mono, Pretendard Variable' : '12px JetBrains Mono, Pretendard Variable',
+            font: isCollisionTarget ? 'bold 14px B612 Mono, JetBrains Mono, Pretendard Variable' : '12px B612 Mono, JetBrains Mono, Pretendard Variable',
             fillColor: color.cesium,
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 3,
@@ -368,7 +368,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
                 var cpaLabel = proximityCpaLabels.add({
                     position: Cesium.Cartesian3.fromDegrees(cpa.lng, cpa.lat),
                     text: 'CPA ' + cpa.dcpaNm.toFixed(2) + 'nm\n' + cpa.tcpaMin.toFixed(1) + 'min',
-                    font: 'bold 11px JetBrains Mono, Pretendard Variable',
+                    font: 'bold 11px B612 Mono, JetBrains Mono, Pretendard Variable',
                     fillColor: Cesium.Color.WHITE,
                     outlineColor: Cesium.Color.BLACK,
                     outlineWidth: 3,
@@ -408,40 +408,29 @@ function _buildNearbyRowsHtml(nearbyVessels) {
     return nearbyVessels.map(function(nv) {
         var isCollisionTarget = collisionTargetMmsi != null && (nv.mmsi == collisionTargetMmsi);
         var hasMlRisk = nv.mlRiskLevel != null && nv.mlRiskLevel > 0;
-        var hasDistRiskDot = nv.distSeverity != null;
-        var DIST_DOT_COLORS = { danger: '#f43f5e', caution: '#f97316', warning: '#eab308' };
-        var color = hasMlRisk
-            ? { css: ML_RISK_COLORS[nv.mlRiskLevel] }
-            : hasDistRiskDot
-                ? { css: DIST_DOT_COLORS[nv.distSeverity] || '#f97316' }
-                : isCollisionTarget
-                    ? { css: '#f43f5e' }
-                    : { css: '#64748b' };
-        var ML_RISK_BADGE = { 3: '#ef4444', 2: '#fb923c', 1: '#fbbf24' };
-        var mlBadgeColor = hasMlRisk ? ML_RISK_BADGE[nv.mlRiskLevel] || ML_RISK_BADGE[1] : null;
-
         var hasDistRisk = nv.distSeverity != null;
-        var DIST_RISK_BADGE = { danger: '#ef4444', caution: '#fb923c', warning: '#fbbf24' };
-        var distBadgeColor = hasDistRisk ? DIST_RISK_BADGE[nv.distSeverity] || DIST_RISK_BADGE['warning'] : null;
 
-        var riskColor = mlBadgeColor || distBadgeColor || null;
-        var highlight = riskColor
-            ? 'border-left:2px solid ' + riskColor + ';'
-            : isCollisionTarget
-                ? 'border-left:2px solid #ef4444;'
-                : '';
+        var ML_RISK_BADGE = { 3: SEV.danger, 2: '#ec7a2c', 1: '#d9a441' };
+        var DIST_RISK_BADGE = { danger: SEV.danger, caution: '#ec7a2c', warning: '#d9a441' };
+        var mlBadgeColor = hasMlRisk ? (ML_RISK_BADGE[nv.mlRiskLevel] || ML_RISK_BADGE[1]) : null;
+        var distBadgeColor = hasDistRisk ? (DIST_RISK_BADGE[nv.distSeverity] || DIST_RISK_BADGE['warning']) : null;
+
+        // One severity signal: the left edge bar (neutral for plain vessels). The
+        // badge carries the AI/CPA label; name + distance stay calm \u2014 no separate
+        // dot, no \u26a0 prefix, no recoloured distance (was 5 redundant signals).
+        var edgeColor = mlBadgeColor || distBadgeColor || (isCollisionTarget ? SEV.danger : 'rgba(255,255,255,0.12)');
+
         var mlBadge = hasMlRisk
             ? '<span class="collision-badge" style="color:' + mlBadgeColor + ';flex-shrink:0;"><span class="collision-dot" style="background:' + mlBadgeColor + '"></span>AI ' + nv.mlRiskLabel + '</span>'
             : '';
         var distBadge = hasDistRisk
             ? '<span class="collision-badge" style="color:' + distBadgeColor + ';flex-shrink:0;"><span class="collision-dot" style="background:' + distBadgeColor + '"></span>CPA ' + nv.distRiskLabel + '</span>'
             : '';
-        var anyRisk = hasMlRisk || hasDistRisk || isCollisionTarget;
-        return '<div class="nearby-row" data-mmsi="' + nv.mmsi + '" data-lat="' + nv.lat + '" data-lng="' + nv.lng + '" style="' + highlight + '">'
-            + '<span class="nearby-dot" style="background:' + color.css + '"></span>'
-            + '<span class="nearby-name">' + (anyRisk ? '\u26a0 ' : '') + nv.name + '</span>'
+
+        return '<div class="nearby-row" data-mmsi="' + nv.mmsi + '" data-lat="' + nv.lat + '" data-lng="' + nv.lng + '" style="--row-sev:' + edgeColor + '">'
+            + '<span class="nearby-name">' + nv.name + '</span>'
             + mlBadge + distBadge
-            + '<span class="nearby-dist" style="' + (anyRisk ? 'color:' + color.css + ';font-weight:700;' : '') + '">' + nv.distance.toFixed(1) + ' nm</span>'
+            + '<span class="nearby-dist">' + nv.distance.toFixed(1) + ' nm</span>'
             + '</div>';
     }).join('');
 }

@@ -59,6 +59,7 @@ var RouteViewer = (function() {
         var coord = document.getElementById(coId);
         if (input) input.value = port.name;
         if (coord) coord.textContent = port.lat.toFixed(4) + ', ' + port.lng.toFixed(4);
+        setEmptyHint(false);  // a port is chosen — drop the guidance card
         updateSearchBtn();
         // Only recenter when the point is off-screen — panning on every pick makes
         // map clicking feel jumpy.
@@ -104,7 +105,7 @@ var RouteViewer = (function() {
                 radius: 6,
                 color: '#ffffff',
                 weight: 1.5,
-                fillColor: '#38bdf8',
+                fillColor: '#4d9bff',
                 fillOpacity: 0.95,
                 bubblingMouseEvents: false  // don't also trigger the map click
             });
@@ -122,7 +123,7 @@ var RouteViewer = (function() {
                 var c = slot === 'from' ? '#10b981' : slot === 'to' ? '#ef4444' : '#fbbf24';
                 m.setStyle({ radius: 8, fillColor: c });
             });
-            m.on('mouseout', function() { m.setStyle({ radius: 6, fillColor: '#38bdf8' }); });
+            m.on('mouseout', function() { m.setStyle({ radius: 6, fillColor: '#4d9bff' }); });
             routePortMarkers.addLayer(m);
             routePortMarkerList.push({ p: p, marker: m });
         });
@@ -313,42 +314,63 @@ var RouteViewer = (function() {
                 '<button id="routePanelToggle" class="route-panel-toggle" title="접기"><i class="fa-solid fa-chevron-up"></i></button>' +
             '</div>' +
             '<div id="routePanelBody" class="route-panel-body">' +
-                '<div class="route-input-group">' +
-                    '<label>출발지</label>' +
-                    '<div class="route-input-row">' +
-                        '<input type="text" id="routeFromInput" placeholder="항구명 검색..." autocomplete="off">' +
-                        '<button id="routeFromClick" class="route-click-btn" title="지도에서 직접 클릭(위경도 지정)"><i class="fa-solid fa-crosshairs"></i></button>' +
+                // ── Section: 구간 (origin → destination itinerary rail) ──
+                // The left spine (green origin node · dotted leg · red destination
+                // node) mirrors the map's start/end pin colors, so the panel reads
+                // as one journey rather than two identical inputs.
+                '<div class="route-section">' +
+                    '<div class="route-eyebrow">구간</div>' +
+                    '<div class="route-rail">' +
+                        '<div class="route-rail-fields">' +
+                            '<div class="route-input-group">' +
+                                '<div class="route-input-row">' +
+                                    '<span class="route-node route-node-from"></span>' +
+                                    '<input type="text" id="routeFromInput" placeholder="출발 항구 검색..." autocomplete="off">' +
+                                    '<button id="routeFromClick" class="route-click-btn" title="지도에서 직접 클릭(위경도 지정)"><i class="fa-solid fa-crosshairs"></i></button>' +
+                                    '<div id="routeFromDropdown" class="route-dropdown"></div>' +
+                                '</div>' +
+                                '<div id="routeFromCoord" class="route-coord-display"></div>' +
+                            '</div>' +
+                            '<div class="route-input-group">' +
+                                '<div class="route-input-row">' +
+                                    '<span class="route-node route-node-to"></span>' +
+                                    '<input type="text" id="routeToInput" placeholder="도착 항구 검색..." autocomplete="off">' +
+                                    '<button id="routeToClick" class="route-click-btn" title="지도에서 직접 클릭(위경도 지정)"><i class="fa-solid fa-crosshairs"></i></button>' +
+                                    '<div id="routeToDropdown" class="route-dropdown"></div>' +
+                                '</div>' +
+                                '<div id="routeToCoord" class="route-coord-display"></div>' +
+                            '</div>' +
+                        '</div>' +
+                        '<button id="routeSwapBtn" class="route-swap-btn" title="출발·도착 교체"><i class="fa-solid fa-arrow-right-arrow-left fa-rotate-90"></i></button>' +
                     '</div>' +
-                    '<div id="routeFromDropdown" class="route-dropdown"></div>' +
-                    '<div id="routeFromCoord" class="route-coord-display"></div>' +
                 '</div>' +
-                '<div class="route-input-group">' +
-                    '<label>도착지</label>' +
-                    '<div class="route-input-row">' +
-                        '<input type="text" id="routeToInput" placeholder="항구명 검색..." autocomplete="off">' +
-                        '<button id="routeToClick" class="route-click-btn" title="지도에서 직접 클릭(위경도 지정)"><i class="fa-solid fa-crosshairs"></i></button>' +
+                // ── Section: 운항 조건 (speed · ship size) ──
+                '<div class="route-section">' +
+                    '<div class="route-eyebrow">운항 조건</div>' +
+                    '<div class="route-input-group">' +
+                        '<div class="route-field-head">' +
+                            '<label>속도</label>' +
+                            '<span class="route-readout"><span id="routeSpeedLabel">14</span> kts</span>' +
+                        '</div>' +
+                        '<input type="range" id="routeSpeedSlider" min="5" max="30" value="14" step="1">' +
                     '</div>' +
-                    '<div id="routeToDropdown" class="route-dropdown"></div>' +
-                    '<div id="routeToCoord" class="route-coord-display"></div>' +
-                '</div>' +
-                '<div class="route-input-group">' +
-                    '<label>속도: <span id="routeSpeedLabel">14</span> kts</label>' +
-                    '<input type="range" id="routeSpeedSlider" min="5" max="30" value="14" step="1">' +
-                '</div>' +
-                '<div class="route-input-group">' +
-                    '<label>선박 크기 등급 <span class="route-size-hint">(길이)</span></label>' +
-                    '<div class="route-size-btns" id="routeSizeBtns">' +
-                        '<button class="route-size-btn" data-size="A" title="1–20 m">A</button>' +
-                        '<button class="route-size-btn" data-size="B" title="21–40 m">B</button>' +
-                        '<button class="route-size-btn active" data-size="C" title="41–80 m">C</button>' +
-                        '<button class="route-size-btn" data-size="D" title="81–200 m">D</button>' +
-                        '<button class="route-size-btn" data-size="E" title="201 m 이상">E</button>' +
+                    '<div class="route-input-group">' +
+                        '<div class="route-field-head">' +
+                            '<label>선박 크기 <span class="route-size-hint">(길이)</span></label>' +
+                            '<span class="route-size-range" id="routeSizeRange">C · 41–80 m</span>' +
+                        '</div>' +
+                        '<div class="route-size-btns" id="routeSizeBtns">' +
+                            '<button class="route-size-btn" data-size="A" title="1–20 m">A</button>' +
+                            '<button class="route-size-btn" data-size="B" title="21–40 m">B</button>' +
+                            '<button class="route-size-btn active" data-size="C" title="41–80 m">C</button>' +
+                            '<button class="route-size-btn" data-size="D" title="81–200 m">D</button>' +
+                            '<button class="route-size-btn" data-size="E" title="201 m 이상">E</button>' +
+                        '</div>' +
                     '</div>' +
-                    '<div class="route-size-range" id="routeSizeRange">C · 41–80 m</div>' +
                 '</div>' +
                 '<div class="route-action-row">' +
                     '<button id="routeSearchBtn" class="route-search-btn" disabled>경로 검색</button>' +
-                    '<button id="routeResetBtn" class="route-reset-btn" title="출발·도착 초기화"><i class="fa-solid fa-rotate-left"></i> 초기화</button>' +
+                    '<button id="routeResetBtn" class="route-reset-btn" title="출발·도착 초기화"><i class="fa-solid fa-rotate-left"></i></button>' +
                 '</div>' +
                 '<div id="routeError" class="route-error"></div>' +
             '</div>';
@@ -362,12 +384,14 @@ var RouteViewer = (function() {
         playbar.innerHTML =
             '<div class="route-playbar-top">' +
                 '<button id="routePlayBtn" class="route-play-btn" title="재생"><i class="fa-solid fa-play"></i></button>' +
+                '<span class="route-time" id="routeTimeNow">0</span>' +
                 '<div class="route-progress-wrap">' +
                     '<div class="route-progress-bar">' +
-                        '<div id="routeProgressFill" class="route-progress-fill"></div>' +
+                        '<div id="routeProgressFill" class="route-progress-fill"><span class="route-progress-thumb"></span></div>' +
                         '<input type="range" id="routeProgressSlider" min="0" max="1000" value="0" class="route-progress-slider">' +
                     '</div>' +
                 '</div>' +
+                '<span class="route-time route-time-total" id="routeTimeTotal">--</span>' +
                 '<div class="route-speed-btns">' +
                     '<button class="route-rate-btn" data-rate="1">x1</button>' +
                     '<button class="route-rate-btn" data-rate="10">x10</button>' +
@@ -515,6 +539,7 @@ var RouteViewer = (function() {
                 var slider = document.getElementById('routeSpeedSlider');
                 if (slider) slider.focus();
             }
+            setEmptyHint(false);  // a port is chosen — drop the guidance hint
             updateSearchBtn();
             updateClickHint();
             highlightIdx = -1;
@@ -780,6 +805,16 @@ var RouteViewer = (function() {
                 })
                 .then(function(data) {
                     console.timeEnd('[Route] fetch');
+                    // searoute can collapse two nearby / same-area ports onto a single
+                    // network node, returning a degenerate <2-point "route". There's no
+                    // navigable path to draw — a straight line would cut across land —
+                    // so warn instead of rendering. (e.g. 속초↔동해)
+                    if (!data.coordinates || data.coordinates.length < 2) {
+                        clearRoute();
+                        hidePlaybar();
+                        showError('이 구간의 항로를 계산할 수 없습니다. 두 항구가 너무 가깝거나 같은 해역일 수 있습니다.');
+                        return;
+                    }
                     // Smooth the sparse searoute vertices so the drawn line (and the
                     // ship that plays back along it) follows a natural, rounded path.
                     routeCoords = smoothRouteCoords(data.coordinates);
@@ -838,6 +873,32 @@ var RouteViewer = (function() {
     function setupResetButton() {
         var btn = document.getElementById('routeResetBtn');
         if (btn) btn.addEventListener('click', resetRoute);
+    }
+
+    // Reflect the current fromPort/toPort into their inputs + coord readouts
+    // (used after a swap, where both slots change at once).
+    function syncSlotInputs() {
+        [['routeFromInput', 'routeFromCoord', fromPort],
+         ['routeToInput',   'routeToCoord',   toPort]].forEach(function(s) {
+            var input = document.getElementById(s[0]);
+            var coord = document.getElementById(s[1]);
+            if (input) input.value = s[2] ? s[2].name : '';
+            if (coord) coord.textContent = s[2] ? (s[2].lat.toFixed(4) + ', ' + s[2].lng.toFixed(4)) : '';
+        });
+    }
+
+    // Swap 출발 ↔ 도착. Only updates the inputs; the user re-runs 경로 검색 to
+    // redraw (an already-drawn line reflects the previous direction until then).
+    function setupSwap() {
+        var btn = document.getElementById('routeSwapBtn');
+        if (!btn) return;
+        btn.addEventListener('click', function() {
+            if (!fromPort && !toPort) return;
+            var tmp = fromPort; fromPort = toPort; toPort = tmp;
+            syncSlotInputs();
+            updateSearchBtn();
+            updateClickHint();
+        });
     }
 
     // Replace the searoute-snapped endpoints with the real selected port coords
@@ -1003,6 +1064,24 @@ var RouteViewer = (function() {
         var slider = document.getElementById('routeProgressSlider');
         if (fill) fill.style.width = (progress * 100) + '%';
         if (slider) slider.value = Math.round(progress * 1000);
+        updatePlaybarReadout();
+    }
+
+    // Format a duration (hours) compactly: 일 for ≥1 day, else 시간.
+    function _fmtDur(hours) {
+        if (!isFinite(hours) || hours <= 0) return '0';
+        var days = hours / 24;
+        return days >= 1 ? days.toFixed(1) + '일' : hours.toFixed(1) + '시간';
+    }
+
+    // Elapsed / total voyage time flanking the scrubber (mono, matches the panels).
+    function updatePlaybarReadout() {
+        var speedKmh = speedKts * KTS_TO_KMH;
+        var totalHours = speedKmh > 0 ? totalDistanceKm / speedKmh : 0;
+        var nowEl = document.getElementById('routeTimeNow');
+        var totEl = document.getElementById('routeTimeTotal');
+        if (nowEl) nowEl.textContent = _fmtDur(totalHours * progress);
+        if (totEl) totEl.textContent = _fmtDur(totalHours);
     }
 
     function animationLoop(timestamp) {
@@ -1122,6 +1201,8 @@ var RouteViewer = (function() {
                 elSeas.textContent = '--';
             }
         }
+
+        updatePlaybarReadout();
     }
 
     function setupPlaybar() {
@@ -1156,9 +1237,16 @@ var RouteViewer = (function() {
         var slider = document.getElementById('routeSpeedSlider');
         var label = document.getElementById('routeSpeedLabel');
         if (!slider) return;
+        function setSpeedFill() {
+            var min = parseFloat(slider.min) || 0, max = parseFloat(slider.max) || 100;
+            var pct = ((parseFloat(slider.value) - min) / (max - min)) * 100;
+            slider.style.setProperty('--route-speed-fill', pct + '%');
+        }
+        setSpeedFill();   // initial fill for the default value
         slider.addEventListener('input', function() {
             speedKts = parseInt(slider.value);
             if (label) label.textContent = speedKts;
+            setSpeedFill();
             updateInfoText();
         });
         slider.addEventListener('keydown', function(e) {
@@ -1283,6 +1371,7 @@ var RouteViewer = (function() {
             setupClickMode();
             setupSearchButton();
             setupResetButton();
+            setupSwap();
             setupPlaybar();
             setupSpeedSlider();
             setupSizeSelector();
@@ -1331,9 +1420,59 @@ var RouteViewer = (function() {
         updateClickBtnStates();
     }
 
+    // ── 외부(챗봇) 구동용 공개 API ──
+    function _applySizeClass(cls) {
+        if (!cls || !SHIP_SIZE_CLASSES[cls]) return;
+        shipSizeClass = cls;
+        var btns = document.getElementById('routeSizeBtns');
+        var rangeEl = document.getElementById('routeSizeRange');
+        if (btns) btns.querySelectorAll('.route-size-btn').forEach(function (b) {
+            b.classList.toggle('active', b.dataset.size === cls);
+        });
+        if (rangeEl) rangeEl.textContent = cls + ' · ' + SHIP_SIZE_CLASSES[cls];
+    }
+
+    // 출발/도착 좌표 + 선박 크기를 설정하고 경로 검색을 실행한다 (챗봇 plan_route).
+    function planRoute(opts) {
+        opts = opts || {};
+        if (opts.sizeClass) _applySizeClass(opts.sizeClass);
+        var fIn = document.getElementById('routeFromInput');
+        var tIn = document.getElementById('routeToInput');
+        var fCoord = document.getElementById('routeFromCoord');
+        var tCoord = document.getElementById('routeToCoord');
+        if (opts.fromLat != null && opts.fromLng != null) {
+            fromPort = { name: opts.fromName || (opts.fromLat.toFixed(2) + ', ' + opts.fromLng.toFixed(2)), lat: opts.fromLat, lng: opts.fromLng };
+            if (fIn) fIn.value = fromPort.name;
+            if (fCoord) fCoord.textContent = fromPort.lat.toFixed(4) + ', ' + fromPort.lng.toFixed(4);
+        }
+        if (opts.toLat != null && opts.toLng != null) {
+            toPort = { name: opts.toName || (opts.toLat.toFixed(2) + ', ' + opts.toLng.toFixed(2)), lat: opts.toLat, lng: opts.toLng };
+            if (tIn) tIn.value = toPort.name;
+            if (tCoord) tCoord.textContent = toPort.lat.toFixed(4) + ', ' + toPort.lng.toFixed(4);
+        }
+        if (typeof setEmptyHint === 'function') setEmptyHint(false);
+        updateSearchBtn();
+        var btn = document.getElementById('routeSearchBtn');
+        if (btn && !btn.disabled) btn.click();
+    }
+
+    // 현재 항로 화면 상태(챗 컨텍스트용)
+    function getState() {
+        return {
+            active: !!document.querySelector('#dedicated-route-inference.active') ||
+                    !!document.getElementById('route-search-panel'),
+            from: fromPort ? fromPort.name : null,
+            to: toPort ? toPort.name : null,
+            size_class: shipSizeClass,
+        };
+    }
+
     return {
         activate: activate,
         deactivate: deactivate,
+        planRoute: planRoute,
+        setSizeClass: _applySizeClass,
+        getState: getState,
     };
 })();
 

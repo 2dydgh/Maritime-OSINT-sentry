@@ -1,5 +1,15 @@
 // ── Maritime OSINT Sentry — UI Controls ──
 
+// ── Loader (AIS Acquisition Scope) ──
+// Updates the readout text + error styling without clobbering the radar markup.
+function setLoaderState(text, isError) {
+    var el = document.getElementById('loading');
+    if (!el) return;
+    el.classList.toggle('is-error', !!isError);
+    var t = document.getElementById('loading-text');
+    if (t && typeof text === 'string') t.textContent = text;
+}
+
 // ── Header KST Clock ──
 function updateHeaderClock() {
     var el = document.getElementById('headerUtcClock');
@@ -422,8 +432,8 @@ async function loadHistoryWindow(centerDate, opts) {
     isLoadingWindow = true;
 
     if (!silent) {
+        setLoaderState('이력 데이터 로딩 중...', false);
         document.getElementById('loading').style.display = 'flex';
-        document.getElementById('loading').innerHTML = '<i class="fa-solid fa-clock-rotate-left fa-spin"></i> LOADING HISTORY...';
     }
 
     var windowStart = new Date(centerDate.getTime() - WINDOW_HALF_MS);
@@ -442,8 +452,11 @@ async function loadHistoryWindow(centerDate, opts) {
         if (!res.ok) {
             console.error('[HISTORY] Trajectory API error:', res.status);
             if (!silent) {
-                document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> LOAD ERROR';
-                setTimeout(function() { document.getElementById('loading').style.display = 'none'; }, 2000);
+                setLoaderState('이력 로딩 실패', true);
+                setTimeout(function() {
+                    document.getElementById('loading').style.display = 'none';
+                    setLoaderState('', false);
+                }, 2000);
             }
             return;
         }
@@ -539,9 +552,10 @@ async function loadHistoryWindow(centerDate, opts) {
     } catch (err) {
         console.error('[HISTORY] Error loading window:', err);
         if (!silent) {
-            document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> LOAD ERROR';
+            setLoaderState('이력 로딩 실패', true);
             setTimeout(function() {
                 document.getElementById('loading').style.display = 'none';
+                setLoaderState('', false);
                 setTimeMode('live');
             }, 2000);
         }
@@ -770,7 +784,7 @@ async function fetchData() {
 
         var eventsSrc = await Cesium.GeoJsonDataSource.load(eventsJson, {
             markerSymbol: 'cross',
-            markerColor: Cesium.Color.fromCssColorString('#3b82f6'),
+            markerColor: Cesium.Color.fromCssColorString('#2f6fed'),
             markerSize: 40
         });
         await viewer.dataSources.add(eventsSrc);
@@ -779,9 +793,9 @@ async function fetchData() {
         var seenAlertIds = new Set();
 
         function alertIcon(type) {
-            if (type === 'speeding') return { icon: 'fa-gauge-high', color: '#93c5fd', label: 'SPEEDING' };
-            if (type === 'signal_lost') return { icon: 'fa-satellite-dish', color: '#60a5fa', label: 'SIGNAL LOST' };
-            if (type === 'dest_change') return { icon: 'fa-right-left', color: '#3b82f6', label: 'DEST CHANGE' };
+            if (type === 'speeding') return { icon: 'fa-gauge-high', color: '#9fbdf7', label: 'SPEEDING' };
+            if (type === 'signal_lost') return { icon: 'fa-satellite-dish', color: '#5b8ef5', label: 'SIGNAL LOST' };
+            if (type === 'dest_change') return { icon: 'fa-right-left', color: '#2f6fed', label: 'DEST CHANGE' };
             return { icon: 'fa-triangle-exclamation', color: '#bfdbfe', label: 'ALERT' };
         }
 
@@ -795,8 +809,8 @@ async function fetchData() {
                 <div class="feed-card" style="border-left-color: ' + item.borderColor + ';"\
                      data-lat="' + (alert.lat || '') + '" data-lng="' + (alert.lng || '') + '" data-mmsi="' + (alert.mmsi || '') + '">\
                     <div class="feed-meta">\
-                        <span class="feed-alert-type" style="color:' + item.color + ';">\
-                            <i class="fa-solid ' + item.icon + '" style="margin-right:4px;"></i>' + item.label + '\
+                        <span class="feed-alert-type">\
+                            <i class="fa-solid ' + item.icon + '" style="margin-right:4px;color:' + item.color + ';"></i>' + item.label + '\
                         </span>\
                         <span class="feed-time">' + item.timeStr + '</span>\
                     </div>\
@@ -931,12 +945,10 @@ async function fetchData() {
 
     } catch (error) {
         console.error("Error fetching map data:", error);
-        document.getElementById('loading').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> SYSTEM ERROR';
-    } finally {
-        if (document.getElementById('loading').innerHTML.includes('\uCD08\uAE30\uD654')) {
-            document.getElementById('loading').style.display = 'none';
-        }
+        setLoaderState('\uC2DC\uC2A4\uD15C \uC624\uB958', true);
     }
+    // On success the loader stays up until the first ships render (the
+    // 'ships:updated' handler in websocket.js hides it); on error it stays red.
 }
 
 fetchData();
@@ -956,7 +968,7 @@ document.body.insertAdjacentHTML('beforeend', '\
             onmouseout="this.style.background=\'transparent\'">\
             \uc704\uc131 \uc601\uc0c1 \uac80\uc0c9 (Sentinel-2)\
         </div>\
-        <div style="padding:4px 16px 8px; color:rgba(59,130,246,0.45); font-size:0.68rem;">\
+        <div style="padding:4px 16px 8px; color:rgba(47, 111, 237,0.45); font-size:0.68rem;">\
             <span id="sentinelMenuCoords">--</span>\
         </div>\
     </div>\
@@ -988,7 +1000,7 @@ function _addSentinelMarker(lat, lng) {
                 ctx.arc(16, 14, 10, Math.PI, 0, false);
                 ctx.quadraticCurveTo(26, 28, 16, 38);
                 ctx.quadraticCurveTo(6, 28, 6, 14);
-                ctx.fillStyle = '#3b82f6';
+                ctx.fillStyle = '#2f6fed';
                 ctx.fill();
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 1.5;
@@ -1009,7 +1021,7 @@ function _addSentinelMarker(lat, lng) {
         label: {
             text: 'Sentinel-2',
             font: '10px JetBrains Mono, Pretendard Variable, monospace',
-            fillColor: Cesium.Color.fromCssColorString('#3b82f6'),
+            fillColor: Cesium.Color.fromCssColorString('#2f6fed'),
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 3,
             style: Cesium.LabelStyle.FILL_AND_OUTLINE,
@@ -1084,7 +1096,7 @@ document.getElementById('sentinelMenuBtn').addEventListener('click', async funct
             '<tr><th>\ud50c\ub7ab\ud3fc</th><td>' + (data.platform || 'Sentinel-2') + '</td></tr>' +
             '<tr><th>\uc88c\ud45c</th><td>' + _sentinelLat + '\u00b0, ' + _sentinelLng + '\u00b0</td></tr>' +
             '</table>' +
-            (href ? '<a ' + href + ' style="display:block;margin-top:16px;text-align:center;color:var(--accent);font-family:\'Pretendard Variable\',\'Inter\',sans-serif;font-size:0.8rem;text-decoration:none;border:1px solid var(--panel-border);border-radius:6px;padding:10px;background:rgba(59,130,246,0.06);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(59,130,246,0.12)\'" onmouseout="this.style.background=\'rgba(59,130,246,0.06)\'"><i class="fa-solid fa-expand"></i> \uc804\uccb4 \ud654\uc9c8\ub85c \ubdf0\uc5b4 \uc5f4\uae30</a>' : '');
+            (href ? '<a ' + href + ' style="display:block;margin-top:16px;text-align:center;color:var(--accent);font-family:\'Pretendard Variable\',\'Inter\',sans-serif;font-size:0.8rem;text-decoration:none;border:1px solid var(--panel-border);border-radius:6px;padding:10px;background:rgba(47, 111, 237,0.06);transition:background 0.2s;" onmouseover="this.style.background=\'rgba(47, 111, 237,0.12)\'" onmouseout="this.style.background=\'rgba(47, 111, 237,0.06)\'"><i class="fa-solid fa-expand"></i> \uc804\uccb4 \ud654\uc9c8\ub85c \ubdf0\uc5b4 \uc5f4\uae30</a>' : '');
     } catch (err) {
         body.innerHTML = '<div style="text-align:center;color:#ef4444;font-size:0.75rem;padding:20px;">Error: ' + err.message + '</div>';
     }
@@ -1546,7 +1558,7 @@ var _searchLeafletMarker = null;
                 ctx.arc(16, 14, 10, Math.PI, 0, false);
                 ctx.quadraticCurveTo(26, 28, 16, 38);
                 ctx.quadraticCurveTo(6, 28, 6, 14);
-                ctx.fillStyle = '#3b82f6';
+                ctx.fillStyle = '#2f6fed';
                 ctx.fill();
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 1.5;
@@ -1566,7 +1578,7 @@ var _searchLeafletMarker = null;
             position: pos,
             text: name,
             font: '11px Pretendard Variable, Inter, sans-serif',
-            fillColor: Cesium.Color.fromCssColorString('#3b82f6'),
+            fillColor: Cesium.Color.fromCssColorString('#2f6fed'),
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 3,
             style: Cesium.LabelStyle.FILL_AND_OUTLINE,

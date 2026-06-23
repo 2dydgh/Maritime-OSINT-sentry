@@ -258,10 +258,24 @@ SHIP_TYPES.forEach(function(type) {
 var leafletAircraftLayerGroups = {};
 var leafletAircraftMarkers = {};
 
+// The OpenSky poller is not started at server boot — kick it off the first time
+// the user enables any aircraft layer, then leave it running for the session.
+var _aircraftTrackerRequested = false;
+function ensureAircraftTracker() {
+    if (_aircraftTrackerRequested) return;
+    _aircraftTrackerRequested = true;
+    fetch('/api/v1/aircraft/start', { method: 'POST' })
+        .catch(function(err) {
+            _aircraftTrackerRequested = false;  // allow a retry on the next toggle
+            console.error('Failed to start aircraft tracker:', err);
+        });
+}
+
 AIRCRAFT_TYPES.forEach(function(type) {
     var checkbox = document.getElementById('filter-ac-' + type);
     if (checkbox) {
         checkbox.addEventListener('change', function() {
+            if (checkbox.checked) ensureAircraftTracker();
             if (aircraftBillboards[type]) aircraftBillboards[type].show = checkbox.checked;
             if (aircraftLabels[type]) aircraftLabels[type].show = checkbox.checked;
             if (currentMapMode === '2d' && leafletMap && leafletAircraftLayerGroups[type]) {
@@ -497,8 +511,9 @@ function updateShipsLayer(ships) {
         updateShip3dModels(ships);
     }
 
-    // 2D mode Leaflet marker update
-    if (currentMapMode === '2d' && leafletMap) {
+    // 2D mode Leaflet marker update — suppressed in 사고(hazard) mode, which hides AIS.
+    if (currentMapMode === '2d' && leafletMap &&
+        !(window.isHazardZonesActive && window.isHazardZonesActive())) {
         var newMarkersByType = {};
         ships.forEach(function(ship) {
             var type = ship.type || 'other';
@@ -584,7 +599,7 @@ function showAircraftInfo(icao24) {
     if (!panel) return;
 
     var type = ac.category || 'other';
-    var color = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
+    var color = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#5b8ef5';
     var altM = ac.altitude != null ? ac.altitude : null;
     var altFt = altM != null ? Math.round(altM * 3.281) : null;
     var velMs = ac.velocity != null ? ac.velocity : null;
@@ -691,7 +706,7 @@ function updateAircraftLayer(aircraft) {
                 } else {
                     var bb = billboards.add({
                         position: position,
-                        image: getAircraftIcon(AIRCRAFT_COLORS[type] || '#60a5fa', type),
+                        image: getAircraftIcon(AIRCRAFT_COLORS[type] || '#5b8ef5', type),
                         width: 18,
                         height: 20,
                         rotation: acHeading,
@@ -708,7 +723,7 @@ function updateAircraftLayer(aircraft) {
                         position: position,
                         text: ac.callsign || '',
                         font: '10px Pretendard Variable, Inter, sans-serif',
-                        fillColor: Cesium.Color.fromCssColorString(AIRCRAFT_COLORS[type] || '#60a5fa'),
+                        fillColor: Cesium.Color.fromCssColorString(AIRCRAFT_COLORS[type] || '#5b8ef5'),
                         outlineColor: Cesium.Color.BLACK,
                         outlineWidth: 3,
                         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
@@ -757,7 +772,7 @@ function updateAircraftLayer(aircraft) {
                 var newH = ac.heading || 0;
                 if (entry._lastHeading !== newH) {
                     entry._lastHeading = newH;
-                    var uColor = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
+                    var uColor = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#5b8ef5';
                     entry.marker.setIcon(L.divIcon({
                         className: 'aircraft-icon-2d',
                         html: '<svg viewBox="0 0 32 32" width="14" height="14" style="transform:rotate(' + newH + 'deg);filter:drop-shadow(0 0 2px rgba(0,0,0,0.6));">' +
@@ -768,7 +783,7 @@ function updateAircraftLayer(aircraft) {
                     }));
                 }
             } else {
-                var color = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#60a5fa';
+                var color = (typeof AIRCRAFT_COLORS !== 'undefined' && AIRCRAFT_COLORS[type]) ? AIRCRAFT_COLORS[type] : '#5b8ef5';
                 var _acHeading = ac.heading || 0;
                 var acIcon = L.divIcon({
                     className: 'aircraft-icon-2d',
@@ -849,6 +864,13 @@ function initWebSocket() {
         EventBus.emit('ws:status', 'connected');
         var loadingText = document.getElementById('loading-text');
         if (loadingText) loadingText.textContent = 'AIS 데이터 수신 대기...';
+        // 안전망: 어떤 이유로든 첫 payload 가 안 와도 8초 뒤 로딩창을 강제로 닫는다.
+        if (!window._loadingSafetyTimer) {
+            window._loadingSafetyTimer = setTimeout(function() {
+                var l = document.getElementById('loading');
+                if (l && l.style.display !== 'none') l.style.display = 'none';
+            }, 8000);
+        }
     };
 
     ws.onmessage = function(event) {
@@ -875,6 +897,10 @@ function initWebSocket() {
 
                 _lastShipsData = data.ships || [];
 
+                // feed_status 를 'ships:updated' 구독자(로딩창 narration)가 읽도록 먼저 저장
+                window._lastFeedStatus = data.feed_status || 'live';
+                window._lastSnapshotTimeMs = data.snapshot_time_ms;
+
                 // DataService handles state + emits 'ships:updated'
                 DataService.updateShips(_lastShipsData);
 
@@ -885,6 +911,7 @@ function initWebSocket() {
                 }
 
                 _lastWsReceived = Date.now();
+                updateFeedBanner(data.feed_status || 'live', data.snapshot_time_ms);
             }
             else if (data.type === "aircraft_update") {
                 // DataService handles state + emits 'aircraft:updated'
@@ -946,22 +973,46 @@ EventBus.on('ships:updated', function(data) {
     // Loading overlay handling
     var loadingEl = document.getElementById('loading');
     var loadingTextEl = document.getElementById('loading-text');
-    var isFirstLoad2d = Object.keys(leafletShipMarkers).length === 0 && currentMapMode === '2d';
+    var feedStatus = window._lastFeedStatus || 'live';
 
-    if (isFirstLoad2d && loadingEl && loadingTextEl) {
-        loadingTextEl.textContent = '선박 데이터 렌더링 중...';
-        loadingEl.style.display = 'flex';
-        requestAnimationFrame(function() {
-            setTimeout(function() {
-                updateShipsLayer(ships);
-                if (loadingEl) loadingEl.style.display = 'none';
-            }, 0);
-        });
-    } else {
-        if (loadingEl && loadingEl.style.display !== 'none') {
-            loadingEl.style.display = 'none';
+    if (feedStatus === 'fallback' || feedStatus === 'down') {
+        // 끊김: 로딩창이 "라이브 신호 없음 → 대체"를 한 박자 narrate 한 뒤 닫힘.
+        // (startup 처럼 로딩창이 떠 있을 때만. 세션 중 끊김은 배너가 담당.)
+        var loadingVisible = loadingEl && loadingEl.style.display !== 'none';
+        if (loadingVisible && !window._feedNarrated) {
+            window._feedNarrated = true;
+            if (loadingTextEl) {
+                loadingTextEl.textContent = (feedStatus === 'fallback')
+                    ? '라이브 AIS 신호 없음 · DB 최근 위치 불러오는 중...'
+                    : '라이브 AIS 신호 없음 · 재연결 대기 중...';
+            }
+            updateShipsLayer(ships);
+            // narration 을 읽을 시간을 준 뒤 닫음 (선박은 이미 아래에 렌더됨).
+            // 1.1초는 너무 짧아 못 읽는다는 피드백 → 2.8초로.
+            setTimeout(function() { if (loadingEl) loadingEl.style.display = 'none'; }, 2800);
+        } else {
+            if (loadingVisible) loadingEl.style.display = 'none';
+            updateShipsLayer(ships);
         }
-        updateShipsLayer(ships);
+    } else {
+        // live: 정상 — 첫 데이터에서 로딩 종료. (다음 끊김 때 다시 narrate)
+        window._feedNarrated = false;
+        var isFirstLoad2d = Object.keys(leafletShipMarkers).length === 0 && currentMapMode === '2d';
+        if (isFirstLoad2d && loadingEl && loadingTextEl) {
+            loadingTextEl.textContent = '선박 데이터 렌더링 중...';
+            loadingEl.style.display = 'flex';
+            requestAnimationFrame(function() {
+                setTimeout(function() {
+                    updateShipsLayer(ships);
+                    if (loadingEl) loadingEl.style.display = 'none';
+                }, 0);
+            });
+        } else {
+            if (loadingEl && loadingEl.style.display !== 'none') {
+                loadingEl.style.display = 'none';
+            }
+            updateShipsLayer(ships);
+        }
     }
 
     // Ship type distribution chart
@@ -1002,9 +1053,9 @@ function _getReticleImage() {
     var c = document.createElement('canvas');
     c.width = size; c.height = size;
     var ctx = c.getContext('2d');
-    ctx.strokeStyle = '#3b82f6';
+    ctx.strokeStyle = '#2f6fed';
     ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#3b82f6';
+    ctx.shadowColor = '#2f6fed';
     ctx.shadowBlur = 6;
 
     // Top-left corner
@@ -1095,3 +1146,36 @@ function clearShipHighlight() {
     _highlightMmsi = null;
 }
 window.clearShipHighlight = clearShipHighlight;
+
+// ── AIS 피드 상태 배너 (live → 숨김 / fallback → 앰버 / down → 레드) ──
+function updateFeedBanner(status, snapshotTimeMs) {
+    // 라이브 전용 도구(충돌/피드) 비활성 표시 토글 — 표현은 CSS(.feed-degraded)가 담당
+    var appLayout = document.getElementById('app-layout');
+    if (appLayout) appLayout.classList.toggle('feed-degraded', status !== 'live');
+
+    var el = document.getElementById('feedStatusBanner');
+    if (!el) return;
+    if (status === 'fallback') {
+        var when = '';
+        if (snapshotTimeMs) {
+            var kst = new Date(snapshotTimeMs + 9 * 60 * 60 * 1000);
+            var nowKst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+            var sameDay = kst.toISOString().substring(0, 10) === nowKst.toISOString().substring(0, 10);
+            // 오늘 데이터면 시:분만, 며칠 지난 스냅샷이면 날짜까지 — 오래된 걸 오늘로 오해 방지.
+            var stamp = sameDay
+                ? kst.toISOString().substring(11, 16)
+                : kst.toISOString().substring(0, 16).replace('T', ' ');
+            when = ' (' + stamp + ' KST 기준)';
+        }
+        el.classList.remove('feed-down');
+        el.textContent = '⚠ 라이브 AIS 끊김 · DB 최근 위치' + when + ' 고정 표시 중';
+        el.hidden = false;
+    } else if (status === 'down') {
+        el.classList.add('feed-down');
+        el.textContent = '⚠ AIS 피드 대기 중 — 재연결 시도 중';
+        el.hidden = false;
+    } else {
+        el.hidden = true;  // live
+    }
+}
+window.updateFeedBanner = updateFeedBanner;

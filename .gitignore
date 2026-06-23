@@ -2,6 +2,9 @@
 .env
 !.env.example
 
+# 개발용 에이전트 스킬 (앱과 무관)
+.agents/
+
 # Python
 __pycache__/
 *.py[cod]

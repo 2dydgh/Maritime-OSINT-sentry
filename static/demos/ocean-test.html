@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Ocean tuning harness</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#app{width:100vw;height:100vh}</style>
+<!-- same builds as the app (three r137 global + examples) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.137.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/objects/Water.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/objects/Sky.js"></script>
+<script src="../js/gerstner.js?v=5"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ── Reference: Sean Bradley webgl_shaders_ocean_gerstner ──
+// Tuned constants live here; once confirmed they get ported into roll-viewer.js.
+var PARAMS = {
+  exposure: 0.5,
+  elevation: 2,
+  azimuth: 180,
+  turbidity: 10,
+  rayleigh: 2,
+  mieCoefficient: 0.005,
+  mieDirectionalG: 0.8,
+  waterColor: 0x001e0f,
+  sunColor: 0xffffff,
+  distortionScale: 3.7,
+  // weather feeding our Gerstner field — baseline swell so calm seas aren't a flat mirror
+  weather: { waveHeight: 1.6, wavePeriod: 8, waveDirection: 0 }
+};
+// allow ?exposure=0.42&elevation=3 ... overrides for fast iteration
+new URLSearchParams(location.search).forEach(function (v, k) {
+  if (k in PARAMS && k !== 'weather') PARAMS[k] = parseFloat(v);
+});
+
+var THREE = window.THREE;
+var container = document.getElementById('app');
+var scene = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 2000);
+camera.position.set(28, 9, 46);
+camera.lookAt(0, 2, 0);
+
+var renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = PARAMS.exposure;
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+container.appendChild(renderer.domElement);
+
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 2, 0);
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.minDistance = 15; controls.maxDistance = 120;
+
+// ── Sun direction ──
+var sun = new THREE.Vector3();
+function sunVec() {
+  var phi = THREE.MathUtils.degToRad(90 - PARAMS.elevation);
+  var theta = THREE.MathUtils.degToRad(PARAMS.azimuth);
+  sun.setFromSphericalCoords(1, phi, theta);
+  return sun;
+}
+
+// ── Sky ──
+var sky = new THREE.Sky();
+sky.scale.setScalar(10000);
+scene.add(sky);
+var su = sky.material.uniforms;
+su['turbidity'].value = PARAMS.turbidity;
+su['rayleigh'].value = PARAMS.rayleigh;
+su['mieCoefficient'].value = PARAMS.mieCoefficient;
+su['mieDirectionalG'].value = PARAMS.mieDirectionalG;
+
+// ── Water ──
+var waterGeometry = new THREE.PlaneGeometry(2000, 2000, 200, 200);
+var waterNormals = new THREE.TextureLoader().load(
+  'https://raw.githubusercontent.com/mrdoob/three.js/r137/examples/textures/waternormals.jpg',
+  function (t) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+);
+var water = new THREE.Water(waterGeometry, {
+  textureWidth: 512, textureHeight: 512,
+  waterNormals: waterNormals,
+  sunDirection: new THREE.Vector3(),
+  sunColor: PARAMS.sunColor,
+  waterColor: PARAMS.waterColor,
+  distortionScale: PARAMS.distortionScale,
+  fog: false
+});
+water.rotation.x = -Math.PI / 2;
+scene.add(water);
+
+// ── Gerstner injection (identical to roll-viewer.js) ──
+var _waves = window.Gerstner.buildWaves(PARAMS.weather);
+(function patch() {
+  var wmat = water.material;
+  var vs = wmat.vertexShader;
+  vs = vs.replace('uniform float time;', 'uniform float time;\nvarying vec3 vGerstnerNormal;\n' + Gerstner.GLSL_SNIPPET);
+  vs = vs.replace('void main() {', 'void main() {\n\tvec3 gPos = position + gerstnerDisplace( position.xy );\n\tvGerstnerNormal = gerstnerNormal( position.xy );');
+  vs = vs.replace('modelMatrix * vec4( position, 1.0 )', 'modelMatrix * vec4( gPos, 1.0 )');
+  vs = vs.replace('modelViewMatrix * vec4( position, 1.0 )', 'modelViewMatrix * vec4( gPos, 1.0 )');
+  wmat.vertexShader = vs;
+  var fsh = wmat.fragmentShader;
+  fsh = fsh.replace('varying vec4 worldPosition;', 'varying vec4 worldPosition;\nvarying vec3 vGerstnerNormal;\nuniform float uCrestTilt;');
+  fsh = fsh.replace(
+    'vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );',
+    'vec3 detailN = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );\n\tvec3 surfaceNormal = normalize( detailN + vec3( vGerstnerNormal.x, 0.0, vGerstnerNormal.z ) * uCrestTilt );'
+  );
+  wmat.fragmentShader = fsh;
+  var dirArr = [], parArr = [];
+  for (var i = 0; i < Gerstner.MAX_WAVES; i++) { dirArr.push(new THREE.Vector2()); parArr.push(new THREE.Vector4()); }
+  wmat.uniforms.uTime = { value: 0 };
+  wmat.uniforms.uWaveCount = { value: Math.min(_waves.length, Gerstner.MAX_WAVES) };
+  wmat.uniforms.uWaveDir = { value: dirArr };
+  wmat.uniforms.uWaveParams = { value: parArr };
+  wmat.uniforms.uCrestTilt = { value: 0.85 };
+  for (var j = 0; j < Gerstner.MAX_WAVES; j++) {
+    var w = _waves[j];
+    if (w) { dirArr[j].set(w.dirX, w.dirY); parArr[j].set(w.k, w.A, w.omega, w.Q); }
+  }
+  wmat.needsUpdate = true;
+})();
+
+// ── PMREM env from sky (reference does this; current app does NOT) ──
+var pmrem = new THREE.PMREMGenerator(renderer);
+var renderTarget;
+function updateSun() {
+  sunVec();
+  su['sunPosition'].value.copy(sun);
+  water.material.uniforms['sunDirection'].value.copy(sun).normalize();
+  if (renderTarget) renderTarget.dispose();
+  renderTarget = pmrem.fromScene(sky);
+  scene.environment = renderTarget.texture;
+}
+updateSun();
+
+// ── A few floating boxes (like the reference) + lights for them ──
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+var dl = new THREE.DirectionalLight(0xfff0d8, 1.1); dl.position.copy(sun).multiplyScalar(50); scene.add(dl);
+var boxGeo = new THREE.BoxGeometry(6, 6, 6);
+var boxMat = new THREE.MeshStandardMaterial({ color: 0x9aa6b2, roughness: 0.55, metalness: 0.1 });
+for (var b = 0; b < 7; b++) {
+  var m = new THREE.Mesh(boxGeo, boxMat);
+  m.position.set((b - 3) * 9 + (b % 2 ? 4 : -4), 1.5, -b * 6 + 10);
+  m.rotation.y = b * 0.7;
+  scene.add(m);
+}
+
+addEventListener('resize', function () {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+var clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  var t = clock.getElapsedTime();
+  water.material.uniforms['time'].value = t * 0.1;
+  water.material.uniforms['uTime'].value = t;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+window.__ready = true;
+</script>
+</body>
+</html>

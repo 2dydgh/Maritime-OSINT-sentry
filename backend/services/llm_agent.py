@@ -49,9 +49,24 @@ def _build_context_message(context: dict | None) -> str | None:
     """
     if not context:
         return None
+
+    # 항로/사고 화면 상태 — roll_viewer가 없어도 단독으로 안내할 수 있다.
+    extra: list[str] = []
+    route = context.get("route")
+    if route and route.get("active"):
+        frm = route.get("from") or "미지정"
+        to = route.get("to") or "미지정"
+        extra.append(
+            f"[현재 화면 상태] 항로(경로 추론) 화면이 열려 있습니다. 출발지='{frm}', "
+            f"도착지='{to}', 선박 크기 등급={route.get('size_class', 'C')}. "
+            "사용자가 '여기서/지금 화면에서 경로' 같이 말하면 이 상태를 기준으로 plan_route를 호출하세요."
+        )
+    if context.get("hazard_zones_active"):
+        extra.append("현재 지도에 사고 위험구역 오버레이가 켜져 있습니다.")
+
     rv = context.get("roll_viewer")
     if not rv:
-        return None
+        return " ".join(extra) if extra else None
     name = rv.get("name") or "UNKNOWN"
     mmsi = rv.get("mmsi", "?")
     parts = [
@@ -67,7 +82,7 @@ def _build_context_message(context: dict | None) -> str | None:
         "반드시 위 선박을 의미합니다 — 다른 선박 이름을 추측하지 마세요. "
         "또한 화면이 이미 열려 있으므로 '횡요각 화면을 먼저 열어주세요' 같은 안내는 하지 마세요."
     )
-    return " ".join(parts)
+    return " ".join(extra + parts)
 
 
 def _build_initial_messages(

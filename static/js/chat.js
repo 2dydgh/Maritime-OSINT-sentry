@@ -121,6 +121,15 @@ var ChatUI = (function () {
                 };
             }
         }
+        // 항로 화면 상태 (열려 있으면 출발/도착/크기를 LLM에 전달)
+        if (window.RouteViewer && window.RouteViewer.getState) {
+            var rs = window.RouteViewer.getState();
+            if (rs && rs.active) context.route = rs;
+        }
+        // 사고 위험구역 오버레이 on/off
+        if (typeof window.isHazardZonesActive === 'function') {
+            context.hazard_zones_active = !!window.isHazardZonesActive();
+        }
 
         fetch('/api/v1/chat', {
             method: 'POST',
@@ -205,6 +214,39 @@ var ChatUI = (function () {
         } else if (action.action === 'return_to_globe') {
             if (window.LayoutManager && typeof window.LayoutManager.closeDedicatedPanel === 'function') {
                 window.LayoutManager.closeDedicatedPanel();
+            }
+        } else if (action.action === 'open_route_screen') {
+            if (window.LayoutManager) window.LayoutManager.handleIconClick('route-inference', 'dedicated-screen');
+        } else if (action.action === 'plan_route') {
+            var _runPlan = function () {
+                if (window.RouteViewer && window.RouteViewer.planRoute) {
+                    window.RouteViewer.planRoute({
+                        fromLat: action.fromLat, fromLng: action.fromLng, fromName: action.fromName,
+                        toLat: action.toLat, toLng: action.toLng, toName: action.toName,
+                        sizeClass: action.sizeClass
+                    });
+                }
+            };
+            var routeActive = window.RouteViewer && window.RouteViewer.getState && window.RouteViewer.getState().active;
+            if (!routeActive && window.LayoutManager) {
+                window.LayoutManager.handleIconClick('route-inference', 'dedicated-screen');
+                setTimeout(_runPlan, 650);   // 패널 빌드 + 지도 초기화 대기
+            } else {
+                _runPlan();
+            }
+        } else if (action.action === 'set_route_size_class') {
+            if (window.RouteViewer && window.RouteViewer.setSizeClass) {
+                window.RouteViewer.setSizeClass(action.size_class);
+            }
+        } else if (action.action === 'toggle_hazard_zones') {
+            // 사고 위험구역은 라이브 지도 오버레이 — 전용 화면이 열려 있으면 먼저 닫는다.
+            if (window.LayoutManager && typeof window.LayoutManager.closeDedicatedPanel === 'function') {
+                window.LayoutManager.closeDedicatedPanel();
+            }
+            if (action.on) {
+                if (typeof window.activateHazardZones === 'function') window.activateHazardZones();
+            } else {
+                if (typeof window.deactivateHazardZones === 'function') window.deactivateHazardZones();
             }
         }
     }

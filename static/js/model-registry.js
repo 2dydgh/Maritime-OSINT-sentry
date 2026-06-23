@@ -26,7 +26,11 @@ var ModelRegistry = (function() {
                 if (window.RouteViewer) RouteViewer.deactivate();
             },
             getShipSummary: function(mmsi) {
-                return { label: '항로', status: '정상', level: 'safe', icon: 'fa-route' };
+                // Route inference is port-to-port, not per-ship — so it shows no
+                // card in a specific ship's panel (still available as a standalone
+                // tool in the MODELS rail). Roll prediction, which IS ship-specific,
+                // keeps its card.
+                return null;
             }
         },
         'hazard-zones': {
@@ -143,7 +147,9 @@ var ModelRegistry = (function() {
             btn.className = 'rail-icon';
             btn.dataset.panel = id;
             btn.dataset.action = m.type;
-            btn.title = m.title;
+            // Icon + label. The rail is collapsed (icon-only) by default and
+            // expands to a drawer on hover, where the label is revealed.
+            btn.setAttribute('aria-label', m.title);
             btn.innerHTML =
                 '<i class="' + m.icon + '"></i>' +
                 '<span class="rail-label">' + m.label + '</span>';

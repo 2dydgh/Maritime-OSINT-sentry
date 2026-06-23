@@ -85,9 +85,12 @@ var _satLabelLayer = null;
 var _chartBaseLayer = null;
 var _chartLabelLayer = null;
 var _chartSeamarkLayer = null;
+
+// Web-Mercator world extent. noWrap 타일 레이어가 저줌에서 가장자리 밖 타일(x=2^z 등)을
+// 요청하면 CARTO가 400 을 던지므로, bounds 로 유효 범위 밖 요청 자체를 막는다.
+var WORLD_TILE_BOUNDS = [[-85.0511, -180], [85.0511, 180]];
 // View saved before entering hazard mode (so we can restore on exit)
 var _savedViewBeforeHazard = null;
-var _shipsChipWasActive = false;  // restore the ships layer chip when 사고 mode exits
 
 // ── Korea hazard view bounds ──
 var KOREA_HAZARD_VIEW = {
@@ -150,13 +153,13 @@ function _useSatelliteBasemap() {
     // Satellite imagery — matches 3D Cesium globe tone.
     _satBaseLayer = L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        { maxZoom: 19, noWrap: true }
+        { maxZoom: 19, noWrap: true, bounds: WORLD_TILE_BOUNDS }
     ).addTo(leafletMap);
 
     // Dark labels overlay (CARTO)
     _satLabelLayer = L.tileLayer(
         'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
-        { maxZoom: 19, subdomains: 'abcd', pane: 'overlayPane', noWrap: true }
+        { maxZoom: 19, subdomains: 'abcd', pane: 'overlayPane', noWrap: true, bounds: WORLD_TILE_BOUNDS }
     ).addTo(leafletMap);
 }
 
@@ -179,13 +182,13 @@ function _useChartBasemap() {
     // imagery. Light by design → no dark tile filter.
     _chartBaseLayer = L.tileLayer(
         'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        { maxZoom: 19, subdomains: 'abcd', errorTileUrl: BLANK_TILE, attribution: '© OpenStreetMap, © CARTO', noWrap: true }
+        { maxZoom: 19, subdomains: 'abcd', errorTileUrl: BLANK_TILE, attribution: '© OpenStreetMap, © CARTO', noWrap: true, bounds: WORLD_TILE_BOUNDS }
     ).addTo(leafletMap);
 
     // Nautical detail: OpenSeaMap seamarks (buoys, lights, depth contours)
     _chartSeamarkLayer = L.tileLayer(
         'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
-        { maxZoom: 18, opacity: 0.85, pane: 'overlayPane', errorTileUrl: BLANK_TILE, noWrap: true }
+        { maxZoom: 18, opacity: 0.85, pane: 'overlayPane', errorTileUrl: BLANK_TILE, noWrap: true, bounds: WORLD_TILE_BOUNDS }
     ).addTo(leafletMap);
     _chartLabelLayer = null;  // Positron already includes labels
 }
@@ -715,6 +718,10 @@ function syncShipsToLeaflet() {
     leafletShipLayerGroups = {};
     leafletShipMarkers = {};
 
+    // 사고(hazard) mode suppresses AIS entirely — clear above, then render nothing.
+    // (Live WS updates are gated by the same flag in websocket.js.)
+    if (_hazardZonesActive) return;
+
     // shipDataMap에서 직접 읽기 (Entity 의존 제거)
     var shipsByType = {};
     Object.keys(shipDataMap).forEach(function(mmsi) {
@@ -1120,8 +1127,10 @@ function _drawDemoHexCell(group, cell, labelName, index, labelGroup) {
     var _ramp = _hazardRamp(score);
     var fillColor = _ramp.fill;
     var fillOpacity = _ramp.opacity;
-    var weight = 1.5;
-    var strokeColor = '#ffffff';
+    // Thin, translucent border so the cluster reads as one continuous heat field
+    // rather than a heavy white honeycomb grid that fights the colour ramp.
+    var weight = 1;
+    var strokeColor = 'rgba(255, 255, 255, 0.5)';
 
     // Honeycomb tiling: radius = CELL_DEG / sqrt(3) (≈ 0.577 × CELL_DEG)
     // produces pointy-top hexes that share edges with neighbors when the grid
@@ -1131,20 +1140,10 @@ function _drawDemoHexCell(group, cell, labelName, index, labelGroup) {
     var hex = L.polygon(hexPts, {
         color: strokeColor,
         weight: weight,
-        opacity: 0.95,
+        opacity: 1,
         fillColor: fillColor,
         fillOpacity: fillOpacity,
         className: 'hazard-hex' + (isHighDanger ? ' hex-danger' : ' hex-high')
-    });
-
-    // Pure white center dot (matching accident.png)
-    var dot = L.circleMarker([cell.lat, cell.lng], {
-        radius: 3,
-        fillColor: '#ffffff',
-        fillOpacity: 1.0,
-        color: '#ffffff',
-        weight: 1,
-        className: 'hazard-dot' + (isHighDanger ? ' dot-danger' : '')
     });
 
     var sub = cell.subscores || {};
@@ -1165,7 +1164,19 @@ function _drawDemoHexCell(group, cell, labelName, index, labelGroup) {
     );
 
     hex.addTo(group);
-    dot.addTo(group);
+
+    // Center dot marks only the hot cores (danger cells). Dotting every cell
+    // turned the rosette into polka-dots and competed with the colour ramp.
+    if (isHighDanger) {
+        L.circleMarker([cell.lat, cell.lng], {
+            radius: 3,
+            fillColor: '#ffffff',
+            fillOpacity: 1.0,
+            color: '#ffffff',
+            weight: 1,
+            className: 'hazard-dot dot-danger'
+        }).addTo(group);
+    }
 
     // Draw leader line + permanent callout, offset clear of the ~0.3° cluster.
     // Each label fans out in a distinct diagonal so callouts never stack.
@@ -1517,8 +1528,11 @@ function _finishHazardActivate() {
         zoom: leafletMap.getZoom()
     };
 
-    // Swap to nautical chart basemap
-    _useChartBasemap();
+    // Keep the satellite basemap (same as normal 2D/3D) so the hazard screen
+    // stays inside the app's identity — the dark ocean makes the yellow→red risk
+    // hexes pop, and there's no jarring swap to a foreign light chart. (The map
+    // is already on satellite when this runs, so this is a no-op guard.)
+    _useSatelliteBasemap();
 
     // Apply hazard styling; drag selection drives the hex render path.
     _applyHazardActiveClass(true);
@@ -1532,14 +1546,11 @@ function _finishHazardActivate() {
     var _bb = document.getElementById('bottomBar');
     if (_bb) _bb.style.display = 'none';
 
-    // Hide AIS while 사고 mode is active by toggling the ships layer chip off.
-    var shipsChip = document.querySelector('.layer-chip[data-layer="ships"]');
-    if (shipsChip && shipsChip.classList.contains('active')) {
-        _shipsChipWasActive = true;
-        shipsChip.click();
-    } else {
-        _shipsChipWasActive = false;
-    }
+    // Hide AIS: clear any ship markers already on the map. The render guards in
+    // syncShipsToLeaflet + the live WS path (gated on _hazardZonesActive, set
+    // above) keep them suppressed for the rest of the 사고 session. We don't touch
+    // the user's ship filters/chip — exiting the mode brings AIS straight back.
+    if (typeof syncShipsToLeaflet === 'function') syncShipsToLeaflet();
 
     // Lock the view to Korean waters
     leafletMap.setMaxBounds(KOREA_HAZARD_VIEW.bounds);
@@ -1613,14 +1624,10 @@ function deactivateHazardZones() {
     // Clear drag-render state and 사고 mode hex layer
     setDemoActive(false);
 
-    // Restore the ships layer chip if 사고 mode flipped it off on entry.
-    if (_shipsChipWasActive) {
-        var shipsChip = document.querySelector('.layer-chip[data-layer="ships"]');
-        if (shipsChip && !shipsChip.classList.contains('active')) {
-            shipsChip.click();
-        }
-        _shipsChipWasActive = false;
-    }
+    // Bring AIS back now that the hazard flag is cleared (set false at the top of
+    // this function). The live WS path resumes on its own; this re-renders
+    // immediately so ships don't blink out until the next update. No-op in 3D.
+    if (currentMapMode === '2d' && typeof syncShipsToLeaflet === 'function') syncShipsToLeaflet();
 
     // Exit area-select mode + clear any drawn rectangle/result
     if (leafletAreaSelectActive) _exitAreaSelectMode();

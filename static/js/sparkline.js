@@ -67,7 +67,7 @@ var BottomBar = (function() {
         if (!container) return;
 
         var defaultColors = {
-            cargo: '#3b82f6', tanker: '#f97316', passenger: '#a855f7',
+            cargo: '#2f6fed', tanker: '#f97316', passenger: '#a855f7',
             fishing: '#10b981', military: '#ef4444', tug: '#06b6d4', other: '#6b7280'
         };
         var types = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
@@ -210,7 +210,7 @@ var BottomBar = (function() {
     }
 
     // FLAG — country count only (detail in popup)
-    var FLAG_COLORS = ['#3b82f6', '#60a5fa', '#93bbfd', '#bdd4fe', '#dbeafe', '#94a3b8', '#64748b'];
+    var FLAG_COLORS = ['#2f6fed', '#5b8ef5', '#93bbfd', '#bdd4fe', '#dbeafe', '#94a3b8', '#64748b'];
 
     function updateFlagDistribution(vessels) {
         var countEl = document.getElementById('bottomFlagCount');
@@ -242,7 +242,7 @@ var BottomBar = (function() {
     }
 
     var defaultColors = {
-        cargo: '#3b82f6', tanker: '#f97316', passenger: '#a855f7',
+        cargo: '#2f6fed', tanker: '#f97316', passenger: '#a855f7',
         fishing: '#10b981', military: '#ef4444', tug: '#06b6d4', other: '#6b7280'
     };
 
@@ -362,7 +362,7 @@ var BottomBar = (function() {
         // Level summary
         html += '<div class="detail-grid">';
         var levels = [
-            { key: 'danger', label: '위험', color: '#ef4444' },
+            { key: 'danger', label: '위험', color: 'var(--sev-danger)' },
             { key: 'warning', label: '경고', color: '#fb923c' },
             { key: 'caution', label: '주의', color: '#eab308' }
         ];
@@ -403,7 +403,7 @@ var BottomBar = (function() {
                 html += '<div class="detail-area-row">' +
                     '<span class="detail-area-name">' + name + '</span>' +
                     '<span class="detail-area-counts">';
-                if (a.danger > 0) html += '<span style="color:#ef4444;">' + a.danger + '위험</span> ';
+                if (a.danger > 0) html += '<span style="color:var(--sev-danger);">' + a.danger + '위험</span> ';
                 if (a.warning > 0) html += '<span style="color:#fb923c;">' + a.warning + '경고</span> ';
                 if (a.caution > 0) html += '<span style="color:#eab308;">' + a.caution + '주의</span>';
                 html += '</span>' +

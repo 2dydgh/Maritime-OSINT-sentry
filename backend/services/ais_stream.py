@@ -17,7 +17,7 @@ from backend.services.metrics import ais_messages_total, ais_vessels_active, ale
 logger = logging.getLogger(__name__)
 
 AIS_WS_URL = "wss://stream.aisstream.io/v0/stream"
-from backend.config import AIS_API_KEY
+from backend.config import AIS_API_KEY, AIS_DISABLED
 API_KEY = AIS_API_KEY
 
 # AIS vessel type code classification
@@ -171,6 +171,7 @@ _vessels: dict[int, dict] = {}
 _vessels_lock = threading.Lock()
 _ws_thread: threading.Thread | None = None
 _ws_running = False
+_ws_process = None  # 현재 떠 있는 node ais_proxy 프로세스 핸들 (종료 시 kill 용)
 
 # -----------------------------------------------------------------------
 # Anomaly Detection — alert queue for Live Feed
@@ -353,19 +354,25 @@ def _ais_stream_loop():
     import subprocess
     import os
 
+    global _ws_process
     proxy_script = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ais_proxy.js")
     backoff = 1  # Exponential backoff starting at 1 second
 
     while _ws_running:
         try:
             logger.info("Starting Node.js AIS Stream Proxy...")
+            # start_new_session: 자식을 별도 프로세스 그룹으로 → 종료 시 그룹째 kill 가능.
+            # 핸들을 모듈 전역에 저장해 stop_ais_stream() 에서 확실히 죽인다
+            # (안 그러면 dev 재시작마다 고아 프록시가 쌓여 같은 키로 동시 연결 → 429).
             process = subprocess.Popen(
                 ['node', proxy_script, API_KEY],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                start_new_session=True,
             )
+            _ws_process = process
             
             # Drain stderr in a background thread to prevent deadlock
             import threading
@@ -598,10 +605,15 @@ def _run_ais_loop():
 def start_ais_stream():
     """Start the AIS WebSocket stream in a background thread."""
     global _ws_thread, _ws_running
+    if AIS_DISABLED:
+        # DISABLE_AIS=1: 프록시를 안 띄운다. throttle 된 키를 안 건드려 쿨다운을
+        # 방해하지 않고, 피드는 DB fallback(라이브 0척 → 스냅샷)으로 degrade 된다.
+        logger.warning("AIS Stream DISABLED (DISABLE_AIS=1) — DB fallback 으로만 동작")
+        return
     if _ws_thread and _ws_thread.is_alive():
         logger.info("AIS Stream already running")
         return
-    
+
     # Load cached vessel data from disk
     _load_cache()
     
@@ -613,7 +625,25 @@ def start_ais_stream():
 
 def stop_ais_stream():
     """Stop the AIS WebSocket stream and save cache."""
-    global _ws_running
+    global _ws_running, _ws_process
     _ws_running = False
+
+    # node 프록시 자식을 그룹째 종료. 안 죽이면 --reload/재시작마다 고아가 쌓여
+    # 같은 키로 동시 연결이 누적되고 aisstream 이 429 로 거부한다.
+    proc = _ws_process
+    _ws_process = None
+    if proc and proc.poll() is None:
+        import os
+        import signal
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.terminate()  # 그룹 kill 실패 시 단일 프로세스라도 종료
+        logger.info("AIS proxy process terminated")
+
     _save_cache()  # Save on shutdown
     logger.info("AIS Stream stopping...")

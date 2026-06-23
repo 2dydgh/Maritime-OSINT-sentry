@@ -228,7 +228,7 @@ function clearWaveHeight() {
 // ── Wind Speed Markers (말풍선 핀) ──
 
 function _windSpeedColor(speed) {
-    if (speed < 5) return '#60a5fa';
+    if (speed < 5) return '#5b8ef5';
     if (speed < 10) return '#34d399';
     if (speed < 20) return '#fbbf24';
     return '#ef4444';
@@ -295,7 +295,7 @@ function _buildWindBubble(speed, dirDeg) {
 
     // 숫자
     ctx.fillStyle = '#fff';
-    ctx.font = '700 11px "JetBrains Mono", monospace';
+    ctx.font = '700 11px "B612 Mono", "JetBrains Mono", "Pretendard Variable", monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(String(sp), cx, cy + 0.5);
 
@@ -395,7 +395,7 @@ function updateWxLegend() {
     }
     if (showWind) {
         html += '<div class="wx-legend-title" style="margin-top:6px;">풍속 (m/s)</div>';
-        html += '<div class="wx-legend-bar" style="background:linear-gradient(90deg, #60a5fa, #34d399, #fbbf24, #ef4444);"></div>';
+        html += '<div class="wx-legend-bar" style="background:linear-gradient(90deg, #5b8ef5, #34d399, #fbbf24, #ef4444);"></div>';
         html += '<div class="wx-legend-labels"><span>0</span><span>5</span><span>10</span><span>20+</span></div>';
     }
 

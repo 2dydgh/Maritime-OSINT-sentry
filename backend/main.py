@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import database, config, websocket
-from .services import ais_stream, data_fetcher, history_writer, aircraft_tracker
+from .services import ais_stream, data_fetcher, history_writer, aircraft_tracker, ais_fallback
 from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision, weather, route, aircraft, chat, hazard
 from .routers.hazard import warm_cache as warm_hazard_cache
 from .services import collision_analyzer, land_filter
@@ -18,26 +18,41 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def _build_ships_payload() -> str | None:
-    """Snapshot all vessels and serialize ONCE, off the event loop.
+# Feed status state (broadcast 루프 전용, 단일 루프라 락 불필요)
+_feed_status = "live"
+_feed_low_streak = 0
 
-    With a global AIS feed (~30k vessels, multi-MB payload) doing this on the
-    event loop every tick starved every other request (hazard API, WS
-    handshakes). Always call via asyncio.to_thread().
+
+async def _build_feed_text() -> str:
+    """live/fallback/down 중 하나를 직렬화해 항상 반환한다 (None 금지).
+
+    라이브 선박이 임계치 미만이면 DB 최근 30분 스냅샷으로 degrade.
+    직렬화는 to_thread 로 이벤트 루프 밖에서 (글로벌 피드 ~30k척).
     """
-    import json as _json
-    import time as _time
-    vessels = ais_stream.get_ais_vessels()
-    if not vessels:
-        return None
-    now_ms = int(_time.time() * 1000)
-    return _json.dumps({
-        "type": "ships_update",
-        "ships": vessels,
-        "total_tracked": len(vessels),
-        "timestamp": now_ms,
-        "server_time_ms": now_ms,
-    })
+    global _feed_status, _feed_low_streak
+    live = await asyncio.to_thread(ais_stream.get_ais_vessels)
+
+    snap: list = []
+    snap_time_ms = None
+    if len(live) < ais_fallback.FALLBACK_THRESHOLD:
+        snap = await ais_fallback.get_fallback_snapshot()
+        snap_time_ms = ais_fallback.get_snapshot_time_ms()
+
+    status, _feed_low_streak = ais_fallback.select_feed_status(
+        len(live), len(snap), _feed_status, _feed_low_streak
+    )
+    _feed_status = status
+
+    if status == "fallback":
+        ships, st = snap, snap_time_ms
+    elif status == "live":
+        ships, st = live, None
+    else:  # down
+        ships, st = [], None
+
+    return await asyncio.to_thread(
+        ais_fallback.build_feed_payload, ships, status, st
+    )
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -85,16 +100,16 @@ async def lifespan(app: FastAPI):
     # Optional: Start period data fetcher if needed for REST fallbacks
     data_fetcher.start_data_fetcher()
 
-    # Start Aircraft Tracker (OpenSky Network)
-    aircraft_tracker.start_aircraft_tracker()
-    
+    # Aircraft Tracker (OpenSky Network) is NOT started here — it is lazily
+    # started the first time the user enables the 항공 layer, via
+    # POST /api/v1/aircraft/start. This avoids hitting OpenSky on every boot.
+
     # Background loop to broadcast ship updates.
     async def broadcast_ships():
         while True:
             try:
-                text = await asyncio.to_thread(_build_ships_payload)
-                if text:
-                    await websocket.manager.broadcast_text(text)
+                text = await _build_feed_text()
+                await websocket.manager.broadcast_text(text)
             except Exception as e:
                 logger.error(f"Error in ship broadcast loop: {e}")
             await asyncio.sleep(3)  # 3s — frontend LED turns "connecting" only past 5s
@@ -171,6 +186,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Dev only (DEV_NO_CACHE=1): no-store on static assets so a plain browser refresh
+# always serves the latest CSS/JS — removes the need to bump ?v= after every edit.
+if config.DEV_NO_CACHE:
+    @app.middleware("http")
+    async def _no_cache_static(request, call_next):
+        resp = await call_next(request)
+        path = request.url.path
+        if path == "/" or path.endswith((".css", ".js", ".html")):
+            resp.headers["Cache-Control"] = "no-store"
+        return resp
+    logging.getLogger(__name__).info("DEV_NO_CACHE on — static assets served no-store")
+
 # WebSocket Endpoint
 @app.websocket("/api/v1/ws/ships")
 async def websocket_ships(ws: WebSocket):
@@ -178,9 +205,8 @@ async def websocket_ships(ws: WebSocket):
     # Immediate snapshot on connect — clients otherwise wait up to 1s for the
     # next broadcast_ships() tick, which is the dominant "서버 연결 중" delay.
     try:
-        text = await asyncio.to_thread(_build_ships_payload)
-        if text:
-            await ws.send_text(text)
+        text = await _build_feed_text()
+        await ws.send_text(text)
     except Exception as e:
         logger.error(f"Initial ship snapshot failed: {e}")
     try:
@@ -191,6 +217,18 @@ async def websocket_ships(ws: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         websocket.manager.disconnect(ws)
+
+# Aircraft tracker control — the OpenSky poller is started on demand the first
+# time the user turns on the 항공 layer, rather than at server boot.
+@app.post("/api/v1/aircraft/start")
+async def aircraft_start():
+    aircraft_tracker.start_aircraft_tracker()
+    return {"status": "started"}
+
+@app.post("/api/v1/aircraft/stop")
+async def aircraft_stop():
+    aircraft_tracker.stop_aircraft_tracker()
+    return {"status": "stopped"}
 
 # Include Routers
 app.include_router(ships.router, prefix="/api/v1")

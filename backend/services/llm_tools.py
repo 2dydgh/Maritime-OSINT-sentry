@@ -5,7 +5,9 @@ Provides Ollama-compatible tool definitions and a dispatcher that calls
 the appropriate backend service functions.
 """
 
+import json
 import math
+import os
 import logging
 from typing import Any
 
@@ -397,6 +399,113 @@ TOOL_DEFINITIONS: list[dict] = [
                     },
                 },
                 "required": ["active"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_route_screen",
+            "description": (
+                "항로(경로 추론) 화면을 엽니다. 사용자가 '항로', '경로', '루트', '항로 화면' 등을 "
+                "언급하며 화면 전환을 원할 때 사용하세요. 특정 구간 경로까지 바로 그리려면 "
+                "open_route_screen 대신 plan_route를 사용하세요."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "plan_route",
+            "description": (
+                "항로 화면에서 출발지→도착지 해상 경로를 추론해 그립니다. 한국 항구 이름"
+                "(busan, incheon, ulsan, gwangyang, pyeongtaek, mokpo, jeju) 또는 'lat,lng' "
+                "좌표를 from/to에 넘기세요. 선박 크기 등급(A~E)을 지정하면 깊이 인식 경로에 반영됩니다. "
+                "예: '부산에서 광양까지 C급 항로'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "from": {
+                        "type": "string",
+                        "description": "출발지. 한국 항구 키 또는 'lat,lng' (예: '35.1,129.05').",
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": "도착지. 한국 항구 키 또는 'lat,lng'.",
+                    },
+                    "size_class": {
+                        "type": "string",
+                        "description": "선박 크기 등급. A(1~20m) B(21~40m) C(41~80m) D(81~200m) E(201m+). 미지정 시 변경 안 함.",
+                        "enum": ["A", "B", "C", "D", "E"],
+                    },
+                },
+                "required": ["from", "to"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_route_size_class",
+            "description": (
+                "항로 화면의 선박 크기 등급(A~E)을 변경합니다. 이미 경로가 그려져 있으면 "
+                "사용자가 다시 plan_route를 요청할 때 새 등급이 적용됩니다."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "size_class": {
+                        "type": "string",
+                        "description": "A(1~20m) B(21~40m) C(41~80m) D(81~200m) E(201m+).",
+                        "enum": ["A", "B", "C", "D", "E"],
+                    },
+                },
+                "required": ["size_class"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "toggle_hazard_zones",
+            "description": (
+                "지도 위 사고/위험 구역(해상 사고 위험 격자) 오버레이를 켜거나 끕니다. "
+                "사용자가 '사고', '위험구역', '사고 위험', 'hazard' 등을 언급하며 표시/숨김을 "
+                "원할 때 사용하세요."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "on": {
+                        "type": "boolean",
+                        "description": "true=사고 위험구역 표시, false=숨김. 기본값 true.",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_hazard_summary",
+            "description": (
+                "특정 해역의 해상 사고 위험을 요약합니다. 한국 항구 키 또는 lat/lon/반경(해리)을 "
+                "지정하면 해당 구역의 위험 등급 분포를 알려줍니다. 사용자가 '이 근처 사고 위험', "
+                "'부산 앞바다 위험도' 같은 질문을 할 때 사용하세요."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "port": {
+                        "type": "string",
+                        "description": "한국 항구 키 (busan, incheon, ...). 지정 시 lat/lon 불필요.",
+                    },
+                    "lat": {"type": "number", "description": "중심 위도 (port 미지정 시)."},
+                    "lon": {"type": "number", "description": "중심 경도 (port 미지정 시)."},
+                    "radius_nm": {"type": "number", "description": "검색 반경(해리). 기본 30nm."},
+                },
             },
         },
     },
@@ -880,9 +989,146 @@ def _tool_set_roll_scenario(arguments: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Route (항로) + Hazard (사고) screen tools
+# ---------------------------------------------------------------------------
+def _resolve_point(spec: str):
+    """Resolve a 'from'/'to' spec → (lat, lng, name) or None.
+
+    Accepts a known Korean port key (busan, incheon, ...) or a 'lat,lng' string.
+    """
+    if not spec:
+        return None
+    key = spec.strip().lower()
+    port = KOREAN_PORTS.get(key)
+    if port:
+        return port["lat"], port["lon"], port["name"]
+    if "," in spec:
+        try:
+            lat_s, lng_s = spec.split(",", 1)
+            return float(lat_s), float(lng_s), f"({float(lat_s):.2f}, {float(lng_s):.2f})"
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def _tool_open_route_screen(arguments: dict) -> dict:
+    return {"action": "open_route_screen", "label": "항로 화면 열기"}
+
+
+def _tool_plan_route(arguments: dict) -> dict:
+    frm = _resolve_point(arguments.get("from", ""))
+    to = _resolve_point(arguments.get("to", ""))
+    if not frm:
+        return {"error": f"출발지를 인식할 수 없습니다: {arguments.get('from')!r}. 한국 항구 이름 또는 'lat,lng'를 쓰세요."}
+    if not to:
+        return {"error": f"도착지를 인식할 수 없습니다: {arguments.get('to')!r}. 한국 항구 이름 또는 'lat,lng'를 쓰세요."}
+    size_class = (arguments.get("size_class") or "").strip().upper() or None
+    if size_class and size_class not in ("A", "B", "C", "D", "E"):
+        size_class = None
+    return {
+        "action": "plan_route",
+        "fromLat": frm[0], "fromLng": frm[1], "fromName": frm[2],
+        "toLat": to[0], "toLng": to[1], "toName": to[2],
+        "sizeClass": size_class,
+        "label": f"항로 추론: {frm[2]} → {to[2]}" + (f" ({size_class}급)" if size_class else ""),
+    }
+
+
+def _tool_set_route_size_class(arguments: dict) -> dict:
+    cls = (arguments.get("size_class") or "").strip().upper()
+    if cls not in ("A", "B", "C", "D", "E"):
+        return {"error": "size_class는 A~E 중 하나여야 합니다."}
+    return {"action": "set_route_size_class", "size_class": cls, "label": f"선박 크기 등급 {cls} 적용"}
+
+
+def _tool_toggle_hazard_zones(arguments: dict) -> dict:
+    on = arguments.get("on")
+    on = True if on is None else bool(on)
+    return {
+        "action": "toggle_hazard_zones",
+        "on": on,
+        "label": "사고 위험구역 " + ("표시" if on else "숨김"),
+    }
+
+
+_HAZARD_CACHE_PATH = os.path.join(os.path.dirname(__file__), "hazard_cells_cache.json")
+_hazard_cells_cache: list | None = None
+
+
+def _load_hazard_cells() -> list:
+    global _hazard_cells_cache
+    if _hazard_cells_cache is None:
+        try:
+            with open(_HAZARD_CACHE_PATH, "r", encoding="utf-8") as f:
+                _hazard_cells_cache = json.load(f).get("cells", [])
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not load hazard cells cache: %s", exc)
+            _hazard_cells_cache = []
+    return _hazard_cells_cache
+
+
+def _tool_get_hazard_summary(arguments: dict) -> dict:
+    port_key = arguments.get("port")
+    if port_key:
+        port = KOREAN_PORTS.get(str(port_key).strip().lower())
+        if not port:
+            return {"error": f"알 수 없는 항구: {port_key}"}
+        lat, lon, area_name = port["lat"], port["lon"], port["name"]
+    else:
+        lat, lon = arguments.get("lat"), arguments.get("lon")
+        if lat is None or lon is None:
+            return {"error": "port 또는 lat/lon을 지정해야 합니다."}
+        lat, lon = float(lat), float(lon)
+        area_name = f"({lat:.2f}, {lon:.2f})"
+
+    radius_nm = float(arguments.get("radius_nm", 30))
+    cells = _load_hazard_cells()
+    near = []
+    for c in cells:
+        d = _haversine_distance(lat, lon, c["lat"], c["lng"])
+        if d <= radius_nm:
+            near.append((d, c))
+
+    if not near:
+        return {
+            "area": area_name, "radius_nm": radius_nm, "cell_count": 0,
+            "summary": f"{area_name} 반경 {radius_nm:.0f}nm 내 사고 위험 격자 데이터가 없습니다.",
+        }
+
+    danger = [c for _, c in near if c.get("score", 0) >= 70]
+    caution = [c for _, c in near if 40 <= c.get("score", 0) < 70]
+    low = [c for _, c in near if c.get("score", 0) < 40]
+    top = sorted(near, key=lambda x: -x[1].get("score", 0))[:3]
+    top_causes = [
+        {"cause": c.get("cause", "—"), "score": round(c.get("score", 0), 1),
+         "dist_nm": round(d, 1)}
+        for d, c in top
+    ]
+    return {
+        "area": area_name,
+        "radius_nm": radius_nm,
+        "cell_count": len(near),
+        "danger_count": len(danger),
+        "caution_count": len(caution),
+        "low_count": len(low),
+        "max_score": round(top[0][1].get("score", 0), 1),
+        "top_hazards": top_causes,
+        "summary": (
+            f"{area_name} 반경 {radius_nm:.0f}nm: 위험 {len(danger)} · 주의 {len(caution)} · "
+            f"양호 {len(low)} 격자. 최고 위험도 {round(top[0][1].get('score', 0), 1)}점."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Tool dispatcher
 # ---------------------------------------------------------------------------
 _TOOL_HANDLERS = {
+    "open_route_screen":    _tool_open_route_screen,
+    "plan_route":           _tool_plan_route,
+    "set_route_size_class": _tool_set_route_size_class,
+    "toggle_hazard_zones":  _tool_toggle_hazard_zones,
+    "get_hazard_summary":   _tool_get_hazard_summary,
     "get_ships":           _tool_get_ships,
     "get_collision_risks": _tool_get_collision_risks,
     "get_area_status":     _tool_get_area_status,

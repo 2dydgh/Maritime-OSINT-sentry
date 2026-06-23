@@ -7,10 +7,10 @@ const G = require('../../static/js/gerstner.js');
 
 const WX = { waveHeight: 3, wavePeriod: 8, waveDirection: 30 };
 
-test('buildWaves returns 4 deterministic components with valid params', () => {
+test('buildWaves returns 6 deterministic components with valid params', () => {
   const a = G.buildWaves(WX);
   const b = G.buildWaves(WX);
-  assert.equal(a.length, 4);
+  assert.equal(a.length, 6);
   assert.deepEqual(a, b); // deterministic, no Math.random
   for (const w of a) {
     assert.ok(w.k > 0, 'k must be positive');

@@ -20,17 +20,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@700;900&family=Rajdhani:wght@600;700&family=B612:wght@400;700&family=B612+Mono:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&family=Orbitron:wght@700;900&family=Rajdhani:wght@600;700&family=B612+Mono:wght@400;700&display=swap"
         rel="stylesheet">
     <!-- Pretendard Variable — provides Korean glyphs for the font-family fallback chain. -->
     <link rel="stylesheet" as="style" crossorigin
         href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/css/flag-icons.min.css">
 
     <!-- Application Styles -->
-    <link rel="stylesheet" href="css/main.css?v=200">
+    <link rel="stylesheet" href="css/main.css?v=245">
     <!-- ECharts for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <!-- Three.js for 3D visualization -->
@@ -113,6 +112,8 @@
 
     <!-- Center Column (Map + Collision) -->
     <div id="centerColumn">
+    <!-- 피드 상태 바: 지도 영역 상단 풀폭(왼쪽 레일은 덮지 않음). fallback/down 일 때만 표시 -->
+    <div id="feedStatusBanner" class="feed-banner" hidden></div>
     <div id="mapRow">
     <div id="mapArea">
         <div id="cesiumContainer"></div>
@@ -403,6 +404,7 @@
                 <span id="collision-count-summary" style="display:none;">0</span>
                 <div id="distRiskSummaryFixed" style="display:none; flex-shrink:0;"></div>
                 <div id="mlRiskSummaryFixed" style="display:none; flex-shrink:0;"></div>
+                <div class="degraded-notice">⏸ 라이브 끊김 — 실시간 충돌 분석 일시중지</div>
                 <div class="collision-table-header">
                     <span class="col-severity">위험도</span>
                     <span class="col-pairs">선박</span>
@@ -422,6 +424,7 @@
             </div>
             <div id="feedSection" class="panel-section">
                 <h2><span>이상 선박 탐지</span></h2>
+                <div class="degraded-notice">⏸ 라이브 끊김 — 실시간 탐지 일시중지</div>
                 <div class="feed-list" id="eventFeed">
                     <div style="text-align:center; color:var(--text-dim); font-style:italic; margin-top:20px; font-size:0.9rem;">
                         정보 수신 대기중...
@@ -579,21 +582,21 @@
     <script src="js/sparkline.js?v=3"></script>
     <script src="js/layout-manager.js?v=12"></script>
     <script src="js/model-registry.js?v=7"></script>
-    <script src="js/ship-builders.js?v=3"></script>
-    <script src="js/ship-preview-3d.js?v=3"></script>
+    <script src="js/ship-builders.js?v=5"></script>
+    <script src="js/ship-preview-3d.js?v=4"></script>
     <script src="js/roll-prediction.js?v=1"></script>
-    <script src="js/gerstner.js?v=1"></script>
-    <script src="js/roll-viewer.js?v=66"></script>
+    <script src="js/gerstner.js?v=5"></script>
+    <script src="js/roll-viewer.js?v=134"></script>
     <script src="js/route-viewer.js?v=26"></script>
     <script src="js/app.js?v=7"></script>
     <script src="js/map-cesium.js?v=6"></script>
     <script src="js/ship-models-3d.js?v=2"></script>
-    <script src="js/map-leaflet.js?v=34"></script>
-    <script src="js/weather-overlay.js?v=5"></script>
+    <script src="js/map-leaflet.js?v=35"></script>
+    <script src="js/weather-overlay.js?v=6"></script>
     <script src="js/satellite.js?v=8"></script>
-    <script src="js/proximity.js?v=7"></script>
+    <script src="js/proximity.js?v=8"></script>
     <script src="js/collision.js?v=13"></script>
-    <script src="js/websocket.js?v=22"></script>
+    <script src="js/websocket.js?v=27"></script>
     <script src="js/ui-controls.js?v=31"></script>
     <script src="js/charts.js?v=6"></script>
     <script src="js/chat.js?v=5"></script>

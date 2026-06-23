@@ -15,16 +15,26 @@ var RollViewer = (function () {
     var shipGroupPred = null;              // 예측 선박 (실제 선박의 클론)
     var splitView = false;                 // false=고스트 겹쳐보기(기본) · true=좌우 나눠보기
     var _predGhostMats = [];               // 예측 선박 전용(클론된) 머티리얼 — 고스트 처리 대상
+    var _predEdgeMats = [];                // 예측 헐 EdgesGeometry 외곽선 머티리얼
     var _predGhostReady = false;
     var heelRefGroup = null;               // 수평(0°) 기준선 — 선박 위치만 따라가고 롤은 따라가지 않음
+    var _rollWedge = null;                 // 실측↔예측 롤 각 사이를 채우는 오차 쐐기(겹쳐보기 전용)
+    var _rollWedgeMat = null;
     var _HEEL = { deckY: 5.0, half: 8.5 }; // 횡요 사다리 끝점 좌표(라벨 투영용)
     var _setRightPanel = null;             // 우측 패널(시뮬레이션/상세) 상호배타 토글 — load()에서 배선
     var waterMesh = null;
+    // ── 수중 모드 (카메라가 수면 아래로 내려가면 잠수 뷰로 전환) ──
+    var _underwater = false;
+    var _underwaterTintEl = null;
+    var _savedFog = null;            // 수면 위 fog 복원용 { color, density }
+    var SURFACE_Y = 0.4;             // 이 높이보다 카메라가 낮아지면 수중 처리
     var gltfModelCache = {};   // { type: THREE.Group }
     var gltfLoader = null;
     var useGltfModels = false;  // disabled — only cargo.glb exists; code ships keep all types consistent
     var composer = null;
     var mainDirLight = null;
+    var _fillLight = null;        // module-scoped so the sky-mood switcher can retune them
+    var _ambLight = null;
     var waterNormals = null;
     var _waves = [];               // current Gerstner wave specs (Gerstner.buildWaves)
     var _waterPatched = false;     // true once Water vertex shader has the Gerstner injection
@@ -52,7 +62,8 @@ var RollViewer = (function () {
 
     var sprayPoints = null;
     var sprayVelocities = [];
-    var SPRAY_COUNT = 80;
+    var SPRAY_COUNT = 90;
+    var _contactShadow = null;   // 수면 위 옅은 접지 그림자(떠 있지 않고 물에 얹힌 느낌)
 
     var cameraAnimating = false;
     var cameraAnimStart = 0;
@@ -65,7 +76,8 @@ var RollViewer = (function () {
     var turnScenarioActive = false;
     var turnPhase = 'straight';   // 'straight' | 'entering' | 'turning' | 'exiting'
     var turnElapsed = 0;
-    var turnHeading = 0;          // current heading in degrees
+    var turnHeading = 0;          // current heading in degrees (delta accumulated during a turn)
+    var baseHeading = 0;          // 선수방위(도) — 파향 대비 배 방향. 조우각이 롤 크기를 좌우한다.
     var turnDirection = 1;        // 1 = starboard, -1 = port
     var _turnMaxRudder = 35;      // 최대 타각(도) — 시뮬레이션 패널 슬라이더로 조절
     var turnHudEl = null;
@@ -74,11 +86,27 @@ var RollViewer = (function () {
     var shipWorldPos = { x: 0, z: 0 };  // ship position in world space
     var camFollow = { x: 0, z: 0 };     // smoothed camera target
     var camFollowHeading = 0;              // smoothed camera heading (radians)
+    var _camHeadingSynced = false;         // false → 다음 프레임에 camFollowHeading를 현재 침로로 스냅(점프 방지)
     var smoothSpeed = 12;                  // lerp-smoothed current speed
     var smoothRoll = 0;                    // lerp-smoothed roll angle
     var smoothPitch = 0;                   // lerp-smoothed pitch angle
+    // ── 부력 관성(heave 스프링-댐퍼) + 6-DOF 미세동요 상태 ──
+    var _heavePos = 0, _heaveVel = 0;      // 수면에 즉시 안 붙고 고유주기로 출렁(지연/오버슈트)
+    var _yawSmooth = 0;                    // 파도가 유도하는 미세 요(스무딩, rad)
     var predRoll = 0;                       // 예측 roll (원시)
     var predPitch = 0;                      // 예측 pitch (원시)
+    // Gerstner 수평(choppy) 변위 — GLSL gerstnerDisplace의 acc.xy 와 동일.
+    // 물 입자의 궤도 운동을 CPU에서 재현해 선체 서지/스웨이를 보이는 물결과 동기시킨다.
+    function _gerstnerHoriz(waves, px, py, t) {
+        var dx = 0, dy = 0;
+        if (waves) for (var i = 0; i < waves.length; i++) {
+            var w = waves[i];
+            if (!(w.A > 0)) continue;
+            var s = Math.sin(w.k * (w.dirX * px + w.dirY * py) - w.omega * t) * w.Q * w.A;
+            dx += w.dirX * s; dy += w.dirY * s;
+        }
+        return { x: dx, y: dy };
+    }
     var smoothPredRoll = 0;                 // lerp-smoothed 예측 roll
     var smoothPredPitch = 0;               // lerp-smoothed 예측 pitch
     var predRollHistory = [];               // 예측 roll 이력 (실제와 동일 길이 유지)
@@ -258,8 +286,9 @@ var RollViewer = (function () {
         return 1 - Math.pow(1 - t, 3);
     }
 
-    var CAM_START = { x: 80, y: 40, z: 80 };
-    var CAM_END = { x: 30, y: 20, z: 40 };
+    var CAM_START = { x: 70, y: 18, z: 70 };   // 시작 위치도 조금 낮고 가깝게
+    // 정착 시점 — water.png처럼 수면 가까이 낮게(y 13→9) + 살짝 더 당겨(거리 50→43) 파도가 전경에 크게.
+    var CAM_END = { x: 26, y: 9, z: 34 };
 
     function animateCamera(elapsed) {
         if (!cameraAnimating) return;
@@ -375,6 +404,7 @@ var RollViewer = (function () {
         _scenarioOverride = null;
         _timeScale = 1.0;
         simWaveTime = 0;
+        _heavePos = 0; _heaveVel = 0; _yawSmooth = 0;
         weather = Object.assign({}, _baseWeather);
         waterFlowOffset = { x: 0, z: 0 };
 
@@ -387,64 +417,87 @@ var RollViewer = (function () {
         var canvasWrap = document.createElement('div');
         canvasWrap.className = 'roll-viewer-canvas-wrap';
 
-        var consoleEl = buildConsole();
-
-        // 상세 정보 슬라이드 드로어 (선박/항해/기상/분석)
+        // 상세 정보 — 가운데 모달 카드 (모양·딤 배경은 CSS가 담당). 닫기 X 포함.
         var panel = buildInfoPanel(ship);
         var drawer = document.createElement('div');
         drawer.className = 'rv-drawer';
         drawer.id = 'rv-drawer';
+        var _detailClose = document.createElement('button');
+        _detailClose.className = 'rv-modal-close';
+        _detailClose.setAttribute('aria-label', '닫기');
+        _detailClose.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        drawer.appendChild(_detailClose);
         drawer.appendChild(panel);
 
         layout.appendChild(titlebar);
         layout.appendChild(canvasWrap);
-        layout.appendChild(consoleEl);
         layout.appendChild(drawer);
         container.appendChild(layout);
+
+        // 횡요각/정확도 텔레메트리 — 하단 콘솔 바 대신 무대 좌상단 HUD로 (3D가 풀 높이를 차지).
+        canvasWrap.appendChild(buildRollHud());
+
+        // 수중 틴트 오버레이 — 카메라가 수면 아래로 내려가면 페이드인 (잠수 뷰).
+        _underwaterTintEl = document.createElement('div');
+        _underwaterTintEl.className = 'rv-underwater-tint';
+        canvasWrap.appendChild(_underwaterTintEl);
 
         // AI 챗 FAB는 전역 유지하되, 하단 콘솔과 겹치지 않게 무대 좌하단으로 올린다.
         var _cb = document.getElementById('chat-bubble');
         if (_cb) _cb.classList.add('rv-chat-shift');
 
-        // 시뮬레이션 제어 패널 (하단 슬라이드업, 기본 숨김) — 무대와 콘솔 사이에 in-flow로 끼워
+        // 시뮬레이션 제어 패널 (하단 슬라이드업, 기본 숨김) — 무대 아래 in-flow 막내로 붙어
         // 열리면 3D 무대를 위로 밀어 올린다 (오른쪽 오버레이로 화면을 덮지 않음).
         buildTurnScenarioUI(layout);
-        var _simPanel = document.getElementById('rv-canvas-hud-scenario');
-        if (_simPanel && consoleEl && consoleEl.parentNode === layout) {
-            layout.insertBefore(_simPanel, consoleEl);
-        }
 
         // 제목줄 토글 배선
+        // 시뮬=하단 바(보면서 조정), 상세=가운데 모달(읽고 닫기). 모달은 포커스형이라 시뮬과
+        // 상호배타로 연다 (한쪽 열면 다른 쪽 닫힘). 배경 클릭·X로도 닫힌다.
         var simBtn = document.getElementById('rv-tb-sim');
         var scenarioEl = document.getElementById('rv-canvas-hud-scenario');
+        var detailBtn = document.getElementById('rv-tb-detail');
+        var _backdrop = document.createElement('div');
+        _backdrop.className = 'rv-modal-backdrop';
+        layout.appendChild(_backdrop);
+        function _showSim(open) {
+            if (scenarioEl) scenarioEl.classList.toggle('rv-sim-open', open);
+            if (simBtn) simBtn.classList.toggle('active', open);
+            // 하단 시뮬 덱이 열리면 좌하단 AI 챗 FAB/패널이 덱을 가린다 → 덱 동안 숨긴다(페이드).
+            var _cb = document.getElementById('chat-bubble');
+            if (_cb) _cb.classList.toggle('rv-chat-deck-hide', open);
+            var _cp = document.getElementById('chat-panel');
+            if (_cp) _cp.classList.toggle('rv-chat-deck-hide', open);
+        }
+        function _showDetail(open) {
+            drawer.classList.toggle('rv-drawer-open', open);
+            _backdrop.classList.toggle('rv-modal-on', open);
+            if (detailBtn) detailBtn.classList.toggle('active', open);
+        }
         if (simBtn && scenarioEl) {
             simBtn.addEventListener('click', function () {
                 var open = !scenarioEl.classList.contains('rv-sim-open');
-                _setRightPanel(open ? 'sim' : null);
+                if (open) _showDetail(false);
+                _showSim(open);
             });
         }
-        var detailBtn = document.getElementById('rv-tb-detail');
         if (detailBtn) {
             detailBtn.addEventListener('click', function () {
                 var open = !drawer.classList.contains('rv-drawer-open');
-                _setRightPanel(open ? 'detail' : null);
+                if (open) _showSim(false);
+                _showDetail(open);
             });
         }
-        // 우측 패널은 상호 배타 — 시뮬레이션/상세 중 하나만 열린다 (겹침 방지).
-        _setRightPanel = function (which) {
-            var simOn = which === 'sim', detOn = which === 'detail';
-            if (scenarioEl) scenarioEl.classList.toggle('rv-sim-open', simOn);
-            drawer.classList.toggle('rv-drawer-open', detOn);
-            if (simBtn) simBtn.classList.toggle('active', simOn);
-            if (detailBtn) detailBtn.classList.toggle('active', detOn);
-        };
+        _backdrop.addEventListener('click', function () { _showDetail(false); });
+        _detailClose.addEventListener('click', function () { _showDetail(false); });
+        // 외부(LLM 등) 호환용 헬퍼
+        _setRightPanel = function (which) { _showSim(which === 'sim'); _showDetail(which === 'detail'); };
 
         buildCanvasOverlays(canvasWrap);   // 카메라 프리셋 (무대에 떠 있음)
 
         // Init Three.js
         initScene(canvasWrap);
         buildSky();
-        // buildSun(); // disabled — too bright
+        buildSun();   // sunPosition 따라가는 부드러운 태양 (위치 고정 + 톤다운)
         buildWater();
         buildCompass();
         buildShip(shipType);
@@ -454,11 +507,17 @@ var RollViewer = (function () {
             // 선체 위 attitude 사다리(가로선)는 제거함 — 정밀 각도는 하단 클리노미터가 담당하고,
             // 3D 무대는 선체가 직접 기우는 모습 + 단일 수평 기준선만으로 깔끔하게 비교한다.
             _buildHeelHorizon();   // 수평 0° 기준선 (유일하게 남는 가로 기준)
+            _buildRollWedge();     // 실측↔예측 롤 각 오차 쐐기 (겹쳐보기)
             // 기본은 고스트 겹쳐보기 — 예측 선박을 반투명 하늘색으로 처리한다.
             setShipViewMode(!splitView);
         }
+        // 초기 분위기(기본 한낮)에 맞춰 선실 창 발광을 끈다 — 대낮에 불 켜진 창 방지.
+        _applyMoodToShipEmissive();
 
         buildSeaMarkers();
+        buildDistantVessels();
+        buildContactShadow();
+        buildSpray();
         buildRadarIndicator();
         startAnimation();
         initRollChart();
@@ -488,7 +547,7 @@ var RollViewer = (function () {
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        var todPal = SKY_PALETTES[getTimeOfDay()];
+        var todPal = SKY_PALETTES[getActiveTod()];
         renderer.toneMappingExposure = todPal.exposure || 0.8;
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -506,10 +565,12 @@ var RollViewer = (function () {
         controls.dampingFactor = 0.05;
         controls.minDistance = 15;
         controls.maxDistance = 80;
+        // 수면 아래로 내려가는 건 허용(수중 모드로 전환됨). 다만 완전 천저(nadir)까진 못 가게 제한.
+        controls.maxPolarAngle = Math.PI * 0.9;
         controls.target.set(0, 2, 0);
 
         // Lights — adjusted by time of day
-        var tod = getTimeOfDay();
+        var tod = getActiveTod();
         var pal = SKY_PALETTES[tod];
         mainDirLight = new THREE.DirectionalLight(pal.sunColor, pal.sunIntensity);
         var dirLight = mainDirLight;
@@ -529,12 +590,12 @@ var RollViewer = (function () {
         var wxMod = getWeatherModifiers();
         dirLight.intensity *= wxMod.sunIntensity;
 
-        var fillLight = new THREE.DirectionalLight(0xaaccff, tod === 'night' ? 0.2 : 0.5);
-        fillLight.position.set(-20, 10, -10);
-        scene.add(fillLight);
+        _fillLight = new THREE.DirectionalLight(0xaaccff, tod === 'night' ? 0.2 : 0.5);
+        _fillLight.position.set(-20, 10, -10);
+        scene.add(_fillLight);
 
-        var ambLight = new THREE.AmbientLight(0xffffff, tod === 'night' ? 0.3 : 0.8);
-        scene.add(ambLight);
+        _ambLight = new THREE.AmbientLight(0xffffff, tod === 'night' ? 0.3 : 0.8);
+        scene.add(_ambLight);
 
         // Resize handler
         _resizeHandler = function () {
@@ -561,11 +622,13 @@ var RollViewer = (function () {
         var renderPass = new THREE.RenderPass(scene, camera);
         var wxMod2 = getWeatherModifiers();
         var bloomStrength = wxMod2.bloomStrength;
+        // 레퍼런스 예제엔 블룸이 없음 — 과한 번짐의 주범이라 확 낮춘다.
+        // threshold를 높여 가장 밝은 것(태양)만 살짝 번지게.
         var bloomPass = new THREE.UnrealBloomPass(
             new THREE.Vector2(w, h),
-            bloomStrength,   // strength
-            0.6,   // radius — wider glow spread
-            0.6    // threshold — catch more bright surfaces
+            bloomStrength * 0.35,   // strength — 대폭 완화
+            0.45,   // radius
+            0.9     // threshold — 매우 밝은 표면(태양)만
         );
 
         composer = new THREE.EffectComposer(renderer);
@@ -634,26 +697,46 @@ var RollViewer = (function () {
         return 'night';
     }
 
+    // The sky is now driven by an explicit user mood (시뮬레이션 패널 → 하늘), defaulting
+    // to 'day' (golden / water.png) instead of the Seoul clock. getActiveTod() is what all
+    // sky/sun/water/light builders read; the clock is only a fallback if no mood is set.
+    var _activeMood = 'noon';    // default 한낮. 'day'(골든) | 'noon'(한낮) | 'dusk'(황혼) | 'night'(야간)
+    function getActiveTod() { return _activeMood || getTimeOfDay(); }
+
     var SKY_PALETTES = {
+        // exposure: ACESFilmic toneMappingExposure. The reference (Sean Bradley
+        // gerstner-ocean / water.png) ships 0.5, but water.png itself reads brighter
+        // than that here, so day = 0.78 — rich, contrasty water + warm horizon without
+        // the washed-out 1.07 and without going dim. Other times warmed toward it.
         dawn: {
             top: 0x1a1a4a, mid: 0x4a3a6a, horizon: 0xd4856a, warm: 0xe8a070,
             bg: 0x3a3050, fog: 0x6a5060, sunColor: 0xffcc88, sunIntensity: 1.2,
-            waterColor: 0x1a2a3d
+            waterColor: 0x1a2a3d, exposure: 0.6
         },
         day: {
             top: 0x0055cc, mid: 0x0088ee, horizon: 0x40aaff, warm: 0x70c8ff,
             bg: 0x0077dd, fog: 0x3399ee, sunColor: 0xfffff0, sunIntensity: 2.0,
-            waterColor: 0x005577, exposure: 1.1, bloom: 0
+            waterColor: 0x001e0f, exposure: 0.78, bloom: 0,
+            turbidity: 10, rayleigh: 2
         },
+        // 한낮 — sun high, clear blue sky (low turbidity), bright bluer sea.
+        noon: {
+            top: 0x1a6fd0, mid: 0x3a9be0, horizon: 0xbfe3ff, warm: 0xe8f4ff,
+            bg: 0x2a7fd0, fog: 0x9fcfff, sunColor: 0xffffff, sunIntensity: 2.4,
+            waterColor: 0x064a6e, exposure: 0.62, bloom: 0,
+            turbidity: 4, rayleigh: 1.2
+        },
+        // 황혼 — 골든과 확실히 구분: 태양을 수평선까지 내리고(elev 1°) 더 어둡게(exp 0.5),
+        // 짙은 주황·적색(sunColor)·어두운 물. 골든은 밝은 금빛, 황혼은 어둑한 노을.
         dusk: {
-            top: 0x0a1a3a, mid: 0x4a3060, horizon: 0xc86040, warm: 0xe08850,
-            bg: 0x2a2040, fog: 0x5a4050, sunColor: 0xff9966, sunIntensity: 1.0,
-            waterColor: 0x0a1a2d
+            top: 0x0a1430, mid: 0x3a2050, horizon: 0xd2502a, warm: 0xe87038,
+            bg: 0x201838, fog: 0x4a2c38, sunColor: 0xff6a2c, sunIntensity: 0.9,
+            waterColor: 0x0a1322, exposure: 0.5, turbidity: 10, rayleigh: 3
         },
         night: {
             top: 0x020810, mid: 0x0a1520, horizon: 0x1a2a3a, warm: 0x2a3040,
             bg: 0x060c18, fog: 0x101828, sunColor: 0x8899bb, sunIntensity: 0.4,
-            waterColor: 0x000a15
+            waterColor: 0x000a15, exposure: 0.8
         }
     };
 
@@ -685,12 +768,22 @@ var RollViewer = (function () {
                 theta = THREE.MathUtils.degToRad(90);
                 break;
             case 'day':
-                phi = THREE.MathUtils.degToRad(90 - 55);
+                // 레퍼런스(Sean Bradley gerstner-ocean / water.png) 기본값 그대로:
+                // elevation 2° + azimuth 180° + turbidity 10 + exposure 0.5.
+                // 낮은 태양이 수면에 긴 정반사(글린트) 길을 만들고 수평선이 따뜻해진다.
+                phi = THREE.MathUtils.degToRad(90 - 2);
+                theta = THREE.MathUtils.degToRad(180);
+                break;
+            case 'noon':
+                // 한낮 — 태양 고도 28°, 정면. 긴 글린트 대신 또렷한 반사점.
+                phi = THREE.MathUtils.degToRad(90 - 28);
                 theta = THREE.MathUtils.degToRad(180);
                 break;
             case 'dusk':
-                phi = THREE.MathUtils.degToRad(90 - 8);
-                theta = THREE.MathUtils.degToRad(270);
+                // 노을 — 태양을 수평선 바로 위로(elev 1°), 카메라 정면(az 180)에 둬 길고 붉은
+                // 글린트와 함께 확실한 '해넘이'. 골든(elev 2·밝음)과 톤·밝기로 구분된다.
+                phi = THREE.MathUtils.degToRad(90 - 1);
+                theta = THREE.MathUtils.degToRad(180);
                 break;
             default:
                 phi = THREE.MathUtils.degToRad(90 + 20);
@@ -705,6 +798,7 @@ var RollViewer = (function () {
     // ── Sky group — moves with ship so horizon never breaks ──
     var skyGroup = null;
     var skyMesh = null;
+    var _skyEnvRT = null;          // PMREM render target holding the sky environment
     var sunPosition = null;
     var saturationPass = null;
     var godRaysShaderPass = null;
@@ -712,10 +806,12 @@ var RollViewer = (function () {
     // ── buildSky() — THREE.Sky for dawn/day/dusk, vertex-color dome for night ──
     function buildSky() {
         var THREE = window.THREE;
-        var tod = getTimeOfDay();
+        var tod = getActiveTod();
         var pal = SKY_PALETTES[tod];
 
-        scene.fog = new THREE.FogExp2(pal.fog, 0.0004);
+        // 안개 — 0.0004는 먼 바다를 회색으로 씻어버려 칙칙했다(레퍼런스엔 안개 없음).
+        // 골든/한낮은 거의 0으로(맑은 수평선), 그 외 시간대는 약하게.
+        scene.fog = new THREE.FogExp2(pal.fog, (tod === 'day' || tod === 'noon') ? 0.00006 : 0.0002);
 
         skyGroup = new THREE.Group();
 
@@ -728,10 +824,11 @@ var RollViewer = (function () {
 
             var skyUniforms = skyMesh.material.uniforms;
             var wxMod = getWeatherModifiers();
-            skyUniforms['turbidity'].value = wxMod.turbidity;
-            skyUniforms['rayleigh'].value = 1;
-            skyUniforms['mieCoefficient'].value = 0.003;
-            skyUniforms['mieDirectionalG'].value = 0.7;
+            // turbidity/rayleigh per mood — 골든/황혼은 10/2(따뜻·뿌연), 한낮은 4/1.2(맑은 파랑).
+            skyUniforms['turbidity'].value = pal.turbidity || 10;
+            skyUniforms['rayleigh'].value = pal.rayleigh || 2;
+            skyUniforms['mieCoefficient'].value = 0.005;
+            skyUniforms['mieDirectionalG'].value = 0.8;
 
             sunPosition = calcSunPosition(tod);
             skyUniforms['sunPosition'].value.copy(sunPosition);
@@ -741,12 +838,32 @@ var RollViewer = (function () {
 
             skyGroup.add(skyMesh);
 
-            // Reduce exposure for Sky shader — it's inherently bright
+            // 노출은 시간대 팔레트값(day=0.5, 레퍼런스). 낮을수록 물이 진하고 글린트가 도드라진다.
             if (renderer) {
-                renderer.toneMappingExposure = tod === 'day' ? 0.5 : 0.6;
+                renderer.toneMappingExposure = pal.exposure || 0.5;
+            }
+
+            // ── PMREM environment from the Sky (reference does this; the app didn't) ──
+            // Gives the ship's PBR materials the same warm sky reflection so it sits
+            // in the scene instead of looking flatly lit. (THREE.Water has its own
+            // mirror reflection, so this is purely for the ship/other meshes.)
+            try {
+                if (renderer && THREE.PMREMGenerator) {
+                    if (_skyEnvRT) { _skyEnvRT.dispose(); _skyEnvRT = null; }
+                    var _pmrem = new THREE.PMREMGenerator(renderer);
+                    _skyEnvRT = _pmrem.fromScene(skyMesh);
+                    scene.environment = _skyEnvRT.texture;
+                    _pmrem.dispose();
+                }
+            } catch (e) {
+                console.warn('[roll-viewer] PMREM sky environment failed:', e);
             }
         } else {
             scene.background = new THREE.Color(pal.bg);
+            // Night has no Sky shader → drop the (now stale, warm) daytime sky env so the
+            // ship doesn't reflect a sunset at night.
+            if (_skyEnvRT) { _skyEnvRT.dispose(); _skyEnvRT = null; }
+            scene.environment = null;
             // Night — vertex-color sky dome
             var skyGeo = new THREE.SphereGeometry(400, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
             var skyVertCount = skyGeo.attributes.position.count;
@@ -896,22 +1013,22 @@ var RollViewer = (function () {
                         ctx.fillStyle = rg;
                         ctx.fillRect(0, 0, w, h);
                     }
-                    // Soft bottom shadow for depth
-                    var sg = ctx.createLinearGradient(0, h * 0.55, 0, h);
-                    sg.addColorStop(0, 'rgba(0,0,0,0)');
-                    sg.addColorStop(0.5, 'rgba(100,120,150,0.08)');
-                    sg.addColorStop(1, 'rgba(80,100,130,0)');
-                    ctx.fillStyle = sg;
-                    ctx.fillRect(0, 0, w, h);
+                    // (어두운 바닥 그림자 제거 — NormalBlending 에선 이게 구름을 '먹구름'처럼
+                    //  회색으로 깔아버렸다. 흰 구름은 밝게만 유지.)
                 }));
             }
 
-            var cumulusCount = 14;
+            // 구름 끔(0) — HDR THREE.Sky 위에 LDR 흰 구름 스프라이트를 합성하면 밝은 하늘보다
+            // 어두워져 '먹구름 얼룩'이 된다. 참고 예제들처럼 깨끗한 하늘이 더 사실적.
+            // (나중에 HDR-bright 구름으로 제대로 다시 넣을 수 있음)
+            var cumulusCount = 0;
             for (var ci = 0; ci < cumulusCount; ci++) {
                 var ca = (ci / cumulusCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
                 var cd = 120 + Math.random() * 160;
                 var cTex = cumulusTextures[ci % cumulusTextures.length];
-                var cMat = new THREE.SpriteMaterial({ map: cTex, transparent: true, opacity: 0.7 + Math.random() * 0.25, depthWrite: false, blending: THREE.AdditiveBlending });
+                // NormalBlending — 구름은 빛을 더하는(가산) 게 아니라 가리는 것. 가산은
+                // 겹칠수록 밝아져 '빛나는 가짜 덩어리'로 보였다. 일반 알파 합성으로 자연스럽게.
+                var cMat = new THREE.SpriteMaterial({ map: cTex, transparent: true, opacity: 0.7 + Math.random() * 0.25, depthWrite: false, blending: THREE.NormalBlending });
                 var cSp = new THREE.Sprite(cMat);
                 var cHeight = 35 + Math.random() * 30;
                 var cScaleX = 50 + Math.random() * 40;
@@ -1025,41 +1142,46 @@ var RollViewer = (function () {
     var sunMesh = null;
     function buildSun() {
         var THREE = window.THREE;
-        var tod = getTimeOfDay();
-        var isSun = (tod === 'day' || tod === 'dawn' || tod === 'dusk');
+        var tod = getActiveTod();
+        // THREE.Sky already renders the sun through atmospheric scattering. A second
+        // hand-built disc landed slightly off the Sky's sun and read as a weird "extra
+        // sun" at golden hour, so for 골든/황혼 we let the Sky provide it. But at 한낮 the
+        // high sun + clear (low-turbidity) sky barely shows a disc, so there we DO draw a
+        // crisp one — placed exactly at the Sky's sunPosition so it reinforces, not doubles.
+        if (skyMesh && tod !== 'noon') return;
+        var isSun = (tod === 'day' || tod === 'noon' || tod === 'dawn' || tod === 'dusk');
 
-        var size = isSun ? 8 : 5;
-        var color = tod === 'day' ? 0xfffde8 : tod === 'dawn' ? 0xffcc88 : tod === 'dusk' ? 0xff8844 : 0xddeeff;
-        var emissive = color;
-        var intensity = tod === 'night' ? 0.5 : 1.5;
+        // 한낮은 맑은 파란 하늘이라 THREE.Sky 자체 해가 거의 안 보인다 → 크고 또렷한
+        // 순백 디스크 + 큰 광륜으로 확실히 보이게. (다른 시간대는 종전대로 은은하게.)
+        var isNoon = (tod === 'noon');
+        var size = isNoon ? 10 : (isSun ? 6 : 4);
+        var color = isNoon ? 0xffffff : tod === 'day' ? 0xfff2d0 : tod === 'dawn' ? 0xffcc88 : tod === 'dusk' ? 0xff8844 : 0xddeeff;
 
-        var geo = new THREE.SphereGeometry(size, 16, 16);
+        var geo = new THREE.SphereGeometry(size, 24, 24);
         var mat = new THREE.MeshBasicMaterial({
             color: color,
             transparent: true,
-            opacity: tod === 'night' ? 0.6 : 0.9
+            opacity: isNoon ? 1.0 : (tod === 'night' ? 0.6 : 0.75),
+            depthWrite: false
         });
         sunMesh = new THREE.Mesh(geo, mat);
 
-        // Position based on time — sun arc
-        var angle = tod === 'dawn' ? 0.1 : tod === 'day' ? 0.8 : tod === 'dusk' ? 0.15 : 0.5;
-        var sunAngle = tod === 'dusk' ? Math.PI * 0.9 : Math.PI * 0.2;
-        sunMesh.position.set(
-            300 * Math.cos(sunAngle),
-            80 + angle * 200,
-            -200
-        );
-        scene.add(sunMesh);
+        // THREE.Sky 의 해와 같은 방향(sunPosition)에 배치 — 두 해가 어긋나지 않게.
+        if (!sunPosition) return;
+        sunMesh.position.copy(sunPosition).multiplyScalar(400);
+        sunMesh.renderOrder = 1;   // 하늘 위에 확실히 그려지도록
+        (skyGroup || scene).add(sunMesh);
 
-        // Glow sprite around sun/moon
+        // Glow sprite around sun/moon — 한낮은 더 밝고 크게.
         var glowCanvas = document.createElement('canvas');
         glowCanvas.width = 128;
         glowCanvas.height = 128;
         var gCtx = glowCanvas.getContext('2d');
         var glowGrad = gCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
-        var glowColor = isSun ? 'rgba(255,250,200,' : 'rgba(200,220,255,';
-        glowGrad.addColorStop(0, glowColor + '0.4)');
-        glowGrad.addColorStop(0.5, glowColor + '0.1)');
+        var glowColor = isSun ? 'rgba(255,250,225,' : 'rgba(200,220,255,';
+        glowGrad.addColorStop(0, glowColor + (isNoon ? '0.85)' : '0.4)'));
+        glowGrad.addColorStop(0.35, glowColor + (isNoon ? '0.32)' : '0.1)'));
+        glowGrad.addColorStop(0.7, glowColor + (isNoon ? '0.08)' : '0.04)'));
         glowGrad.addColorStop(1, glowColor + '0)');
         gCtx.fillStyle = glowGrad;
         gCtx.fillRect(0, 0, 128, 128);
@@ -1068,13 +1190,16 @@ var RollViewer = (function () {
         var glowMat = new THREE.SpriteMaterial({
             map: glowTex,
             transparent: true,
-            opacity: isSun ? 0.35 : 0.2,
-            depthWrite: false
+            opacity: isNoon ? 0.85 : (isSun ? 0.35 : 0.2),
+            depthWrite: false,
+            blending: isNoon ? THREE.AdditiveBlending : THREE.NormalBlending
         });
         var glowSprite = new THREE.Sprite(glowMat);
-        glowSprite.scale.set(size * 4, size * 4, 1);
+        var glowScale = isNoon ? size * 7 : size * 5;
+        glowSprite.scale.set(glowScale, glowScale, 1);
         glowSprite.position.copy(sunMesh.position);
-        scene.add(glowSprite);
+        glowSprite.renderOrder = 1;
+        (skyGroup || scene).add(glowSprite);
     }
 
     // ── buildWake() — foam particle trail behind ship ──
@@ -1492,6 +1617,76 @@ var RollViewer = (function () {
         }
     }
 
+    // ── Distant vessel silhouettes — populate the horizon for scale & depth ──
+    // Like water.png's scattered objects: a few far ships give the empty sea a sense
+    // of scale and layered distance, with the hero ship still the clear focus. Far
+    // enough that they don't need precise wave sampling — a gentle bob reads fine.
+    // (Bobbing nav buoys riding the wave field are a deferred follow-up.)
+    var distantVessels = [];
+    function buildDistantVessels() {
+        var THREE = window.THREE;
+        // angle (rad), distance, scale — spread around, kept off the camera's front-centre
+        var defs = [
+            { ang: 0.55, dist: 175, scale: 1.3 },
+            { ang: 2.35, dist: 235, scale: 1.8 },
+            { ang: 3.9, dist: 150, scale: 1.0 },
+            { ang: 5.2, dist: 205, scale: 1.45 }
+        ];
+        // Dark, lightly-reflective so it reads as a silhouette against the bright sky
+        // yet still catches the sky env map in every mood.
+        var hullMat = new THREE.MeshStandardMaterial({ color: 0x39434f, roughness: 0.72, metalness: 0.12 });
+        var superMat = new THREE.MeshStandardMaterial({ color: 0x2c343f, roughness: 0.7, metalness: 0.1 });
+
+        for (var i = 0; i < defs.length; i++) {
+            var d = defs[i];
+            var s = d.scale;
+            var g = new THREE.Group();
+
+            // Hull — long low block
+            var hull = new THREE.Mesh(new THREE.BoxGeometry(22 * s, 2.4 * s, 4 * s), hullMat);
+            hull.position.y = 1.0 * s;
+            g.add(hull);
+            // Bow taper — a wedge at the front
+            var bow = new THREE.Mesh(new THREE.BoxGeometry(4 * s, 2.4 * s, 4 * s), hullMat);
+            bow.position.set(12 * s, 1.0 * s, 0);
+            bow.rotation.y = Math.PI / 4;
+            g.add(bow);
+            // Superstructure — block toward the stern
+            var sup = new THREE.Mesh(new THREE.BoxGeometry(5 * s, 4 * s, 3.4 * s), superMat);
+            sup.position.set(-6 * s, 3.6 * s, 0);
+            g.add(sup);
+            // Funnel
+            var fun = new THREE.Mesh(new THREE.BoxGeometry(1.8 * s, 2.6 * s, 2 * s), superMat);
+            fun.position.set(-8.5 * s, 5.4 * s, 0);
+            g.add(fun);
+
+            g.traverse(function (o) { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+
+            var px = Math.cos(d.ang) * d.dist;
+            var pz = Math.sin(d.ang) * d.dist;
+            g.position.set(px, -0.6 * s, pz);
+            g.rotation.y = d.ang + Math.PI / 2 + (i % 2 ? 0.5 : -0.4);   // varied headings
+            scene.add(g);
+
+            distantVessels.push({
+                group: g,
+                baseY: -0.6 * s,
+                scale: s,
+                phase: i * 1.7,
+                bobAmp: 0.18 * s,
+                bobFreq: 0.22 + i * 0.03
+            });
+        }
+    }
+
+    function animateDistantVessels(elapsed) {
+        for (var i = 0; i < distantVessels.length; i++) {
+            var v = distantVessels[i];
+            v.group.position.y = v.baseY + Math.sin(elapsed * v.bobFreq + v.phase) * v.bobAmp;
+            v.group.rotation.z = Math.sin(elapsed * v.bobFreq * 0.8 + v.phase) * 0.015;
+        }
+    }
+
     // ── Turning scenario ──
     function buildTurnScenarioUI(canvasWrap) {
         // 상단 중앙 선회 버튼은 제거됨 — 조작은 우상단 시뮬레이션 패널의 버튼으로 통합.
@@ -1511,6 +1706,20 @@ var RollViewer = (function () {
         var _wv = (weather && weather.waveHeight != null) ? weather.waveHeight : 2.5;
         var _wp = (weather && weather.wavePeriod != null) ? weather.wavePeriod : 8;
         var _sp = (shipSpeed != null) ? shipSpeed : 10;
+        // 타륜(ship's helm) 마크업 — 림 + 8개 스포크 + 8개 손잡이(peg). 손잡이는 cardinal 틱 사이(22.5° 오프셋)에 둔다.
+        var _helmSVG = (function () {
+            var grips = '', spokes = '';
+            for (var i = 0; i < 8; i++) {
+                var a = (i * 45 + 22.5) * Math.PI / 180;
+                var s = Math.sin(a), c = Math.cos(a);
+                spokes += '<line class="rv-helm-spoke" x1="' + (50 + 9 * s).toFixed(1) + '" y1="' + (50 - 9 * c).toFixed(1) +
+                          '" x2="' + (50 + 36 * s).toFixed(1) + '" y2="' + (50 - 36 * c).toFixed(1) + '"/>';
+                grips += '<line class="rv-helm-grip" x1="' + (50 + 37 * s).toFixed(1) + '" y1="' + (50 - 37 * c).toFixed(1) +
+                         '" x2="' + (50 + 45 * s).toFixed(1) + '" y2="' + (50 - 45 * c).toFixed(1) + '"/>';
+            }
+            return '<g class="rv-helm-wheel" id="rv-helm-wheel">' +
+                   '<circle class="rv-helm-rim" cx="50" cy="50" r="38"/>' + spokes + grips + '</g>';
+        })();
         // 4-컬럼 오퍼레이터 레이아웃 — 하단 풀폭 바에 가로로 펼친다.
         // 모든 컨트롤 id는 유지되므로 아래 바인딩 코드는 그대로 동작한다.
         scenarioOverlay.innerHTML =
@@ -1519,48 +1728,102 @@ var RollViewer = (function () {
             '<button type="button" class="rv-scenario-collapse" id="rv-scenario-collapse" title="접기/펼치기"><i class="fa-solid fa-chevron-up"></i></button>' +
             '</div>' +
             '<div class="rv-scenario-body" id="rv-scenario-body">' +
+            '<div class="rv-sim-cols">' +
 
             // ── 1. 해상 상태 (sea state — drives the roll) ──
-            '<div class="rv-sim-group">' +
-            '<div class="rv-sim-eyebrow">해상 상태<span class="rv-sea-state" id="rv-sea-state" data-level="safe">—</span></div>' +
+            '<div class="rv-sim-group rv-sim-group-sea">' +
+            '<div class="rv-sim-eyebrow"><i class="fa-solid fa-water rv-eyebrow-ic"></i>해상<span class="rv-sea-state" id="rv-sea-state" data-level="safe">—</span></div>' +
+            '<div class="rv-sim-rows">' +
             '<div class="rv-sim-row"><label>파고</label><input type="range" id="rv-sim-wave" min="0.5" max="8" step="0.1" data-warn="5" data-danger="6.5" value="' + _wv + '"><span class="rv-sim-val" id="rv-sim-wave-val">' + _wv.toFixed(1) + ' m</span></div>' +
             '<div class="rv-sim-row"><label>파주기</label><input type="range" id="rv-sim-period" min="4" max="16" step="0.5" value="' + _wp + '"><span class="rv-sim-val" id="rv-sim-period-val">' + _wp.toFixed(1) + ' s</span></div>' +
             '</div>' +
+            '</div>' +
 
-            // ── 2. 선박·침로 (vessel + heading) ──
-            '<div class="rv-sim-group">' +
-            '<div class="rv-sim-eyebrow">선박·침로</div>' +
+            // ── 1b. 하늘 (visual mood — golden default, click to apply) ──
+            '<div class="rv-sim-group rv-sim-group-sky">' +
+            '<div class="rv-sim-eyebrow"><i class="fa-solid fa-cloud-sun rv-eyebrow-ic"></i>하늘</div>' +
+            '<div class="rv-scn-seg rv-sky-seg" role="group" aria-label="하늘 분위기">' +
+            '<button type="button" class="rv-scn-btn" data-sky="day">골든</button>' +
+            '<button type="button" class="rv-scn-btn active" data-sky="noon">한낮</button>' +
+            '<button type="button" class="rv-scn-btn" data-sky="dusk">황혼</button>' +
+            '<button type="button" class="rv-scn-btn" data-sky="night">야간</button>' +
+            '</div>' +
+            '</div>' +
+
+            // ── 2. 선박 (속도 + 선수 조우각 컴퍼스 다이얼) ──
+            '<div class="rv-sim-group rv-sim-group-vessel">' +
+            '<div class="rv-sim-eyebrow"><i class="fa-solid fa-ship rv-eyebrow-ic"></i>선박</div>' +
+            '<div class="rv-sim-vessel">' +
+            '<div class="rv-sim-vessel-left">' +
+            '<div class="rv-sim-rows">' +
             '<div class="rv-sim-row"><label>속도</label><input type="range" id="rv-sim-speed" min="0" max="25" step="0.5" value="' + _sp + '"><span class="rv-sim-val" id="rv-sim-speed-val">' + _sp.toFixed(1) + ' kt</span></div>' +
-            '<div class="rv-sim-row"><label>방향</label><div class="rv-sim-dir"><button type="button" class="rv-sim-dir-btn" id="rv-sim-dir-port">좌현</button><button type="button" class="rv-sim-dir-btn" id="rv-sim-dir-stbd">우현</button></div></div>' +
+            '</div>' +
+            // 롤 강도 게이지 — 우측 컴퍼스가 아니라 좌측(속도) 옆에 둔다
+            '<div class="rv-roll-gauge" title="조우각에 따른 예상 횡요 강도">' +
+            '<span class="rv-roll-gauge-label">롤 강도</span>' +
+            '<span class="rv-roll-gauge-track"><span class="rv-roll-gauge-fill" id="rv-roll-intensity"></span></span>' +
+            '<span class="rv-roll-gauge-val" id="rv-roll-intensity-val">약함</span>' +
+            '</div>' +
+            '</div>' +
+            '<div class="rv-compass-wrap">' +
+            '<div class="rv-compass" id="rv-compass" tabindex="0" role="slider" aria-label="선수 조우각" aria-valuemin="0" aria-valuemax="359" aria-valuenow="0">' +
+            '<input type="hidden" id="rv-sim-heading" value="0">' +
+            '<svg viewBox="0 0 100 100" class="rv-compass-svg" aria-hidden="true">' +
+            '<circle class="rv-compass-ring" cx="50" cy="50" r="38"/>' +
+            _helmSVG +
+            '<g class="rv-compass-ticks">' +
+            '<line x1="50" y1="12" x2="50" y2="18"/>' +
+            '<line x1="50" y1="82" x2="50" y2="88"/>' +
+            '<line class="rv-compass-tick-beam" x1="82" y1="50" x2="88" y2="50"/>' +
+            '<line class="rv-compass-tick-beam" x1="12" y1="50" x2="18" y2="50"/>' +
+            '</g>' +
+            '<g class="rv-compass-wave"><line x1="50" y1="5" x2="50" y2="16"/><path d="M45 13 L50 20 L55 13"/></g>' +
+            '<g class="rv-compass-needle" id="rv-compass-needle">' +
+            '<path class="rv-compass-bow" d="M50 20 L44 51 L56 51 Z"/>' +
+            '<path class="rv-compass-stern" d="M44 51 L56 51 L50 62 Z"/>' +
+            '</g>' +
+            '<circle class="rv-compass-hub" cx="50" cy="50" r="3.5"/>' +
+            '</svg>' +
+            '</div>' +
+            '<div class="rv-compass-cap"><span class="rv-compass-tag">선수</span><span class="rv-sim-val" id="rv-sim-heading-val">정면파 0°</span></div>' +
+            '</div>' +   // /rv-compass-wrap
+            '</div>' +   // /rv-sim-vessel
+            '</div>' +   // /rv-sim-group-vessel
+
+            // ── 3. 시나리오 (직진 기본 세그먼트 + 타각) ──
+            '<div class="rv-sim-group rv-sim-group-scenario">' +
+            '<div class="rv-sim-eyebrow"><i class="fa-solid fa-arrows-turn-right rv-eyebrow-ic"></i>시나리오</div>' +
+            '<div class="rv-scn-seg" role="group" aria-label="시나리오 선택">' +
+            '<button type="button" class="rv-scn-btn active" id="rv-scn-straight" data-scn="straight">직진</button>' +
+            '<button type="button" class="rv-scn-btn" id="rv-scn-port" data-scn="port">좌현</button>' +
+            '<button type="button" class="rv-scn-btn" id="rv-scn-stbd" data-scn="stbd">우현</button>' +
+            '<button type="button" class="rv-scn-btn" id="rv-scn-capsize" data-scn="capsize">전복</button>' +
+            '</div>' +
+            '<div class="rv-sim-rows">' +
+            '<div class="rv-sim-row rv-sim-row-rudder rv-disabled" id="rv-sim-rudder-row"><label>타각</label><input type="range" id="rv-sim-rudder" min="5" max="35" step="1" data-warn="25" data-danger="32" value="35" disabled><span class="rv-sim-val" id="rv-sim-rudder-val">35°</span></div>' +
+            '</div>' +
             '</div>' +
 
-            // ── 3. 조타 (rudder input only) ──
-            '<div class="rv-sim-group">' +
-            '<div class="rv-sim-eyebrow">조타</div>' +
-            '<div class="rv-sim-row"><label>타각</label><input type="range" id="rv-sim-rudder" min="5" max="35" step="1" data-warn="25" data-danger="32" value="35"><span class="rv-sim-val" id="rv-sim-rudder-val">35°</span></div>' +
-            '</div>' +
-
-            // ── 4. 시나리오 (조작 + 실행 상태) — 상태는 조작 입력이 아니라 출력이라 이 칸에 둔다 ──
-            '<div class="rv-sim-group rv-sim-group-actions">' +
-            '<div class="rv-sim-eyebrow">시나리오</div>' +
-            '<div class="rv-scenario-actions">' +
-            '<button type="button" class="rv-action-btn rv-action-primary" id="rv-act-turn">선회 시작</button>' +
-            '<div class="rv-sim-utilrow">' +
-            '<button type="button" class="rv-action-btn" id="rv-act-capsize">전복</button>' +
+            // ── 4. 실행 (시나리오에 따라 라벨 변경) ──
+            '<div class="rv-sim-actions">' +
+            '<div class="rv-sim-eyebrow"><i class="fa-solid fa-play rv-eyebrow-ic"></i>실행</div>' +
+            '<div class="rv-sim-actions-btns">' +
+            '<button type="button" class="rv-action-btn rv-action-primary" id="rv-act-run" disabled>직진 운항</button>' +
             '<button type="button" class="rv-action-btn" id="rv-act-clear">초기화</button>' +
             '</div>' +
             '</div>' +
-            '<div class="rv-scenario-turn" id="rv-hud-turn-section" hidden>' +
-            '<div class="rv-scenario-turn-row">' +
-            '<div class="rv-scenario-turn-item"><span class="rv-scenario-turn-label">상태</span><span class="rv-scenario-turn-val" id="rv-turn-phase">직진</span></div>' +
-            '<div class="rv-scenario-turn-item"><span class="rv-scenario-turn-label">침로</span><span class="rv-scenario-turn-val" id="rv-turn-heading">000°</span></div>' +
-            '<div class="rv-scenario-turn-item"><span class="rv-scenario-turn-label">타각</span><span class="rv-scenario-turn-val" id="rv-turn-rudder">0°</span></div>' +
-            '</div>' +
-            '<div class="rv-turn-progress"><div class="rv-turn-progress-fill" id="rv-turn-progress-fill"></div></div>' +
-            '</div>' +
+
+            '</div>' +   // ── /.rv-sim-cols ──
+
+            // ── 진행 상황 — 풀폭 얇은 띠(선회 중에만). 폭을 안 바꿔 덱 가운데가 안 밀린다. ──
+            '<div class="rv-sim-progress" id="rv-sim-progress" hidden>' +
+            '<span class="rv-sim-prog-item"><span class="rv-sim-prog-label">상태</span><span class="rv-scenario-turn-val" id="rv-turn-phase">직진</span></span>' +
+            '<span class="rv-sim-prog-item"><span class="rv-sim-prog-label">침로</span><span class="rv-scenario-turn-val" id="rv-turn-heading">000°</span></span>' +
+            '<span class="rv-sim-prog-item"><span class="rv-sim-prog-label">타각</span><span class="rv-scenario-turn-val" id="rv-turn-rudder">0°</span></span>' +
+            '<span class="rv-turn-progress"><span class="rv-turn-progress-fill" id="rv-turn-progress-fill"></span></span>' +
             '</div>' +
 
-            '</div>';
+            '</div>';   // ── /.rv-scenario-body ──
         canvasWrap.appendChild(scenarioOverlay);
 
         // 접기 토글
@@ -1577,6 +1840,23 @@ var RollViewer = (function () {
                         icon.className = 'fa-solid fa-chevron-up';
                     }
                 }
+            });
+        }
+
+        // 하늘 분위기 세그먼트 — 클릭 즉시 setSkyMood 적용 (clock 무시, 기본 골든)
+        var skySeg = scenarioOverlay.querySelector('.rv-sky-seg');
+        if (skySeg) {
+            // reflect the active mood in case a prior session left a non-default one
+            skySeg.querySelectorAll('.rv-scn-btn').forEach(function (b) {
+                b.classList.toggle('active', b.getAttribute('data-sky') === _activeMood);
+            });
+            skySeg.addEventListener('click', function (e) {
+                var btn = e.target.closest('.rv-scn-btn');
+                if (!btn) return;
+                var mood = btn.getAttribute('data-sky');
+                if (!mood) return;
+                skySeg.querySelectorAll('.rv-scn-btn').forEach(function (b) { b.classList.toggle('active', b === btn); });
+                setSkyMood(mood);
             });
         }
 
@@ -1620,17 +1900,105 @@ var RollViewer = (function () {
         _bindSimSlider('rv-sim-speed', 'rv-sim-speed-val', function (v) { return v.toFixed(1) + ' kt'; }, function (v) { setScenarioOverride({ shipSpeed: v }); });
         _bindSimSlider('rv-sim-rudder', 'rv-sim-rudder-val', function (v) { return v.toFixed(0) + '°'; }, function (v) { _turnMaxRudder = v; });
 
-        // 선회 방향 토글 (전역 turnDirection 직접 설정 → 진행 중 선회에도 반영)
-        var dirPort = document.getElementById('rv-sim-dir-port');
-        var dirStbd = document.getElementById('rv-sim-dir-stbd');
-        function _setSimDir(d) {
-            turnDirection = d;
-            if (dirPort) dirPort.classList.toggle('active', d === -1);
-            if (dirStbd) dirStbd.classList.toggle('active', d === 1);
+        // 선수방위 — 파향 대비 조우각으로 라벨링(정면/옆/뒷파). baseHeading이 롤 크기를 좌우한다.
+        function _encLabel(h) {
+            var wd = (weather && weather.waveDirection) || 0;
+            var rel = (((wd - h) % 360) + 360) % 360;       // 0–360
+            var off = rel > 180 ? 360 - rel : rel;          // 0(정면)–180(뒷) off-bow
+            var ang = Math.round(off);
+            if (off < 35) return '정면파 ' + ang + '°';
+            if (off > 145) return '뒷파 ' + ang + '°';
+            if (off >= 55 && off <= 125) return '옆파 ' + ang + '°';
+            return '사파 ' + ang + '°';
         }
-        if (dirPort) dirPort.addEventListener('click', function () { _setSimDir(-1); });
-        if (dirStbd) dirStbd.addEventListener('click', function () { _setSimDir(1); });
-        _setSimDir(1);
+        // ── 선수 컴퍼스 다이얼 — 조우각(파향 대비)을 회전으로 설정 ──
+        // 화면각 θ(상=0, 시계방향)을 끌면 baseHeading=(파향-θ). θ=rel 이라 _encLabel과 정합:
+        // θ=0 정면파 · θ=90 옆파(우현) · θ=180 뒷파 · θ=270 옆파(좌현).
+        var compassEl = document.getElementById('rv-compass');
+        var needleEl = document.getElementById('rv-compass-needle');
+        var helmEl = document.getElementById('rv-helm-wheel');
+        var headingInput = document.getElementById('rv-sim-heading');
+        var headingValEl = document.getElementById('rv-sim-heading-val');
+        var intensityFill = document.getElementById('rv-roll-intensity');
+        var intensityValEl = document.getElementById('rv-roll-intensity-val');
+        var _needleAngle = 0;   // 연속 니들 각(도) — 0/360 경계에서 한 바퀴 도는 것 방지(최단 경로 추적)
+        function _compassSet(deg) {
+            deg = ((Math.round(deg) % 360) + 360) % 360;
+            baseHeading = deg;
+            if (headingInput) headingInput.value = deg;
+            if (compassEl) compassEl.setAttribute('aria-valuenow', deg);
+            var wd = (weather && weather.waveDirection) || 0;
+            var theta = (((wd - deg) % 360) + 360) % 360;   // 화면 니들 각(0~360)
+            // 최단 경로로 연속 각 갱신 → CSS 전환이 경계에서 빙 돌지 않고 매끄럽게 미끄러진다.
+            var d = theta - (((_needleAngle % 360) + 360) % 360);
+            if (d > 180) d -= 360; else if (d < -180) d += 360;
+            _needleAngle += d;
+            if (needleEl) needleEl.setAttribute('transform', 'rotate(' + _needleAngle + ' 50 50)');
+            // 타륜도 선수와 함께 회전 → 손잡이가 돌아 '키를 돌린' 듯한 피드백
+            if (helmEl) helmEl.setAttribute('transform', 'rotate(' + _needleAngle + ' 50 50)');
+            if (headingValEl) headingValEl.textContent = _encLabel(deg);
+            // 예상 롤 강도 — 4120 라인의 롤 물리와 동일한 beamFactor(0.2~1.0). 옆파일수록 강함.
+            var beamFactor = 0.2 + 0.8 * Math.abs(Math.sin(theta * Math.PI / 180));
+            if (intensityFill) {
+                intensityFill.style.width = Math.round(beamFactor * 100) + '%';
+                var lvl = beamFactor >= 0.82 ? 'danger' : beamFactor >= 0.5 ? 'caution' : 'safe';
+                intensityFill.dataset.level = lvl;
+                if (intensityValEl) {
+                    intensityValEl.textContent = lvl === 'danger' ? '강함' : lvl === 'caution' ? '보통' : '약함';
+                    intensityValEl.dataset.level = lvl;
+                }
+            }
+        }
+        // ── 타륜(helm) 조작 — 절대각 점프가 아니라 '잡고 돌리는' 상대 회전 ──
+        // 포인터의 각도 변화량(Δ)만큼 선수를 돌린다. 잡은 손잡이가 포인터를 따라와 실제 키를 돌리는 느낌.
+        var _lastPtrAngle = null;
+        var _helmTurned = false;   // 이번 드래그에서 실제 회전을 시작했는지(선미 뷰 1회 전환용)
+        function _ptrAngle(ev) {
+            var r = compassEl.getBoundingClientRect();
+            var px = ev.clientX - (r.left + r.width / 2);
+            var py = ev.clientY - (r.top + r.height / 2);
+            return { ang: Math.atan2(px, -py) * 180 / Math.PI, rad: Math.sqrt(px * px + py * py), w: r.width };
+        }
+        function _helmDrag(ev) {
+            if (!compassEl) return;
+            var a = _ptrAngle(ev);
+            // 중심 근처 데드존 — 미세 이동에도 각도가 휙 튀므로 기준만 갱신하고 회전은 보류.
+            if (a.rad < a.w * 0.12) { _lastPtrAngle = a.ang; return; }
+            if (_lastPtrAngle === null) { _lastPtrAngle = a.ang; return; }
+            var d = a.ang - _lastPtrAngle;
+            if (d > 180) d -= 360; else if (d < -180) d += 360;   // 최단 경로(한 바퀴 넘김 처리)
+            _lastPtrAngle = a.ang;
+            if (Math.abs(d) < 0.01) return;
+            // 실제로 돌리기 시작하면 카메라를 선미 뒤로 → 조타석에서 직접 조종하는 시점
+            if (!_helmTurned) { _helmTurned = true; animateCameraToPreset({ x: -32, y: 13, z: 0 }); }
+            _compassSet(baseHeading - d);   // 포인터가 시계방향이면 선수도 따라 돈다
+        }
+        if (compassEl) {
+            // Pointer capture → 드래그 중 포인터가 벗어나도 추적, window 리스너 누수 없음.
+            compassEl.addEventListener('pointerdown', function (ev) {
+                ev.preventDefault();
+                try { compassEl.setPointerCapture(ev.pointerId); } catch (e) {}
+                _lastPtrAngle = _ptrAngle(ev).ang;   // 잡은 지점 기준 — 점프 없이 여기서부터 회전
+                _helmTurned = false;
+                compassEl.classList.add('rv-compass-turning');
+            });
+            compassEl.addEventListener('pointermove', function (ev) {
+                if (compassEl.hasPointerCapture && compassEl.hasPointerCapture(ev.pointerId)) _helmDrag(ev);
+            });
+            var _helmRelease = function (ev) {
+                _lastPtrAngle = null;
+                compassEl.classList.remove('rv-compass-turning');
+                try { compassEl.releasePointerCapture(ev.pointerId); } catch (e) {}
+            };
+            compassEl.addEventListener('pointerup', _helmRelease);
+            compassEl.addEventListener('pointercancel', _helmRelease);
+            compassEl.addEventListener('keydown', function (ev) {
+                if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') { _compassSet(baseHeading - 5); ev.preventDefault(); }
+                else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') { _compassSet(baseHeading + 5); ev.preventDefault(); }
+            });
+        }
+        // 초기 = 정면파(조우각 0). baseHeading=파향이라야 encounter=0 → 바우가 위쪽 wave 마커를 정면으로 본다.
+        _compassSet((weather && weather.waveDirection) || 0);
 
         // 슬라이더 값 복원 헬퍼
         function _resetSim(id, valId, val, fmt) {
@@ -1640,13 +2008,65 @@ var RollViewer = (function () {
             if (vEl) vEl.textContent = fmt(val);
         }
 
-        // 액션 버튼 (선회 시작/정지 · 전복 · 초기화)
-        var actTurn = document.getElementById('rv-act-turn');
-        var actCapsize = document.getElementById('rv-act-capsize');
+        // ── 시나리오 세그먼트 (직진 기본) + 실행 ──
+        // simScenario = 의도(직진/좌현/우현/전복). 실행 버튼이 실제 시작/정지를 담당.
+        var simScenario = 'straight';
+        var scnBtns = {
+            straight: document.getElementById('rv-scn-straight'),
+            port: document.getElementById('rv-scn-port'),
+            stbd: document.getElementById('rv-scn-stbd'),
+            capsize: document.getElementById('rv-scn-capsize')
+        };
+        var runBtn = document.getElementById('rv-act-run');
+        var rudderRow = document.getElementById('rv-sim-rudder-row');
+        var rudderInput = document.getElementById('rv-sim-rudder');
+        function _syncSimUI() {
+            Object.keys(scnBtns).forEach(function (k) {
+                if (scnBtns[k]) scnBtns[k].classList.toggle('active', k === simScenario);
+            });
+            var rudderOn = (simScenario === 'port' || simScenario === 'stbd');
+            if (rudderRow) rudderRow.classList.toggle('rv-disabled', !rudderOn);
+            if (rudderInput) rudderInput.disabled = !rudderOn;
+            if (!runBtn) return;
+            runBtn.classList.remove('active');
+            if (simScenario === 'straight') {
+                runBtn.textContent = '직진 운항';
+                runBtn.disabled = true;
+            } else if (simScenario === 'capsize') {
+                runBtn.disabled = false;
+                if (_capsize) { runBtn.textContent = '정지'; runBtn.classList.add('active'); }
+                else runBtn.textContent = '전복 시작';
+            } else {   // port | stbd
+                runBtn.disabled = false;
+                if (turnScenarioActive) { runBtn.textContent = '선회 정지'; runBtn.classList.add('active'); }
+                else runBtn.textContent = '선회 시작';
+            }
+        }
+        function _selectScenario(scn) {
+            simScenario = scn;
+            // 좌현↔우현 전환은 선회 진행 중이면 라이브 반영(정지 안 함).
+            if (scn === 'straight') { setTurnScenario(false); clearCapsize(); }
+            else if (scn === 'port') { turnDirection = -1; clearCapsize(); }
+            else if (scn === 'stbd') { turnDirection = 1; clearCapsize(); }
+            else if (scn === 'capsize') { setTurnScenario(false); }
+            _syncSimUI();
+        }
+        Object.keys(scnBtns).forEach(function (k) {
+            if (scnBtns[k]) scnBtns[k].addEventListener('click', function () { _selectScenario(k); });
+        });
+        if (runBtn) runBtn.addEventListener('click', function () {
+            if (simScenario === 'capsize') {
+                if (_capsize) { clearCapsize(); simScenario = 'straight'; }
+                else triggerCapsize(turnDirection || 1, 0);
+            } else if (simScenario === 'port' || simScenario === 'stbd') {
+                if (turnScenarioActive) { setTurnScenario(false); simScenario = 'straight'; }
+                else setTurnScenario(true, turnDirection);
+            }
+            _syncSimUI();
+        });
+
+        // 초기화 = 완전 복귀: 선회 정지 + 전복 취소 + 날씨/속도 해제 + 슬라이더·선수·시나리오 원복
         var actClear = document.getElementById('rv-act-clear');
-        if (actTurn) actTurn.addEventListener('click', function () { setTurnScenario(!turnScenarioActive, turnDirection); });
-        if (actCapsize) actCapsize.addEventListener('click', function () { triggerCapsize(turnDirection, 0); });
-        // 초기화 = 완전 복귀: 선회 정지 + 전복 취소 + 날씨/속도 해제 + 슬라이더 원복
         if (actClear) actClear.addEventListener('click', function () {
             setTurnScenario(false);
             clearCapsize();
@@ -1656,11 +2076,17 @@ var RollViewer = (function () {
             _resetSim('rv-sim-period', 'rv-sim-period-val', bw.wavePeriod != null ? bw.wavePeriod : 8, function (v) { return parseFloat(v).toFixed(1) + ' s'; });
             _resetSim('rv-sim-speed', 'rv-sim-speed-val', _baseShipSpeed != null ? _baseShipSpeed : 10, function (v) { return parseFloat(v).toFixed(1) + ' kt'; });
             _resetSim('rv-sim-rudder', 'rv-sim-rudder-val', 35, function (v) { return parseFloat(v).toFixed(0) + '°'; });
+            _compassSet((weather && weather.waveDirection) || 0);   // 정면파로 복귀
             _turnMaxRudder = 35;
+            turnDirection = 1;
+            simScenario = 'straight';
+            _syncSimUI();
         });
 
-        // Keep turnHudEl reference for toggle logic (still uses id="rv-hud-turn-section")
-        turnHudEl = document.getElementById('rv-hud-turn-section');
+        _syncSimUI();   // 초기 상태 반영(직진)
+
+        // 진행 상황 띠(선회 중에만) 토글 참조
+        turnHudEl = document.getElementById('rv-sim-progress');
     }
 
     // ── Title bar (top): back · ship identity · view-mode + control toggles ──
@@ -1692,37 +2118,32 @@ var RollViewer = (function () {
         return bar;
     }
 
-    // ── Bottom instrument console — three labelled modules in a centred rack ──
-    function buildConsole() {
-        var consoleEl = document.createElement('div');
-        consoleEl.className = 'rv-console';
-        consoleEl.innerHTML =
-            '<div class="rv-console-rack">' +
-                // module 1 — clinometer gauge
-                '<section class="rv-mod rv-mod-clino">' +
-                    '<span class="rv-mod-eyebrow">횡경사계</span>' +
-                    '<div class="rv-clino-wrap">' + _clinoSvg() + '</div>' +
-                '</section>' +
-                // module 2 — heel readouts
-                '<section class="rv-mod rv-mod-heel">' +
-                    '<span class="rv-mod-eyebrow">횡요각</span>' +
-                    '<div class="rv-clino-readout">' +
-                        '<div class="rv-clino-cell rv-clino-cell-real"><span class="rv-clino-tag">실측</span><span class="rv-clino-val" id="rv-real-roll">0.0°</span></div>' +
-                        '<div class="rv-clino-gap"><span class="rv-clino-gap-tag">오차</span><span class="rv-clino-gap-val rv-roll-safe" id="rv-clino-gap">0.0°</span></div>' +
-                        '<div class="rv-clino-cell rv-clino-cell-pred"><span class="rv-clino-tag">예측</span><span class="rv-clino-val" id="rv-pred-roll">0.0°</span></div>' +
-                    '</div>' +
-                '</section>' +
-                // module 3 — prediction accuracy metrics
-                '<section class="rv-mod rv-mod-error">' +
-                    '<span class="rv-mod-eyebrow">예측 정확도</span>' +
-                    '<div class="rv-console-metrics">' +
-                        '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">RMSE</span><span class="rv-pred-hud-val" id="rv-rmse">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-rmse-bar"></i></span></div>' +
-                        '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">Δ Roll</span><span class="rv-pred-hud-val" id="rv-d-roll">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-d-roll-bar"></i></span></div>' +
-                        '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">Δ Pitch</span><span class="rv-pred-hud-val" id="rv-d-pitch">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-d-pitch-bar"></i></span></div>' +
-                    '</div>' +
-                '</section>' +
+    // ── 횡요각 HUD — 무대 좌상단 카드 (하단 콘솔 바를 대체) ──
+    // 범례(실측/예측 점) + 횡요각 수치(실측/오차/예측) + 예측 정확도(RMSE/Δ)를 한 카드로 묶는다.
+    // 기존 id를 그대로 사용하므로 _setRollValue·updateMetronomes·_setErrBar 갱신이 무수정으로 동작.
+    function buildRollHud() {
+        var hud = document.createElement('div');
+        hud.className = 'rv-hud';
+        hud.id = 'rv-hud';
+        hud.innerHTML =
+            '<div class="rv-hud-sec rv-hud-sec-primary">' +
+                '<div class="rv-hud-eyebrow">횡요각 오차</div>' +
+                // 히어로: 실측−예측 차이(이 카드의 결론). 크게 + 심각도 색.
+                '<div class="rv-hud-hero"><span class="rv-clino-gap-val rv-roll-safe" id="rv-clino-gap">0.0°</span></div>' +
+                // 보조 쌍: 실측 vs 예측 (작게, 한 줄 비교)
+                '<div class="rv-hud-pair">' +
+                    '<span class="rv-hud-pair-item"><span class="rv-hud-dot rv-hud-dot-real"></span><span class="rv-hud-tag">실측</span><span class="rv-clino-val" id="rv-real-roll">0.0°</span></span>' +
+                    '<span class="rv-hud-pair-item"><span class="rv-hud-dot rv-hud-dot-pred"></span><span class="rv-hud-tag">예측</span><span class="rv-clino-val" id="rv-pred-roll">0.0°</span></span>' +
+                '</div>' +
+            '</div>' +
+            '<div class="rv-hud-sec rv-hud-sec-acc">' +
+                '<div class="rv-hud-eyebrow">예측 정확도</div>' +
+                '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">RMSE</span><span class="rv-pred-hud-val" id="rv-rmse">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-rmse-bar"></i></span></div>' +
+                '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">Δ Roll</span><span class="rv-pred-hud-val" id="rv-d-roll">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-d-roll-bar"></i></span></div>' +
+                '<div class="rv-pred-hud-row"><span class="rv-pred-hud-label">Δ Pitch</span><span class="rv-pred-hud-val" id="rv-d-pitch">0.0°</span><span class="rv-pred-hud-bar"><i class="rv-pred-hud-bar-fill" id="rv-d-pitch-bar"></i></span></div>' +
             '</div>';
-        return consoleEl;
+        // 시나리오 진행 상황은 좌상단 HUD가 아니라 하단 액션 바 옆에 둔다(buildSimPanel의 .rv-sim-progress).
+        return hud;
     }
 
     // ── Camera presets (float in the 3D stage) ──
@@ -1768,9 +2189,15 @@ var RollViewer = (function () {
     function animateCameraToPreset(targetPos) {
         if (!camera || cameraAnimating) return;
         var elapsed = (performance.now() - clockStart) / 1000;
+        // 프리셋 좌표는 선체-로컬(+x=선수, +z=우현)이다. 현재 선수방위(heading)로 회전시켜
+        // 월드 좌표로 옮겨야 배가 돌아가 있어도 '선미' 버튼이 진짜 선미 뒤를 잡는다.
+        var _h = (baseHeading + (turnScenarioActive ? turnHeading : 0)) * Math.PI / 180;
+        var _cos = Math.cos(_h), _sin = Math.sin(_h);
+        var _wx = _cos * targetPos.x + _sin * targetPos.z;
+        var _wz = -_sin * targetPos.x + _cos * targetPos.z;
         camPresetAnim = {
             fromPos: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
-            toPos: { x: shipWorldPos.x + targetPos.x, y: targetPos.y, z: shipWorldPos.z + targetPos.z },
+            toPos: { x: shipWorldPos.x + _wx, y: targetPos.y, z: shipWorldPos.z + _wz },
             fromTarget: controls ? { x: controls.target.x, y: controls.target.y, z: controls.target.z } : { x: 0, y: 2, z: 0 },
             toTarget: { x: shipWorldPos.x, y: 2, z: shipWorldPos.z },
             start: elapsed,
@@ -1808,6 +2235,7 @@ var RollViewer = (function () {
 
         if (t >= 1) {
             camPresetAnim = null;
+            _camHeadingSynced = false;   // 추종 재개 시 현재 침로로 스냅(오비트 점프 방지)
             if (controls) controls.update();
         }
     }
@@ -1821,6 +2249,10 @@ var RollViewer = (function () {
     function setTurnScenario(active, direction) {
         // direction: 1 = locked starboard, -1 = locked port, 0/undefined = alternate each cycle
         turnScenarioActive = !!active;
+        // 선회 중에만 나타나는 진행(재생) 바가 짧아진 패널 안에서 컨트롤과 겹치지 않도록,
+        // 선회 동안에는 덱을 살짝 키워 재생 바에 깨끗한 자리를 준다.
+        var _deckPanel = document.getElementById('rv-canvas-hud-scenario');
+        if (_deckPanel) _deckPanel.classList.toggle('rv-deck-turning', turnScenarioActive);
         if (turnScenarioActive) {
             // Skip the 8-second 'straight' lead-in — when a user explicitly asks for
             // a turn, they expect to see the ship turning immediately.
@@ -1849,6 +2281,7 @@ var RollViewer = (function () {
             if (actTurnOff) { actTurnOff.textContent = '선회 시작'; actTurnOff.classList.remove('active'); }
             turnHeading = 0;
             camFollowHeading = 0;
+            _camHeadingSynced = false;   // 침로가 baseHeading로 복귀 → 카메라 재동기화(점프 방지)
         }
         // Refresh top-right scenario panel — it shows turn details when active
         _refreshWeatherDisplay();
@@ -1933,7 +2366,12 @@ var RollViewer = (function () {
             phaseEl.textContent = phaseName;
             phaseEl.className = 'rv-scenario-turn-val' + (turnPhase === 'turning' ? ' rv-turn-danger' : turnPhase !== 'straight' ? ' rv-turn-active' : '');
         }
-        if (headingEl) headingEl.textContent = ('00' + Math.round(turnHeading)).slice(-3) + '°';
+        if (headingEl) {
+            // 표시용 컴퍼스 침로 — 회전 로직(turnHeading=rotation.y)은 그대로 두고 숫자만 보정.
+            // 정지 시 baseHeading, 우현(starboard) 선회 시 증가, 좌현 시 감소하도록 부호 반전.
+            var _compass = (Math.round((baseHeading - turnHeading) % 360 + 360) % 360);
+            headingEl.textContent = ('00' + _compass).slice(-3) + '°';
+        }
         if (rudderEl) rudderEl.textContent = (rudder > 0.5 ? (dir > 0 ? 'S' : 'P') + Math.round(rudder) + '°' : '0°');
         if (progressFill) progressFill.style.width = ((cycleTime / TURN_TOTAL) * 100) + '%';
 
@@ -2388,7 +2826,7 @@ var RollViewer = (function () {
         cv.width = w; cv.height = h;
         var ctx = cv.getContext('2d');
         var fs = Math.min(h * 0.68, (w * 0.92) / Math.max(text.length, 1) * 1.7);
-        ctx.font = '700 ' + fs.toFixed(0) + "px 'Wanted Sans Variable', 'Pretendard Variable', 'Inter', sans-serif";
+        ctx.font = '700 ' + fs.toFixed(0) + "px 'Rajdhani', 'S-CoreDream-6Bold', 'Pretendard Variable', sans-serif";
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = color;
@@ -2403,7 +2841,7 @@ var RollViewer = (function () {
         var cv = document.createElement('canvas');
         cv.width = 96; cv.height = 256;
         var ctx = cv.getContext('2d');
-        ctx.font = "700 38px 'JetBrains Mono', monospace";
+        ctx.font = "700 38px 'B612 Mono', 'JetBrains Mono', 'Pretendard Variable', monospace";
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = color;
@@ -2719,7 +3157,7 @@ var RollViewer = (function () {
             cv.width = 128; cv.height = 128;
             var cx = cv.getContext('2d');
             cx.fillStyle = c.color;
-            cx.font = "600 88px 'Wanted Sans Variable', 'Pretendard Variable', 'Inter', sans-serif";
+            cx.font = "600 88px 'Rajdhani', 'S-CoreDream-6Bold', 'Pretendard Variable', sans-serif";
             cx.textAlign = 'center';
             cx.textBaseline = 'middle';
             cx.fillText(c.label, 64, 68);
@@ -2736,7 +3174,7 @@ var RollViewer = (function () {
         canvas.width = 128; canvas.height = 32;
         var ctx = canvas.getContext('2d');
         ctx.fillStyle = '#2f6fed';
-        ctx.font = "700 20px 'Wanted Sans Variable', 'Pretendard Variable', 'Inter', sans-serif";
+        ctx.font = "700 20px 'Rajdhani', 'S-CoreDream-6Bold', 'Pretendard Variable', sans-serif";
         ctx.textAlign = 'center';
         ctx.fillText('WAVE ' + Math.round(weather.waveDirection) + '°', 64, 22);
         var texture = new THREE.CanvasTexture(canvas);
@@ -2750,110 +3188,114 @@ var RollViewer = (function () {
 
     // ── buildSpray() — bow spray particle system ──
     // ── buildSpray() — sea mist / fog particle system ──
+    // ── buildSpray() — 선수 포말 입자(정상 bow wave + 슬램 스프레이). sprayPoints는 매 프레임
+    //    shipWorldPos에 부착되고 좌표는 선체-로컬. 입자는 뱃머리에서 솟구쳐 중력으로 떨어진다. ──
     function buildSpray() {
         var THREE = window.THREE;
-
         var geometry = new THREE.BufferGeometry();
         var positions = new Float32Array(SPRAY_COUNT * 3);
-
         sprayVelocities = [];
-
         for (var i = 0; i < SPRAY_COUNT; i++) {
-            // Spread around the ship, near waterline
-            positions[i * 3] = (Math.random() - 0.3) * 30;   // wide x spread
-            positions[i * 3 + 1] = Math.random() * 2;             // low, near water
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 30;   // wide z spread
-
-            sprayVelocities.push({
-                vx: (Math.random() - 0.5) * 0.3,   // slow drift
-                vy: 0.05 + Math.random() * 0.15,    // gentle rise
-                vz: (Math.random() - 0.5) * 0.3,
-                life: Math.random() * 5,             // stagger start
-                maxLife: 3 + Math.random() * 4       // long-lived
-            });
+            positions[i * 3] = 0; positions[i * 3 + 1] = -2; positions[i * 3 + 2] = 0;  // 처음엔 수면 아래(숨김)
+            sprayVelocities.push({ vx: 0, vy: 0, vz: 0, life: Math.random() * 1.2, maxLife: 0.5 + Math.random() * 0.6 });
         }
-
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
         var material = new THREE.PointsMaterial({
-            color: 0xb0c4de,         // light steel blue — mist color
-            size: 1.5,               // larger, softer
+            color: 0xeef4fb,         // 흰 포말
+            size: 1.2,
             transparent: true,
-            opacity: 0.12,           // very subtle
+            opacity: 0.0,
             blending: THREE.NormalBlending,
             depthWrite: false,
             sizeAttenuation: true
         });
-
         sprayPoints = new THREE.Points(geometry, material);
+        sprayPoints.frustumCulled = false;   // 선체에 부착되어 항상 보이도록
         scene.add(sprayPoints);
     }
 
-    // ── animateSpray(dt) — drift sea mist particles, amplified during turns ──
-    function animateSpray(dt, headingRad, rudderAngle) {
+    // ── buildContactShadow() — 수면 위 옅은 타원 그림자. 선체 아래에 깔려 '물에 얹힌' 접지감을 준다. ──
+    function buildContactShadow() {
+        var THREE = window.THREE;
+        var cv = document.createElement('canvas'); cv.width = cv.height = 128;
+        var c = cv.getContext('2d');
+        var g = c.createRadialGradient(64, 64, 4, 64, 64, 64);
+        g.addColorStop(0, 'rgba(0,20,30,0.55)');
+        g.addColorStop(0.5, 'rgba(0,15,25,0.26)');
+        g.addColorStop(1, 'rgba(0,10,20,0)');
+        c.fillStyle = g; c.fillRect(0, 0, 128, 128);
+        var tex = new THREE.CanvasTexture(cv);
+        var mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.6 });
+        var plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+        plane.rotation.x = -Math.PI / 2;
+        plane.scale.set(22, 8, 1);          // 로컬 x=선수미 길이(→heading 0에서 +X), y=빔
+        var grp = new THREE.Group();
+        grp.add(plane);
+        grp.renderOrder = 1;
+        grp.frustumCulled = false;
+        _contactShadow = grp;
+        scene.add(grp);
+    }
+
+    // ── animateSpray(dt, heading, bowFoam, slam) — 뱃머리 포말 ──
+    //  bowFoam: 속도 기반 상시 선수파(0~1), slam: 마루에 처박힐 때 물보라 버스트(0~1).
+    //  입자는 선체-로컬 좌표(sprayPoints는 호출부에서 shipWorldPos에 부착). 중력으로 낙하.
+    function animateSpray(dt, headingRad, bowFoam, slam) {
         if (!sprayPoints) return;
-
         var pos = sprayPoints.geometry.attributes.position;
-        var intensity = Math.min(weather.waveHeight / 3, 1) * 0.7 + 0.3;
-        var isTurning = turnScenarioActive && typeof rudderAngle === 'number' && Math.abs(rudderAngle) > 1;
-        var turnIntensity = isTurning ? Math.min(Math.abs(rudderAngle) / 25, 1) : 0;
-        var turnOuter = (rudderAngle || 0) > 0 ? 1 : -1;
-
-        // Side vector relative to heading
-        var sideX = typeof headingRad === 'number' ? Math.sin(headingRad) : 0;
-        var sideZ = typeof headingRad === 'number' ? Math.cos(headingRad) : 0;
-        var fwdX = typeof headingRad === 'number' ? Math.cos(headingRad) : 1;
-        var fwdZ = typeof headingRad === 'number' ? -Math.sin(headingRad) : 0;
+        var fwdX = Math.cos(headingRad), fwdZ = -Math.sin(headingRad);
+        var sideX = Math.sin(headingRad), sideZ = Math.cos(headingRad);
+        var bowDist = 8.5;            // 뱃머리까지 거리(선체-로컬)
+        var active = Math.max(bowFoam, slam);
+        var GRAV = 7.0;
 
         for (var i = 0; i < SPRAY_COUNT; i++) {
             var v = sprayVelocities[i];
             v.life += dt;
 
             if (v.life >= v.maxLife) {
-                if (isTurning && Math.random() < 0.5 + turnIntensity * 0.4) {
-                    // Respawn on turn inner side — more concentrated spray
-                    var along = -2 + Math.random() * 14;
-                    var spread = 3 + Math.random() * 4 * turnIntensity;
-                    pos.setXYZ(i,
-                        fwdX * along + sideX * turnOuter * spread,
-                        Math.random() * 0.3,
-                        fwdZ * along + sideZ * turnOuter * spread
-                    );
-                    v.vx = sideX * turnOuter * (0.3 + Math.random() * 0.8 * turnIntensity) + (Math.random() - 0.5) * 0.2;
-                    v.vy = (0.1 + Math.random() * 0.4) * (1 + turnIntensity);
-                    v.vz = sideZ * turnOuter * (0.3 + Math.random() * 0.8 * turnIntensity) + (Math.random() - 0.5) * 0.2;
-                    v.maxLife = 1.5 + Math.random() * 2.5;
-                } else {
-                    // Normal respawn — scattered
-                    pos.setXYZ(i,
-                        (Math.random() - 0.3) * 30,
-                        Math.random() * 0.5,
-                        (Math.random() - 0.5) * 30
-                    );
-                    v.vx = (Math.random() - 0.5) * 0.3 * intensity;
-                    v.vy = (0.05 + Math.random() * 0.15) * intensity;
-                    v.vz = (Math.random() - 0.5) * 0.3 * intensity;
-                    v.maxLife = 3 + Math.random() * 4;
+                if (active < 0.03) {
+                    // 정지/표류 — 입자를 수면 아래로 치워 보이지 않게
+                    pos.setXYZ(i, 0, -2, 0);
+                    v.vx = v.vy = v.vz = 0; v.maxLife = 0.8 + Math.random() * 0.6; v.life = 0;
+                    continue;
                 }
+                var burst = slam > 0.05 && Math.random() < (0.25 + slam * 0.65);
+                var amp = burst ? (0.8 + slam * 1.0) : (0.15 + bowFoam * 0.5);
+                var lateral = Math.random() * 2 - 1;                          // -1(좌) ~ +1(우)
+                var along = bowDist + (Math.random() - 0.5) * 4;
+                var beamOff = lateral * (1.6 + Math.abs(lateral) * 2.2);      // 가장자리일수록 넓게 → V 콧수염
+                pos.setXYZ(i,
+                    fwdX * along + sideX * beamOff,
+                    0.1 + Math.random() * 0.2,
+                    fwdZ * along + sideZ * beamOff);
+                v.vx = sideX * lateral * (0.7 + amp * 0.9) + fwdX * (0.2 + amp * 0.5);
+                v.vz = sideZ * lateral * (0.7 + amp * 0.9) + fwdZ * (0.2 + amp * 0.5);
+                v.vy = burst ? (1.1 + slam * 2.4 + Math.random() * 0.8) : (0.25 + bowFoam * 0.8 + Math.random() * 0.3);
+                v.maxLife = burst ? (0.5 + Math.random() * 0.6) : (0.4 + Math.random() * 0.6);
                 v.life = 0;
                 continue;
             }
 
+            v.vy -= GRAV * dt;   // 중력 — 솟구쳤다 떨어진다
             var x = pos.getX(i) + v.vx * dt;
             var y = pos.getY(i) + v.vy * dt;
             var z = pos.getZ(i) + v.vz * dt;
-
-            if (y > 3.5 + turnIntensity * 2) {
-                v.life = v.maxLife;
-                y = 0;
-            }
-
+            if (y < 0) { v.life = v.maxLife; y = 0; }   // 수면 도달 → 재활용
             pos.setXYZ(i, x, y, z);
         }
 
-        sprayPoints.material.opacity = 0.08 + 0.07 * intensity + turnIntensity * 0.1;
-        sprayPoints.material.size = 1.5 + turnIntensity * 1.0;
+        sprayPoints.material.opacity = Math.min(0.75, 0.12 + active * 0.6);
+        sprayPoints.material.size = 0.9 + slam * 1.3 + bowFoam * 0.4;
         pos.needsUpdate = true;
+    }
+
+    // Visual swell floor — a dead-calm sea (waveHeight ≈ 0) renders as a flat mirror
+    // that just blows out the sky. The reference always carries gentle swell, so for
+    // the *visual* wave field we floor the height; physics/labels still use real data.
+    function _visualWeather() {
+        if ((weather.waveHeight || 0) >= 0.8) return weather;
+        return Object.assign({}, weather, { waveHeight: 0.8 });
     }
 
     // ── buildWater() — Three.js Water shader with reflection/refraction ──
@@ -2870,27 +3312,32 @@ var RollViewer = (function () {
             }
         );
 
-        var tod = getTimeOfDay();
+        var tod = getActiveTod();
         var pal = SKY_PALETTES[tod];
         waterMesh = new THREE.Water(waterGeometry, {
-            textureWidth: 256,
-            textureHeight: 256,
+            // 512 — reference resolution; sharper sky reflection / sun glint than 256.
+            textureWidth: 512,
+            textureHeight: 512,
             waterNormals: waterNormals,
             sunDirection: (sunPosition ? sunPosition.clone().normalize() : new THREE.Vector3(0.7, 0.5, 0.3).normalize()),
-            sunColor: pal.sunColor,
+            // day uses the reference pure-white glint; other times keep a warm sun tint.
+            sunColor: (tod === 'day') ? 0xffffff : pal.sunColor,
             waterColor: pal.waterColor,
-            distortionScale: Math.max(weather.waveHeight * 1.5, 1.0),
+            // floor 3.0 (≈ reference 3.7) so even a calm sea keeps a shimmering glint
+            // path instead of a dead flat mirror that just blows out the sky.
+            distortionScale: Math.max((weather.waveHeight || 0) * 1.5, 3.0),
             fog: scene.fog !== undefined
         });
 
         waterMesh.rotation.x = -Math.PI / 2;
         waterMesh.position.y = 0;
+        if (waterMesh.material) waterMesh.material.side = THREE.DoubleSide;   // 수중에서 수면을 밑에서도 보이게
         scene.add(waterMesh);
 
         // ── Gerstner displacement injection ──
         // Reuse THREE.Water's reflection/refraction; patch its vertex shader to
         // displace vertices. Ship heave samples the same wave field (heightAt).
-        _waves = (window.Gerstner) ? Gerstner.buildWaves(weather) : [];
+        _waves = (window.Gerstner) ? Gerstner.buildWaves(_visualWeather()) : [];
         _waterPatched = false;
         if (window.Gerstner) {
             try {
@@ -2899,15 +3346,31 @@ var RollViewer = (function () {
                 if (vs.indexOf('gerstnerDisplace') === -1) {
                     vs = vs.replace(
                         'uniform float time;',
-                        'uniform float time;\n' + Gerstner.GLSL_SNIPPET
+                        'uniform float time;\nvarying vec3 vGerstnerNormal;\n' + Gerstner.GLSL_SNIPPET
                     );
                     vs = vs.replace(
                         'void main() {',
-                        'void main() {\n\tvec3 gPos = position + gerstnerDisplace( position.xy );'
+                        'void main() {\n\tvec3 gPos = position + gerstnerDisplace( position.xy );\n\tvGerstnerNormal = gerstnerNormal( position.xy );'
                     );
                     vs = vs.replace('modelMatrix * vec4( position, 1.0 )', 'modelMatrix * vec4( gPos, 1.0 )');
                     vs = vs.replace('modelViewMatrix * vec4( position, 1.0 )', 'modelViewMatrix * vec4( gPos, 1.0 )');
                     wmat.vertexShader = vs;
+
+                    // ── Analytic normals — light follows the real wave shape ──
+                    // Replace the flat normal-map surfaceNormal with the exact Gerstner
+                    // normal, keeping a fraction of texture ripple for fine sparkle.
+                    var fsh = wmat.fragmentShader;
+                    fsh = fsh.replace(
+                        'varying vec4 worldPosition;',
+                        'varying vec4 worldPosition;\nvarying vec3 vGerstnerNormal;\nuniform float uCrestTilt;'
+                    );
+                    fsh = fsh.replace(
+                        'vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );',
+                        'vec3 detailN = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );\n\tvec3 surfaceNormal = normalize( detailN + vec3( vGerstnerNormal.x, 0.0, vGerstnerNormal.z ) * uCrestTilt );'
+                    );
+                    // rf0은 레퍼런스(water.png)와 동일하게 THREE.Water 기본값 0.3 유지.
+                    // (0.16으로 낮췄더니 정면 반사가 줄어 물이 어둡고 초록끼가 돌았다 → 되돌림)
+                    wmat.fragmentShader = fsh;
 
                     var dirArr = [], parArr = [];
                     for (var wi = 0; wi < Gerstner.MAX_WAVES; wi++) {
@@ -2918,6 +3381,7 @@ var RollViewer = (function () {
                     wmat.uniforms.uWaveCount = { value: 0 };
                     wmat.uniforms.uWaveDir = { value: dirArr };
                     wmat.uniforms.uWaveParams = { value: parArr };
+                    wmat.uniforms.uCrestTilt = { value: 0.85 };   // 0.6→0.85 — 매크로 파면 노멀을 라이팅에 더 반영(면이 또렷)
                     wmat.needsUpdate = true;
                     _waterPatched = true;
                     _applyWavesToWater();
@@ -2947,6 +3411,124 @@ var RollViewer = (function () {
             }
         }
         u.uWaveCount.value = Math.min(_waves.length, max);
+    }
+
+    // ── setSkyMood(mood) — live switch the sky/sun/water/lights to a preset ──
+    // Driven by the 시뮬레이션 패널 → 하늘 segmented control. 'day'(골든) is the default.
+    // Sky/clouds/sun are cheap so we rebuild them; the stateful Water is updated in place.
+    function setSkyMood(mood) {
+        if (!scene) return;
+        if (!SKY_PALETTES[mood]) return;
+        if (mood === _activeMood && skyGroup) return;   // no-op if already active
+        _activeMood = mood;
+
+        _disposeSkyVisuals();
+        buildSky();    // rebuilds skyGroup + fog + exposure + PMREM env (reads getActiveTod)
+        buildSun();    // disc only for the night dome; skips when Sky shader is active
+
+        _applyMoodToWater();
+        _applyMoodToLights();
+        _refreshNavLights();
+        _applyMoodToShipEmissive();
+    }
+
+    // Remove + dispose the current sky dome, clouds and sun disc before a rebuild.
+    function _disposeSkyVisuals() {
+        [skyGroup, cloudGroup].forEach(function (g) {
+            if (!g) return;
+            scene.remove(g);
+            g.traverse(function (o) {
+                if (o.geometry) o.geometry.dispose();
+                if (o.material) {
+                    if (o.material.map) o.material.map.dispose();
+                    o.material.dispose();
+                }
+            });
+        });
+        skyGroup = null; skyMesh = null;
+        cloudGroup = null; _cloudSprites = [];
+        sunMesh = null;   // was a child of skyGroup, disposed above
+    }
+
+    // Retint the existing Water shader for the active mood (no rebuild — keeps the mirror).
+    function _applyMoodToWater() {
+        if (!waterMesh || !waterMesh.material || !waterMesh.material.uniforms) return;
+        var mood = getActiveTod();
+        var pal = SKY_PALETTES[mood];
+        var u = waterMesh.material.uniforms;
+        if (u['waterColor']) u['waterColor'].value.setHex(pal.waterColor);
+        if (u['sunColor']) u['sunColor'].value.setHex((mood === 'day' || mood === 'noon') ? 0xffffff : pal.sunColor);
+        if (u['sunDirection'] && sunPosition) u['sunDirection'].value.copy(sunPosition).normalize();
+        if (u['distortionScale']) u['distortionScale'].value = Math.max((weather.waveHeight || 0) * 1.5, 3.0);
+    }
+
+    // Retune the scene lights (which light the ship) to the active mood.
+    function _applyMoodToLights() {
+        var mood = getActiveTod();
+        var pal = SKY_PALETTES[mood];
+        var wxMod = getWeatherModifiers();
+        if (mainDirLight) {
+            mainDirLight.color.setHex(pal.sunColor);
+            mainDirLight.intensity = pal.sunIntensity * wxMod.sunIntensity;
+            if (sunPosition) mainDirLight.position.copy(sunPosition).multiplyScalar(50);
+        }
+        if (_fillLight) _fillLight.intensity = (mood === 'night') ? 0.2 : 0.5;
+        if (_ambLight) _ambLight.intensity = (mood === 'night') ? 0.3 : 0.8;
+    }
+
+    // Rebuild the ship's COLREG nav lights for the active mood (off at 골든/한낮).
+    function _refreshNavLights() {
+        if (!shipGroup) return;
+        for (var i = 0; i < navLights.length; i++) {
+            var n = navLights[i];
+            [n.light, n.bulb, n.sprite].forEach(function (o) {
+                if (!o) return;
+                if (o.parent) o.parent.remove(o);
+                if (o.geometry) o.geometry.dispose();
+                if (o.material) o.material.dispose();
+            });
+        }
+        navLights = [];
+        buildNavLights(shipType);   // skips entirely for day/noon
+    }
+
+    // Lit windows/superstructure should glow only at dusk/night — dimmed in daylight,
+    // otherwise a 한낮 ship looks like every cabin light is on at midday.
+    function _applyMoodToShipEmissive() {
+        var mood = getActiveTod();
+        var factor = (mood === 'night') ? 1.0 : (mood === 'dusk' || mood === 'dawn') ? 0.55 : 0.0;
+        [shipGroup, shipGroupPred].forEach(function (g) {
+            if (!g) return;
+            g.traverse(function (o) {
+                if (!o.isMesh || !o.material || !o.material.emissive) return;
+                var m = o.material;
+                if (m.userData._baseEmis === undefined) {
+                    m.userData._baseEmis = (m.emissiveIntensity != null) ? m.emissiveIntensity : 1;
+                }
+                m.emissiveIntensity = m.userData._baseEmis * factor;
+            });
+        });
+    }
+
+    // ── 수중 모드 토글 — 수면 아래로 내려가면 청록 fog + 화면 틴트로 잠수 뷰 ──
+    function _setUnderwater(on) {
+        if (on === _underwater) return;
+        _underwater = on;
+        if (on) {
+            if (scene && scene.fog) {
+                _savedFog = { color: scene.fog.color.getHex(), density: scene.fog.density };
+                scene.fog.color.setHex(0x0a3f4f);
+                scene.fog.density = 0.05;          // 깊이감 있는 청록 탁도
+            }
+            if (_underwaterTintEl) _underwaterTintEl.classList.add('rv-underwater-on');
+        } else {
+            if (scene && scene.fog && _savedFog) {
+                scene.fog.color.setHex(_savedFog.color);
+                scene.fog.density = _savedFog.density;
+            }
+            _savedFog = null;
+            if (_underwaterTintEl) _underwaterTintEl.classList.remove('rv-underwater-on');
+        }
     }
 
     // ── animateWater(time) — update Water shader uniforms ──
@@ -3046,8 +3628,10 @@ var RollViewer = (function () {
     var navLights = [];
     function buildNavLights(type) {
         var THREE = window.THREE;
-        var tod = getTimeOfDay();
-        if (tod === 'day') return;
+        var tod = getActiveTod();
+        // 항해등은 박명/야간에만 켠다. 골든·한낮(대낮)엔 끈다 — 한낮에 빨강·초록 등이
+        // 켜져 '시간 따라 변한다'처럼 보였던 버그.
+        if (tod === 'day' || tod === 'noon') return;
 
         // Ship dimensions by type for light placement
         var dims = {
@@ -3919,7 +4503,7 @@ var RollViewer = (function () {
             var turnState = computeTurnState(dt);
 
             // ── Ship heading & speed ──
-            var headingRad = turnScenarioActive ? (turnHeading * Math.PI / 180) : 0;
+            var headingRad = (baseHeading + (turnScenarioActive ? turnHeading : 0)) * Math.PI / 180;
             var targetSpeed = shipSpeed;
             if (turnScenarioActive && turnPhase === 'turning') {
                 targetSpeed = shipSpeed * 0.7;
@@ -3950,14 +4534,15 @@ var RollViewer = (function () {
             }
             // ── Animate sea markers (stationary in world, ship passes them) ──
             animateSeaMarkers(dt, headingRad, 0);
+            animateDistantVessels(elapsed);
 
             animateWater(elapsed);
             // (old static wake removed — wakeTrail handles this now)
             // (wakeTrail removed — water reflections provide sufficient visual cue)
 
-            // Weather-dynamic fog & clouds
+            // Weather-dynamic fog & clouds (수중일 땐 수중 fog를 유지하므로 건너뜀)
             var wxDyn = getWeatherModifiers();
-            if (scene.fog) scene.fog.density = wxDyn.fogDensity;
+            if (scene.fog && !_underwater) scene.fog.density = wxDyn.fogDensity;
             if (_cloudSprites) {
                 for (var ci = 0; ci < _cloudSprites.length; ci++) {
                     var cs = _cloudSprites[ci];
@@ -3994,26 +4579,53 @@ var RollViewer = (function () {
                 else if (dT < 2.5) resonanceMult = 1.8;   // 공진 주의
             }
 
+            // 조우각(encounter angle) — 선체가 파도를 어느 각도로 받느냐.
+            // 옆파(beam, |sin|=1)면 롤 최대, 정면·뒷파(head/following, |sin|=0)면 롤 최소.
+            var encRel = ((weather.waveDirection || 0) - (baseHeading + (turnScenarioActive ? turnHeading : 0))) * Math.PI / 180;
+            var beamFactor = 0.2 + 0.8 * Math.abs(Math.sin(encRel));   // 0.2(정면/뒷) ~ 1.0(옆파)
+
             var primaryRoll = rollParams.amp * waveScale * resonanceMult * Math.sin(w1);
             var secondaryRoll = rollParams.amp * 0.3 * waveScale * Math.sin(w1 * 1.7 + 1.2);
             var tertiaryRoll = rollParams.amp * 0.12 * waveScale * Math.sin(w1 * 3.1 + 2.7);
-            var waveRoll = primaryRoll + secondaryRoll + tertiaryRoll;
+            var waveRoll = (primaryRoll + secondaryRoll + tertiaryRoll) * beamFactor;
 
             // Turn-induced heel: 선회 방향으로 기울임 (좌선회→좌로 기울고 메트로놈도 좌로)
             var turnHeel = 0;
             if (turnScenarioActive && turnState.rudderAngle !== 0) {
-                turnHeel = turnState.rudderAngle * 0.22;
+                turnHeel = turnState.rudderAngle * 0.32;   // 0.22→0.32 — 선회 heel 강화
+            }
+            // 좌현/우현 고정 선회는 주기의 '직진' 구간(8s)에도 그쪽으로 최소 7° 기본 list 를 유지한다.
+            // → 직진과 확실히 구분되고 횡요가 더 잘 보인다. (turnDirection: +1 우현 / -1 좌현)
+            if (turnScenarioActive && (turnDirection === 1 || turnDirection === -1)) {
+                if (Math.abs(turnHeel) < 7) turnHeel = turnDirection * 7;
             }
 
-            // Combined roll — cap to realistic max ~18°
+            // Combined roll — cap to realistic max ~20°
             var rawRoll = waveRoll * turnState.rollMultiplier + turnHeel;
-            if (rawRoll > 18) rawRoll = 18;
-            if (rawRoll < -18) rawRoll = -18;
+            if (rawRoll > 20) rawRoll = 20;
+            if (rawRoll < -20) rawRoll = -20;
 
-            // Pitch: longer period, smaller amplitude, deterministic noise
+            // Pitch: longer period, smaller amplitude, deterministic noise.
+            // 조우각상 정면·뒷파(|cos|=1)에서 피치 최대, 옆파에서 최소 — 롤과 상보적.
             var pitchScale = turnScenarioActive ? Math.min(waveScale, 0.6) : waveScale;
-            var rawPitch = (rollParams.amp * 0.35) * pitchScale * Math.sin(w1 * 0.6)
-                + rollParams.amp * 0.12 * pitchScale * Math.sin(w1 * 1.3 + 0.8);
+            pitchScale *= (0.35 + 0.65 * Math.abs(Math.cos(encRel)));
+            // 자연 피치(앞뒤 끄덕임) — 실제 Gerstner 표면을 뱃머리/선미에서 샘플해 그 경사에
+            // 맞춘다(예제의 floating과 동일 원리). 긴 선체(±_hl)라 짧은 파엔 덜, 긴 swell엔 더
+            // 끄덕여 사실적. 같은 simWaveTime 이라 보이는 물결과 동기. (롤은 물리 모델 유지)
+            var rawPitch;
+            var _bowCrest = 0;   // 뱃머리 지점의 파고(>0이면 마루) — 슬램 스프레이 트리거용
+            if (window.Gerstner && _waves.length) {
+                var _hl = 16;                                   // 선체 앞뒤 절반 길이(샘플 거리)
+                var _fx = Math.cos(headingRad), _fy = Math.sin(headingRad);  // fore-aft (plane-local)
+                var _hBow = Gerstner.heightAt(_waves, _hl * _fx, _hl * _fy, simWaveTime);
+                var _hStern = Gerstner.heightAt(_waves, -_hl * _fx, -_hl * _fy, simWaveTime);
+                _bowCrest = _hBow;
+                rawPitch = Math.atan2(_hBow - _hStern, 2 * _hl) * 180 / Math.PI;
+                if (rawPitch > 12) rawPitch = 12; else if (rawPitch < -12) rawPitch = -12;
+            } else {
+                rawPitch = (rollParams.amp * 0.35) * pitchScale * Math.sin(w1 * 0.6)
+                    + rollParams.amp * 0.12 * pitchScale * Math.sin(w1 * 1.3 + 0.8);
+            }
 
             // Smooth roll & pitch — exponential lerp removes any remaining jitter
             var motionLerp = 1 - Math.pow(0.015, dt);  // ~τ=0.24s, smooth but responsive
@@ -4049,23 +4661,46 @@ var RollViewer = (function () {
                 // ct < 0 → still in the pre-capsize delay; no roll override yet.
             }
 
+            // ── 부력 관성 + 6-DOF 미세동요 ──
+            // Heave: 수면을 즉시 추종하지 않고 스프링-댐퍼로 고유주기 출렁(지연·오버슈트 → 무게감).
+            // 타깃은 선체 원점(0,0)의 실제 Gerstner 높이. Gerstner 부재 시 옛 sin bob.
+            var _haveG = (window.Gerstner && _waves.length);
+            var targetHeave = _haveG
+                ? Gerstner.heightAt(_waves, 0, 0, simWaveTime)
+                : weather.waveHeight * 0.1 * Math.sin(elapsed * 0.8);
+            var _capArmed = !!(_capsize && _capsize.armed);
+            if (_capArmed) {                 // 전복 중엔 침몰 곡선이 주도 → 관성 끄고 타깃에 스냅
+                _heavePos = targetHeave; _heaveVel = 0;
+            } else {
+                var _Tn = 3.4, _zeta = 0.5;  // 고유주기 3.4s, ζ=0.5(약한 오버슈트)
+                var _wn = 2 * Math.PI / _Tn;
+                _heaveVel += (_wn * _wn * (targetHeave - _heavePos) - 2 * _zeta * _wn * _heaveVel) * dt;
+                _heavePos += _heaveVel * dt;
+            }
+            // 서지/스웨이 — 물 입자 수평 궤도운동을 따라 살짝 떠밀림(보이는 물결과 동기). 요 — 측면 파경사.
+            var _swayX = 0, _swayZ = 0, _yawTarget = 0;
+            if (_haveG && !_capArmed) {
+                var _hz = _gerstnerHoriz(_waves, 0, 0, simWaveTime);
+                _swayX = _hz.x * 0.45; _swayZ = _hz.y * 0.45;   // 자유 입자보다 둔하게(선체 저항)
+                var _bL = 10;
+                var _bx = -Math.sin(headingRad), _by = Math.cos(headingRad);   // 빔(좌우) 방향
+                var _hP = Gerstner.heightAt(_waves, _bL * _bx, _bL * _by, simWaveTime);
+                var _hS = Gerstner.heightAt(_waves, -_bL * _bx, -_bL * _by, simWaveTime);
+                _yawTarget = Math.atan2(_hP - _hS, 2 * _bL) * 0.6;   // 라디안, 과하지 않게 0.6배
+            }
+            _yawSmooth += (_yawTarget - _yawSmooth) * (1 - Math.pow(0.05, dt));
+
             // ── Apply ship world position + rotations ──
             if (shipGroup) {
-                shipGroup.position.x = shipWorldPos.x;
-                shipGroup.position.z = shipWorldPos.z;
-                // Heave: ride the actual wave surface. Water plane is centred on the
-                // ship, so sample at its local origin (0,0). Falls back to the old
-                // sin bob only when the Gerstner module is unavailable.
-                var heaveY = (window.Gerstner && _waves.length)
-                    ? Gerstner.heightAt(_waves, 0, 0, simWaveTime)
-                    : weather.waveHeight * 0.1 * Math.sin(elapsed * 0.8);
-                shipGroup.position.y = -0.8 + heaveY + capsizeSinkY;
-                shipGroup.rotation.y = headingRad;
+                shipGroup.position.x = shipWorldPos.x + _swayX;
+                shipGroup.position.z = shipWorldPos.z + _swayZ;
+                shipGroup.position.y = -0.8 + _heavePos + capsizeSinkY;
+                shipGroup.rotation.y = headingRad + _yawSmooth;
                 shipGroup.rotation.x = smoothRoll * (Math.PI / 180);
                 shipGroup.rotation.z = smoothPitch * (Math.PI / 180);
                 if (shipGroupPred) {
                     shipGroupPred.position.copy(shipGroup.position);
-                    shipGroupPred.rotation.y = headingRad;
+                    shipGroupPred.rotation.y = headingRad + _yawSmooth;
                     shipGroupPred.rotation.x = smoothPredRoll * (Math.PI / 180);
                     shipGroupPred.rotation.z = smoothPredPitch * (Math.PI / 180);
                 }
@@ -4074,6 +4709,27 @@ var RollViewer = (function () {
                     heelRefGroup.position.copy(shipGroup.position);
                     heelRefGroup.rotation.y = headingRad;
                 }
+            }
+
+            // ── 선수 포말(정상 bow wave) + 슬램 스프레이 ──
+            // bowFoam: 속도 클수록 상시 뱃머리 포말. slam: 마루(_bowCrest>0)에 속도로 처박힐 때 물보라.
+            if (sprayPoints) {
+                var _bowFoam = Math.min(smoothSpeed / 14, 1) * 0.85;
+                var _slam = Math.min(1, Math.max(0, _bowCrest) / Math.max(weather.waveHeight * 0.6, 0.6))
+                            * Math.min(smoothSpeed / 7, 1);
+                sprayPoints.position.set(shipWorldPos.x, 0, shipWorldPos.z);   // 선체에 부착
+                animateSpray(dt, headingRad, _bowFoam, _slam);
+            }
+
+            // ── 접지 그림자 — 수면 위 옅은 타원. 선체가 떠오르면 옅고 넓게, 가라앉으면 짙고 좁게. ──
+            if (_contactShadow) {
+                _contactShadow.position.set(shipWorldPos.x, targetHeave + 0.05, shipWorldPos.z);
+                _contactShadow.rotation.y = headingRad;
+                var _gap = Math.max(-0.35, Math.min(0.4, _heavePos - targetHeave));
+                var _csm = _contactShadow.children[0];
+                _csm.material.opacity = Math.max(0.22, 0.6 - _gap * 0.5);
+                var _csc = 1 + _gap * 0.4;
+                _csm.scale.set(22 * _csc, 8 * _csc, 1);
             }
 
             // ── Compass follows ship ──
@@ -4094,7 +4750,8 @@ var RollViewer = (function () {
 
 
             // ── Camera follows ship: position + orbit behind heading ──
-            if (!cameraAnimating && controls) {
+            // 프리셋 전환(camPresetAnim) 중엔 그 애니메이션이 카메라를 전담 → 추종 보류(충돌 방지)
+            if (!cameraAnimating && !camPresetAnim && controls) {
                 var lerpFactor = 1 - Math.pow(0.02, dt);
                 camFollow.x += (shipWorldPos.x - camFollow.x) * lerpFactor;
                 camFollow.z += (shipWorldPos.z - camFollow.z) * lerpFactor;
@@ -4106,8 +4763,14 @@ var RollViewer = (function () {
                 camera.position.x += dx;
                 camera.position.z += dz;
 
-                // Orbit camera around target to stay behind ship
-                if (turnScenarioActive) {
+                // Orbit camera to track the bow heading so the ship stays at a constant
+                // viewing angle — 선수를 돌리면 카메라가 같이 돌아 롤(출렁임) 변화만 또렷이 보인다.
+                // 선회뿐 아니라 정지(직진) 상태의 컴퍼스 회전도 추종한다.
+                if (!_camHeadingSynced) {
+                    // 첫 프레임/리셋 직후 — 현재 침로로 스냅(회전 없이) → 시작 점프 방지
+                    camFollowHeading = headingRad;
+                    _camHeadingSynced = true;
+                } else {
                     var headingLerp = 1 - Math.pow(0.05, dt);
                     var dHeading = headingRad - camFollowHeading;
                     if (dHeading > Math.PI) dHeading -= 2 * Math.PI;
@@ -4144,6 +4807,7 @@ var RollViewer = (function () {
             var absPitch = Math.abs(smoothPitch);
             updateMetronomes(smoothRoll, smoothPredRoll);
             _updateHeelLabels(smoothRoll, smoothPredRoll);
+            _updateRollWedge(smoothRoll, smoothPredRoll);
             _setRollValue('rv-real-roll', absRoll);
             _setRollValue('rv-pred-roll', Math.abs(smoothPredRoll));
             if (window.RollPrediction) {
@@ -4171,11 +4835,16 @@ var RollViewer = (function () {
             pitchHistory.push(absPitch);
             if (pitchHistory.length > 60) pitchHistory.shift();
 
+            // (선수 추종 카메라는 위 'Camera follows ship' 블록의 camFollowHeading에서 처리)
+
             // ── Camera roll sync — tilt camera with ship roll ──
             var camRollRad = smoothRoll * (Math.PI / 180) * 0.3;  // 30% of ship roll
             camera.up.set(Math.sin(camRollRad), Math.cos(camRollRad), 0);
 
             if (controls) controls.update();
+
+            // ── 수중 모드 전환 — 카메라가 수면보다 낮아지면 잠수 뷰 ──
+            _setUnderwater(camera.position.y < SURFACE_Y);
 
             // Update God Rays sun screen position
             if (godRaysShaderPass && sunPosition) {
@@ -4263,7 +4932,7 @@ var RollViewer = (function () {
         if (!teEl) return;
 
         var waveT = (weather && weather.wavePeriod) || 0;
-        var relAngle = ((weather && weather.waveDirection) || 0) - (turnScenarioActive ? turnHeading : 0);
+        var relAngle = ((weather && weather.waveDirection) || 0) - (baseHeading + (turnScenarioActive ? turnHeading : 0));
         var te = _encounterPeriod(waveT, shipSpeed, relAngle);
         var risk = _resonanceRisk(naturalRollPeriod, isFinite(te) ? te : 0);
         var margin = (isFinite(te) && te > 0) ? Math.abs(naturalRollPeriod - te) : null;
@@ -4739,6 +5408,47 @@ var RollViewer = (function () {
         scene.add(heelRefGroup);
     }
 
+    // ── 오차 쐐기 ──
+    // apex 를 롤 축(원점)에 두고, 실측/예측 헐의 같은 갑판 끝점까지 삼각형을 친다.
+    // → 쐐기가 벌어진 각이 곧 롤 오차(Δ). 매 프레임 _updateHeelLabels 에서 갱신.
+    function _buildRollWedge() {
+        var THREE = window.THREE;
+        if (!THREE || !scene) return;
+        var geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
+        _rollWedgeMat = new THREE.MeshBasicMaterial({
+            color: 0x22c55e, transparent: true, opacity: 0.0,
+            side: THREE.DoubleSide, depthTest: false, depthWrite: false
+        });
+        _rollWedge = new THREE.Mesh(geo, _rollWedgeMat);
+        _rollWedge.renderOrder = 997;     // 헐 위, 사다리/라벨 아래
+        _rollWedge.frustumCulled = false;
+        _rollWedge.visible = false;
+        scene.add(_rollWedge);
+    }
+
+    // gap(도)에 따른 쐐기 색 — HUD/라벨 severity 램프와 동일 계열
+    var _WEDGE_COLORS = { safe: 0x22c55e, caution: 0xd9a441, warning: 0xec7a2c, danger: 0xef4444 };
+    function _updateRollWedge(realDeg, predDeg) {
+        var THREE = window.THREE;
+        if (!_rollWedge || !THREE) return;
+        if (splitView || !shipGroup || !shipGroupPred) { _rollWedge.visible = false; return; }
+        var deckY = _HEEL.deckY, z = _HEEL.half;
+        var apex = shipGroup.localToWorld(new THREE.Vector3(0, 0, 0));        // 롤 축(원점)
+        var rTip = shipGroup.localToWorld(new THREE.Vector3(0, deckY, z));    // 실측 우현 끝
+        var pTip = shipGroupPred.localToWorld(new THREE.Vector3(0, deckY, z));// 예측 우현 끝
+        var pos = _rollWedge.geometry.attributes.position;
+        pos.setXYZ(0, apex.x, apex.y, apex.z);
+        pos.setXYZ(1, rTip.x, rTip.y, rTip.z);
+        pos.setXYZ(2, pTip.x, pTip.y, pTip.z);
+        pos.needsUpdate = true;
+        var gap = Math.abs(realDeg - predDeg);
+        var lvl = gap < 2 ? 'safe' : gap < 4 ? 'caution' : gap < 8 ? 'warning' : 'danger';
+        _rollWedgeMat.color.setHex(_WEDGE_COLORS[lvl]);
+        _rollWedgeMat.opacity = 0.16 + 0.44 * Math.min(gap / 8, 1);   // 차이 클수록 진하게
+        _rollWedge.visible = true;
+    }
+
     // 사다리 끝점(월드)→화면 투영 후, 각 선박의 횡요각을 라벨로 표시 (겹쳐보기에서만).
     function _projTip(group, z) {
         var THREE = window.THREE;
@@ -4767,8 +5477,11 @@ var RollViewer = (function () {
     // ── 고스트 겹쳐보기 / 나눠보기 ──
     // 예측 선박(클론)의 머티리얼을 한 번만 자체 복제해 둔다 (실측 선박과 공유 방지).
     function _prepGhostMaterials() {
+        var THREE = window.THREE;
         _predGhostMats = [];
+        _predEdgeMats = [];
         if (!shipGroupPred) return;
+        var edgeAdds = [];   // traverse 중 add 하면 순회가 꼬이므로 사후 일괄 추가
         shipGroupPred.traverse(function (o) {
             if (!o.isMesh || !o.material) return;
             if (o.userData && o.userData._heelMast) return;   // 피뢰침 마스트는 고스트 처리 제외
@@ -4778,7 +5491,27 @@ var RollViewer = (function () {
                 o.material = o.material.clone();
                 _predGhostMats.push(o.material);
             }
+            // 예측 헐 외곽선 — EdgesGeometry(특징 모서리만)로 깔끔한 와이어 실루엣.
+            // depthTest:false + 높은 renderOrder → 겹쳐도 실측 위에 항상 또렷이 그려진다.
+            if (THREE && THREE.EdgesGeometry && o.geometry && !o.userData._predEdgeBuilt) {
+                try {
+                    // depthTest:true → 깊이를 따라 가려질 모서리는 가려진다(덧칠/스티커 느낌 제거).
+                    // 임계 45° → 주요 실루엣 모서리만(촘촘한 패널선 제거), opacity 0.55 → 은은하게.
+                    var em = new THREE.LineBasicMaterial({
+                        color: 0x8fd0ff, transparent: true, opacity: 0.55,
+                        depthTest: true, depthWrite: false
+                    });
+                    var edges = new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, 45), em);
+                    edges.userData._heelMast = true;   // 고스트 머티리얼 재처리 대상에서 제외
+                    edges.userData._predEdge = true;
+                    edges.renderOrder = 1000;
+                    o.userData._predEdgeBuilt = true;
+                    edgeAdds.push({ parent: o, child: edges });
+                    _predEdgeMats.push(em);
+                } catch (e) { /* geometry 없는 메시는 스킵 */ }
+            }
         });
+        edgeAdds.forEach(function (e) { e.parent.add(e.child); });
         _predGhostReady = true;
     }
 
@@ -4786,17 +5519,21 @@ var RollViewer = (function () {
     // 하늘색 반투명으로 덮어, 다채로운 실측 선박과 한눈에 구분된다. 겹쳐보기·나눠보기
     // 모두에서 항상 고스트로 유지한다 (solid=실측, ghost=예측 의미를 일관되게).
     function _setGhost() {
+        // 외곽선(EdgesGeometry)이 예측 실루엣을 담당하므로 fill 볼륨은 아주 옅게 깔아
+        // 실측 솔리드 헐이 그대로 비치게 한다 (와이어 홀로그램).
         _predGhostMats.forEach(function (m) {
             m.transparent = true;
-            m.opacity = 0.42;
+            m.opacity = 0.14;
             m.depthWrite = false;
             if (m.color) m.color.setHex(0x6fb4ff);              // 통일된 하늘색 홀로그램
-            if (m.emissive) { m.emissive.setHex(0x2f6fed); m.emissiveIntensity = 0.5; }
+            if (m.emissive) { m.emissive.setHex(0x4d9bff); m.emissiveIntensity = 0.6; }
             if ('metalness' in m) m.metalness = 0.0;
             if ('roughness' in m) m.roughness = 1.0;
             if ('map' in m) m.map = null;                       // 텍스처 제거 → 홀로그램 느낌
             m.needsUpdate = true;
         });
+        // 외곽선 가시성 유지(나눠보기/겹쳐보기 동일)
+        _predEdgeMats.forEach(function (em) { em.opacity = 0.55; em.needsUpdate = true; });
     }
 
     // overlay=true → 겹쳐보기, false → 좌우 나눠보기(스시저 분할 렌더).
@@ -4820,7 +5557,9 @@ var RollViewer = (function () {
     function dispose() {
         // AI 챗 FAB 위치 원복
         var _cb = document.getElementById('chat-bubble');
-        if (_cb) _cb.classList.remove('rv-chat-shift');
+        if (_cb) _cb.classList.remove('rv-chat-shift', 'rv-chat-deck-hide');
+        var _cp = document.getElementById('chat-panel');
+        if (_cp) _cp.classList.remove('rv-chat-deck-hide');
 
         // Stop animation loop
         if (animFrameId !== null) {
@@ -4882,6 +5621,10 @@ var RollViewer = (function () {
             controls = null;
         }
 
+        // Dispose sky environment render target
+        if (_skyEnvRT) { _skyEnvRT.dispose(); _skyEnvRT = null; }
+        if (scene) scene.environment = null;
+
         // Dispose renderer
         if (renderer) {
             renderer.dispose();
@@ -4898,6 +5641,9 @@ var RollViewer = (function () {
         if (waterNormals) { waterNormals.dispose(); }
         waterMesh = null;
         waterNormals = null;
+        _underwater = false;
+        _underwaterTintEl = null;
+        _savedFog = null;
         wakePoints = null;
         wakeParticles = [];
         wakeTrail = null;
@@ -4917,10 +5663,19 @@ var RollViewer = (function () {
         _shipMatCache = {};
 
         seaMarkers = [];
+        for (var _dv = 0; _dv < distantVessels.length; _dv++) {
+            var _dvg = distantVessels[_dv].group;
+            if (_dvg) _dvg.traverse(function (o) {
+                if (o.geometry) o.geometry.dispose();
+                if (o.material) o.material.dispose();
+            });
+        }
+        distantVessels = [];
         navLights = [];
         radarSweep = null;
         sprayPoints = null;
         sprayVelocities = [];
+        _contactShadow = null;
         gltfModelCache = {};
         gltfLoader = null;
         clockStart = null;
@@ -4939,6 +5694,7 @@ var RollViewer = (function () {
         _capsize = null;
         camFollow = { x: 0, z: 0 };
         camFollowHeading = 0;
+        _camHeadingSynced = false;
         weather = null;
         rollParams = null;
         naturalRollPeriod = null;
@@ -4954,7 +5710,10 @@ var RollViewer = (function () {
         // 예측 선박/이력 정리
         shipGroupPred = null;
         heelRefGroup = null;
+        _rollWedge = null;
+        _rollWedgeMat = null;
         _predGhostMats = [];
+        _predEdgeMats = [];
         _predGhostReady = false;
         predRollHistory = [];
         predPitchHistory = [];
@@ -5010,8 +5769,8 @@ var RollViewer = (function () {
             overridesEl.hidden = rows.length === 0;
         }
 
-        // Show/hide turn details section based on turn scenario state
-        var turnSection = document.getElementById('rv-hud-turn-section');
+        // Show/hide turn progress panel based on turn scenario state
+        var turnSection = document.getElementById('rv-sim-progress');
         if (turnSection) turnSection.hidden = !turnScenarioActive;
     }
 
@@ -5033,7 +5792,7 @@ var RollViewer = (function () {
             shipSpeed = Math.max(0, Math.min(35, params.shipSpeed));
         }
         _refreshWeatherDisplay();
-        if (window.Gerstner) { _waves = Gerstner.buildWaves(weather); _applyWavesToWater(); }
+        if (window.Gerstner) { _waves = Gerstner.buildWaves(_visualWeather()); _applyWavesToWater(); }
         return true;
     }
 
@@ -5044,7 +5803,7 @@ var RollViewer = (function () {
         if (_baseShipSpeed !== null) shipSpeed = _baseShipSpeed;
         Object.assign(weather, _baseWeather);
         _refreshWeatherDisplay();
-        if (window.Gerstner) { _waves = Gerstner.buildWaves(weather); _applyWavesToWater(); }
+        if (window.Gerstner) { _waves = Gerstner.buildWaves(_visualWeather()); _applyWavesToWater(); }
         return true;
     }
 

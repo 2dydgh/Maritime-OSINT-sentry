@@ -92,19 +92,49 @@ if (tabDist) tabDist.addEventListener('click', function() { switchCollisionTab('
 if (tabMl) tabMl.addEventListener('click', function() { switchCollisionTab('ml'); });
 
 function collisionSeverityBadge(severity) {
-    var colors = { danger: '#ef4444', caution: '#fb923c', warning: '#fbbf24' };
-    var dots = { danger: '#ef4444', caution: '#fb923c', warning: '#fbbf24' };
+    // Dot carries the colour; text stays calm light grey so the row doesn't read
+    // as gaudy coloured text. Only danger lights its text up (the one loud step).
+    var dots = { danger: SEV.danger, caution: '#ec7a2c', warning: '#d9a441' };
+    var textc = { danger: SEV.danger, caution: 'var(--text-sub)', warning: 'var(--text-sub)' };
     var labels = { danger: '위험', caution: '경고', warning: '주의' };
-    var c = colors[severity] || '#fbbf24';
-    var d = dots[severity] || '#fbbf24';
+    var d = dots[severity] || '#d9a441';
+    var t = textc[severity] || 'var(--text-sub)';
     var lbl = labels[severity] || severity;
-    return '<span class="collision-badge" style="color:' + c + '"><span class="collision-dot" style="background:' + d + '"></span>' + lbl + '</span>';
+    return '<span class="collision-badge" style="color:' + t + '"><span class="collision-dot" style="background:' + d + '"></span>' + lbl + '</span>';
 }
 
 function mlRiskBadge(level, label) {
-    var colors = { 0: '#6ee7b7', 1: '#fbbf24', 2: '#fb923c', 3: '#ef4444' };
+    var dots = { 0: '#6ee7b7', 1: '#d9a441', 2: '#ec7a2c', 3: SEV.danger };
+    var textc = { 0: 'var(--text-sub)', 1: 'var(--text-sub)', 2: 'var(--text-sub)', 3: SEV.danger };
     var icons = { 0: '\u24EA', 1: '\u2460', 2: '\u2461', 3: '\u2462' };
-    return '<span class="collision-badge" style="color:' + colors[level] + '"><span class="collision-dot" style="background:' + colors[level] + '"></span>' + icons[level] + ' ' + label + '</span>';
+    return '<span class="collision-badge" style="color:' + textc[level] + '"><span class="collision-dot" style="background:' + dots[level] + '"></span>' + icons[level] + ' ' + label + '</span>';
+}
+
+// \u2500\u2500 Contact-card helpers: severity drives the row's left edge bar + label.
+// Text stays calm; only the loudest step (danger / level 3) colours its label.
+function _sevHex(severity) {
+    return { danger: SEV.danger, caution: '#ec7a2c', warning: '#d9a441' }[severity] || '#d9a441';
+}
+function _sevLabel(severity) {
+    return { danger: '\uC704\uD5D8', caution: '\uACBD\uACE0', warning: '\uC8FC\uC758' }[severity] || severity;
+}
+function _mlHex(level) {
+    return { 0: '#6ee7b7', 1: '#d9a441', 2: '#ec7a2c', 3: SEV.danger }[level] || '#d9a441';
+}
+// Render one contact card. Severity is carried by the left edge bar, so the
+// per-card text label is redundant for low tiers \u2014 show it only for the loud
+// step (danger), in its colour, so it still shouts. Avoids clashing with area.
+function _collisionCard(r, sevHex, sevLabel, loud, area) {
+    var sevTag = loud ? '<span class="cr-sev" style="color:' + sevHex + '">' + sevLabel + '</span>' : '';
+    return '\
+        <div class="cr-row1">\
+            <span class="cr-ship-a" title="' + r.ship_a.name + '">' + r.ship_a.name + '</span>\
+            ' + sevTag + '\
+        </div>\
+        <div class="cr-row2">\
+            <span class="cr-ship-b" title="' + r.ship_b.name + '"><small>\u2192</small> ' + r.ship_b.name + '</span>\
+            <span class="cr-area">' + area + '</span>\
+        </div>';
 }
 
 function _renderCollisionTicker(list, cardsHtml, count) {
@@ -157,12 +187,11 @@ function renderCollisionList() {
             cautionN = risks.filter(function(r) { return r.severity === 'warning'; }).length;
             dangerLabel = '위험'; warnLabel = '경고'; cautionLabel = '주의';
         }
-        function pill(cls, label, count) {
-            var zero = count === 0 ? ' s-zero' : '';
-            return '<span class="s-pill ' + cls + zero + '" title="' + label + ' ' + count + '">' +
-                '<span class="s-dot"></span><span class="s-count">' + count + '</span></span>';
-        }
-        summaryStats.innerHTML = pill('s-danger', dangerLabel, dangerN) + pill('s-warn', warnLabel, warnN) + pill('s-caution', cautionLabel, cautionN);
+        // Title row shows the TOTAL only (per-severity counts live once, in the
+        // filter chips below). The total tints to the worst active severity.
+        var worstSev = dangerN > 0 ? SEV.danger : warnN > 0 ? '#ec7a2c' : cautionN > 0 ? '#d9a441' : 'var(--text-dim)';
+        summaryStats.innerHTML = '<span class="drawer-total" style="--total-sev:' + worstSev + '" title="전체 ' + risks.length + '">' +
+            '<b>' + risks.length + '</b><i>RISKS</i></span>';
 
         // Bottom bar risk update — always use ML data
         if (typeof BottomBar !== 'undefined') {
@@ -232,15 +261,15 @@ function renderCollisionList() {
             var distDefaultActive = distRiskFilter === null ? 'active' : '';
             distSummary.innerHTML = '\
                 <div class="ml-risk-summary">\
-                    <div class="risk-stat ' + distIsActive('danger') + '" data-dist-filter="danger" style="--stat-color: #f43f5e; --stat-bg: rgba(244,63,94,0.15);">\
+                    <div class="risk-stat ' + distIsActive('danger') + '" data-dist-filter="danger" style="--stat-color: var(--sev-danger); --stat-bg: rgba(var(--sev-danger-rgb),0.15);">\
                         <span class="risk-stat-count">' + dangerCount + '</span>\
                         <span class="risk-stat-label">\uc704\ud5d8</span>\
                     </div>\
-                    <div class="risk-stat ' + distIsActive('caution') + '" data-dist-filter="caution" style="--stat-color: #f97316; --stat-bg: rgba(249,115,22,0.15);">\
+                    <div class="risk-stat ' + distIsActive('caution') + '" data-dist-filter="caution" style="--stat-color: #ec7a2c; --stat-bg: rgba(249,115,22,0.15);">\
                         <span class="risk-stat-count">' + cautionCount + '</span>\
                         <span class="risk-stat-label">\uacbd\uace0</span>\
                     </div>\
-                    <div class="risk-stat ' + distIsActive('warning') + '" data-dist-filter="warning" style="--stat-color: #eab308; --stat-bg: rgba(234,179,8,0.15);">\
+                    <div class="risk-stat ' + distIsActive('warning') + '" data-dist-filter="warning" style="--stat-color: #d9a441; --stat-bg: rgba(245, 166, 35,0.15);">\
                         <span class="risk-stat-count">' + warningCount + '</span>\
                         <span class="risk-stat-label">\uc8fc\uc758</span>\
                     </div>\
@@ -273,12 +302,10 @@ function renderCollisionList() {
             list.innerHTML = '<div class="collision-empty">\ud574\ub2f9 \ub4f1\uae09\uc758 \uc704\ud5d8\uc774 \uc5c6\uc2b5\ub2c8\ub2e4</div>';
         } else {
             var rowsHtml = distFiltered.map(function(r) { return '\
-                <div class="collision-row"\
+                <div class="collision-row sev-' + r.severity + '" style="--row-sev:' + _sevHex(r.severity) + '"\
                      data-mmsi-a="' + r.ship_a.mmsi + '" data-mmsi-b="' + r.ship_b.mmsi + '"\
                      data-lat-a="' + r.ship_a.lat + '" data-lng-a="' + r.ship_a.lng + '" data-lat-b="' + r.ship_b.lat + '" data-lng-b="' + r.ship_b.lng + '">\
-                    <span class="col-severity">' + collisionSeverityBadge(r.severity) + '</span>\
-                    <span class="col-pairs" title="' + r.ship_a.name + ' \u2192 ' + r.ship_b.name + '">' + r.ship_a.name + ' <small>\u2192</small> ' + r.ship_b.name + '</span>\
-                    <span class="col-area">' + _seaAreaShort(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '</span>\
+                    ' + _collisionCard(r, _sevHex(r.severity), _sevLabel(r.severity), r.severity === 'danger', _seaAreaShort(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng)) + '\
                 </div>';
             }).join('');
             _renderCollisionTicker(list, rowsHtml, distFiltered.length);
@@ -294,15 +321,15 @@ function renderCollisionList() {
         fixedSummary.style.display = 'block';
         fixedSummary.innerHTML = '\
             <div class="ml-risk-summary">\
-                <div class="risk-stat ' + isActive(3) + '" data-risk-filter="3" style="--stat-color: #f43f5e; --stat-bg: rgba(244,63,94,0.15);">\
+                <div class="risk-stat ' + isActive(3) + '" data-risk-filter="3" style="--stat-color: var(--sev-danger); --stat-bg: rgba(var(--sev-danger-rgb),0.15);">\
                     <span class="risk-stat-count">' + countByLevel[3] + '</span>\
                     <span class="risk-stat-label">\uc704\ud5d8</span>\
                 </div>\
-                <div class="risk-stat ' + isActive(2) + '" data-risk-filter="2" style="--stat-color: #f97316; --stat-bg: rgba(249,115,22,0.15);">\
+                <div class="risk-stat ' + isActive(2) + '" data-risk-filter="2" style="--stat-color: #ec7a2c; --stat-bg: rgba(249,115,22,0.15);">\
                     <span class="risk-stat-count">' + countByLevel[2] + '</span>\
                     <span class="risk-stat-label">\uacbd\uace0</span>\
                 </div>\
-                <div class="risk-stat ' + isActive(1) + '" data-risk-filter="1" style="--stat-color: #eab308; --stat-bg: rgba(234,179,8,0.15);">\
+                <div class="risk-stat ' + isActive(1) + '" data-risk-filter="1" style="--stat-color: #d9a441; --stat-bg: rgba(245, 166, 35,0.15);">\
                     <span class="risk-stat-count">' + countByLevel[1] + '</span>\
                     <span class="risk-stat-label">\uc8fc\uc758</span>\
                 </div>\
@@ -334,14 +361,12 @@ function renderCollisionList() {
             list.innerHTML = '<div class="collision-empty">\ud574\ub2f9 \ub4f1\uae09\uc758 \uc704\ud5d8\uc774 \uc5c6\uc2b5\ub2c8\ub2e4</div>';
         } else {
             var mlRowsHtml = filtered.map(function(r) { return '\
-                <div class="collision-row"\
+                <div class="collision-row sev-ml-' + r.risk_level + '" style="--row-sev:' + _mlHex(r.risk_level) + '"\
                      data-mmsi-a="' + r.ship_a.mmsi + '" data-mmsi-b="' + r.ship_b.mmsi + '"\
                      data-lat-a="' + r.ship_a.lat + '" data-lng-a="' + r.ship_a.lng + '" data-lat-b="' + r.ship_b.lat + '" data-lng-b="' + r.ship_b.lng + '"\
                      data-sog-a="' + r.ship_a.sog + '" data-cog-a="' + r.ship_a.cog + '" data-name-a="' + r.ship_a.name + '"\
                      data-risk-level="' + r.risk_level + '">\
-                    <span class="col-severity">' + mlRiskBadge(r.risk_level, r.risk_label) + '</span>\
-                    <span class="col-pairs" title="' + r.ship_a.name + ' \u2192 ' + r.ship_b.name + '">' + r.ship_a.name + ' <small>\u2192</small> ' + r.ship_b.name + '</span>\
-                    <span class="col-area">' + _seaAreaShort(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng) + '</span>\
+                    ' + _collisionCard(r, _mlHex(r.risk_level), r.risk_label, r.risk_level === 3, _seaAreaShort(r.ship_a.lat, r.ship_a.lng, r.ship_b.lat, r.ship_b.lng)) + '\
                 </div>';
             }).join('');
             _renderCollisionTicker(list, mlRowsHtml, filtered.length);
