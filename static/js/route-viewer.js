@@ -1450,6 +1450,12 @@ var RouteViewer = (function() {
             if (tIn) tIn.value = toPort.name;
             if (tCoord) tCoord.textContent = toPort.lat.toFixed(4) + ', ' + toPort.lng.toFixed(4);
         }
+        // 프로그램적으로(AI 등) 출발/도착이 채워졌으니 클릭 안내 상태도 동기화한다.
+        // 이게 없으면 화면 열릴 때 떠 있던 "지도에서 출발 항구를 클릭하세요" 배너가
+        // 출발지가 이미 지정됐는데도 그대로 남아 있었다(클릭 전 안내가 클릭 후에도 잔존).
+        clickMode = null;
+        if (typeof updateClickBtnStates === 'function') updateClickBtnStates();
+        if (typeof updateClickHint === 'function') updateClickHint();
         if (typeof setEmptyHint === 'function') setEmptyHint(false);
         updateSearchBtn();
         var btn = document.getElementById('routeSearchBtn');
@@ -1467,11 +1473,39 @@ var RouteViewer = (function() {
         };
     }
 
+    // Programmatic playback control (AI 어시스턴트용).
+    //   opts.rate : 배속 프리셋(1·10·100·500·2000) — 비프리셋이면 가장 가까운 값으로 스냅.
+    //   opts.play : true=재생 시작, false=정지. (undefined면 재생상태 변경 없음 — 배속만 조정)
+    function setPlayback(opts) {
+        opts = opts || {};
+        showPlaybar();
+        if (opts.rate != null) {
+            var r = parseInt(opts.rate, 10);
+            var presets = [1, 10, 100, 500, 2000];
+            if (presets.indexOf(r) === -1) {
+                r = presets.reduce(function (a, b) {
+                    return Math.abs(b - r) < Math.abs(a - r) ? b : a;
+                });
+            }
+            playbackRate = r;
+            document.querySelectorAll('.route-rate-btn').forEach(function (b) {
+                b.classList.toggle('active', parseInt(b.dataset.rate, 10) === r);
+            });
+        }
+        if (opts.play === true) {
+            if (routeCoords.length >= 2) startAnimation();
+        } else if (opts.play === false) {
+            stopAnimation();
+        }
+        return { rate: playbackRate, playing: playing, hasRoute: routeCoords.length >= 2 };
+    }
+
     return {
         activate: activate,
         deactivate: deactivate,
         planRoute: planRoute,
         setSizeClass: _applySizeClass,
+        setPlayback: setPlayback,
         getState: getState,
     };
 })();

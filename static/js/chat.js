@@ -142,6 +142,11 @@ var ChatUI = (function () {
         })
         .then(function (data) {
             _hideTyping();
+            // Multi-step turns return an execution plan — surface it as a checklist
+            // above the answer so the agent's reasoning is visible.
+            if (data && data.plan && Array.isArray(data.plan.steps) && data.plan.steps.length) {
+                _renderPlan(data.plan);
+            }
             var reply = (data && data.text) ? data.text : '응답을 받지 못했습니다.';
             _appendMessage('assistant', reply);
             _history.push({ role: 'assistant', content: reply });
@@ -164,91 +169,200 @@ var ChatUI = (function () {
         });
     }
 
-    function _dispatchAction(action) {
-        if (!action || !action.action) return;
-        if (action.action === 'fly_to') {
-            EventBus.emit('command:flyTo', { lat: action.lat, lon: action.lon });
-        } else if (action.action === 'filter_ships') {
-            EventBus.emit('command:filter', { shipType: action.ship_type || action.types });
-        } else if (action.action === 'set_roll_scenario') {
-            if (!window.RollViewer || !window.RollViewer.isActive || !window.RollViewer.isActive()) {
+    // ── Frontend action registry ──
+    // Each agent tool result carries an "action"; one handler per action below.
+    // Adding a new tool = one entry here (+ its backend @tool) — no growing if/else.
+
+    function _rollViewerActive() {
+        return !!(window.RollViewer && window.RollViewer.isActive && window.RollViewer.isActive());
+    }
+
+    // Run fn now if the route screen is open; otherwise open it first and run
+    // once the panel/map has finished building.
+    function _withRouteScreen(fn) {
+        var open = window.RouteViewer && window.RouteViewer.getState && window.RouteViewer.getState().active;
+        if (!open && window.LayoutManager) {
+            window.LayoutManager.handleIconClick('route-inference', 'dedicated-screen');
+            setTimeout(fn, 650);   // 패널 빌드 + 지도 초기화 대기
+        } else {
+            fn();
+        }
+    }
+
+    var ACTION_HANDLERS = {
+        fly_to: function (a) {
+            EventBus.emit('command:flyTo', { lat: a.lat, lon: a.lon });
+        },
+        filter_ships: function (a) {
+            EventBus.emit('command:filter', { shipType: a.ship_type || a.types });
+        },
+        set_roll_scenario: function (a) {
+            if (!_rollViewerActive()) {
                 _appendMessage('assistant', '횡요각 화면이 열려있지 않아 시나리오를 적용하지 못했습니다. 선박을 클릭하고 횡요각 화면을 먼저 열어주세요.');
                 return;
             }
-            if (action.clear) {
+            if (a.clear) {
                 window.RollViewer.clearScenarioOverride();
-            } else if (action.params) {
-                window.RollViewer.setScenarioOverride(action.params);
+            } else if (a.params) {
+                window.RollViewer.setScenarioOverride(a.params);
             }
-        } else if (action.action === 'set_turn_scenario') {
-            if (!window.RollViewer || !window.RollViewer.isActive || !window.RollViewer.isActive()) {
+        },
+        set_turn_scenario: function (a) {
+            if (!_rollViewerActive()) {
                 _appendMessage('assistant', '횡요각 화면이 열려있지 않아 선회 시나리오를 시작할 수 없습니다. 선박을 클릭하고 횡요각 화면을 먼저 열어주세요.');
                 return;
             }
-            window.RollViewer.setTurnScenario(action.active, action.direction || 0);
-        } else if (action.action === 'open_roll_viewer') {
+            window.RollViewer.setTurnScenario(a.active, a.direction || 0);
+        },
+        open_roll_viewer: function (a) {
             // Open the roll-viewer dedicated screen for the given MMSI.
             // Mirrors what clicking the model card does in the UI.
-            if (!action.mmsi) return;
-            if (window.RollViewer && window.RollViewer.isActive && window.RollViewer.isActive()
-                && window.RollViewer.getCurrentMmsi && window.RollViewer.getCurrentMmsi() === action.mmsi) {
+            if (!a.mmsi) return;
+            if (_rollViewerActive()
+                && window.RollViewer.getCurrentMmsi && window.RollViewer.getCurrentMmsi() === a.mmsi) {
                 return;  // already open for this ship
             }
             if (window.ModelRegistry && window.LayoutManager) {
                 var rollModel = window.ModelRegistry.get && window.ModelRegistry.get('roll-prediction');
                 if (rollModel) {
-                    rollModel._selectedMmsi = action.mmsi;
+                    rollModel._selectedMmsi = a.mmsi;
                     window.LayoutManager.handleIconClick('roll-prediction', 'dedicated-screen');
                 }
             }
-        } else if (action.action === 'trigger_capsize') {
-            if (!window.RollViewer || !window.RollViewer.isActive || !window.RollViewer.isActive()) {
+        },
+        set_roll_camera: function (a) {
+            if (!_rollViewerActive()) {
+                _appendMessage('assistant', '횡요각 화면이 열려있지 않아 카메라 시점을 바꿀 수 없습니다. 선박을 클릭하고 횡요각 화면을 먼저 열어주세요.');
+                return;
+            }
+            if (window.RollViewer.setCameraView) window.RollViewer.setCameraView(a.view);
+        },
+        trigger_capsize: function (a) {
+            if (!_rollViewerActive()) {
                 _appendMessage('assistant', '횡요각 화면이 열려있지 않아 전복 시뮬레이션을 시작할 수 없습니다. 선박을 클릭하고 횡요각 화면을 먼저 열어주세요.');
                 return;
             }
-            if (action.clear) {
+            if (a.clear) {
                 window.RollViewer.clearCapsize();
             } else {
-                window.RollViewer.triggerCapsize(action.direction || 0, action.delay_seconds || 0);
+                window.RollViewer.triggerCapsize(a.direction || 0, a.delay_seconds || 0);
             }
-        } else if (action.action === 'return_to_globe') {
+        },
+        return_to_globe: function () {
             if (window.LayoutManager && typeof window.LayoutManager.closeDedicatedPanel === 'function') {
                 window.LayoutManager.closeDedicatedPanel();
             }
-        } else if (action.action === 'open_route_screen') {
+        },
+        open_route_screen: function () {
             if (window.LayoutManager) window.LayoutManager.handleIconClick('route-inference', 'dedicated-screen');
-        } else if (action.action === 'plan_route') {
-            var _runPlan = function () {
+        },
+        plan_route: function (a) {
+            _withRouteScreen(function () {
                 if (window.RouteViewer && window.RouteViewer.planRoute) {
                     window.RouteViewer.planRoute({
-                        fromLat: action.fromLat, fromLng: action.fromLng, fromName: action.fromName,
-                        toLat: action.toLat, toLng: action.toLng, toName: action.toName,
-                        sizeClass: action.sizeClass
+                        fromLat: a.fromLat, fromLng: a.fromLng, fromName: a.fromName,
+                        toLat: a.toLat, toLng: a.toLng, toName: a.toName,
+                        sizeClass: a.sizeClass
                     });
                 }
-            };
-            var routeActive = window.RouteViewer && window.RouteViewer.getState && window.RouteViewer.getState().active;
-            if (!routeActive && window.LayoutManager) {
-                window.LayoutManager.handleIconClick('route-inference', 'dedicated-screen');
-                setTimeout(_runPlan, 650);   // 패널 빌드 + 지도 초기화 대기
-            } else {
-                _runPlan();
-            }
-        } else if (action.action === 'set_route_size_class') {
+            });
+        },
+        set_route_size_class: function (a) {
             if (window.RouteViewer && window.RouteViewer.setSizeClass) {
-                window.RouteViewer.setSizeClass(action.size_class);
+                window.RouteViewer.setSizeClass(a.size_class);
             }
-        } else if (action.action === 'toggle_hazard_zones') {
+        },
+        set_route_playback: function (a) {
+            _withRouteScreen(function () {
+                if (window.RouteViewer && window.RouteViewer.setPlayback) {
+                    window.RouteViewer.setPlayback({ play: a.play, rate: a.rate });
+                }
+            });
+        },
+        toggle_hazard_zones: function (a) {
             // 사고 위험구역은 라이브 지도 오버레이 — 전용 화면이 열려 있으면 먼저 닫는다.
             if (window.LayoutManager && typeof window.LayoutManager.closeDedicatedPanel === 'function') {
                 window.LayoutManager.closeDedicatedPanel();
             }
-            if (action.on) {
+            if (a.on) {
                 if (typeof window.activateHazardZones === 'function') window.activateHazardZones();
             } else {
                 if (typeof window.deactivateHazardZones === 'function') window.deactivateHazardZones();
             }
         }
+    };
+
+    function _dispatchAction(action) {
+        if (!action || !action.action) return;
+        var handler = ACTION_HANDLERS[action.action];
+        if (handler) handler(action);
+    }
+
+    // Friendly Korean labels for tools, used only when a step has no `why`.
+    var TOOL_LABELS = {
+        open_route_screen: '항로 화면 열기',
+        plan_route: '항로 추론',
+        set_route_size_class: '선박 등급 변경',
+        get_hazard_summary: '사고 위험 요약',
+        toggle_hazard_zones: '위험구역 표시',
+        get_ships: '선박 조회',
+        get_collision_risks: '충돌 위험 조회',
+        get_area_status: '해역 현황',
+        fly_to: '지도 이동',
+        filter_ships: '선박 필터',
+        get_ship_detail: '선박 상세',
+        set_roll_scenario: '횡요각 시나리오',
+        set_turn_scenario: '선회 시나리오',
+        open_roll_viewer: '횡요각 화면 열기',
+        trigger_capsize: '전복 시뮬레이션',
+        return_to_globe: '지구본 복귀'
+    };
+
+    function _stepLabel(step) {
+        if (step.why && step.why.trim()) return step.why.trim();
+        return TOOL_LABELS[step.tool] || step.tool;
+    }
+
+    // Render the agent's executed plan as a checklist card. Steps tick in with a
+    // calm staggered reveal (CSS-driven) so it reads as sequential execution.
+    function _renderPlan(plan) {
+        var card = document.createElement('div');
+        card.className = 'chat-plan';
+
+        var head = document.createElement('div');
+        head.className = 'chat-plan-head';
+        var label = document.createElement('span');
+        label.className = 'chat-plan-label';
+        label.textContent = '실행 계획';
+        head.appendChild(label);
+        if (plan.goal) {
+            var goal = document.createElement('span');
+            goal.className = 'chat-plan-goal';
+            goal.textContent = plan.goal;
+            head.appendChild(goal);
+        }
+        card.appendChild(head);
+
+        var ol = document.createElement('ol');
+        ol.className = 'chat-plan-steps';
+        plan.steps.forEach(function (step, i) {
+            var li = document.createElement('li');
+            li.className = 'chat-plan-step';
+            li.style.animationDelay = (i * 0.12) + 's';
+            var check = document.createElement('span');
+            check.className = 'chat-plan-check';
+            check.textContent = '✓';
+            var txt = document.createElement('span');
+            txt.className = 'chat-plan-text';
+            txt.textContent = _stepLabel(step);
+            li.appendChild(check);
+            li.appendChild(txt);
+            ol.appendChild(li);
+        });
+        card.appendChild(ol);
+
+        _messages.appendChild(card);
+        _messages.scrollTop = _messages.scrollHeight;
     }
 
     function _appendMessage(role, text) {

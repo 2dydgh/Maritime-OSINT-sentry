@@ -6949,6 +6949,85 @@ input[type="range"]#routeSpeedSlider::-moz-range-thumb {
     border-color: var(--primary);
 }
 
+/* Agent execution plan — checklist card shown above the answer on multi-step turns */
+.chat-plan {
+    align-self: flex-start;
+    max-width: 90%;
+    background: rgba(47, 111, 237, 0.06);
+    border: 1px solid var(--primary-glow, rgba(47, 111, 237, 0.3));
+    border-left: 2px solid var(--primary, #2f6fed);
+    border-radius: 8px;
+    padding: 8px 11px 7px;
+    font-family: var(--font-body);
+}
+
+.chat-plan-head {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin-bottom: 7px;
+}
+
+.chat-plan-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--primary, #2f6fed);
+    font-weight: 700;
+    flex: none;
+}
+
+.chat-plan-goal {
+    font-size: 0.7rem;
+    color: var(--text-sub, #a1a1aa);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-plan-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.chat-plan-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    font-size: 0.74rem;
+    color: var(--text-main, #f4f4f5);
+    opacity: 0;
+    animation: chatPlanStepIn 0.28s ease forwards;
+}
+
+.chat-plan-check {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin-top: 1px;
+    border-radius: 50%;
+    background: var(--primary, #2f6fed);
+    color: #fff;
+    font-size: 0.58rem;
+    line-height: 14px;
+    text-align: center;
+    font-weight: 700;
+}
+
+.chat-plan-text {
+    flex: 1;
+    line-height: 1.4;
+}
+
+@keyframes chatPlanStepIn {
+    from { opacity: 0; transform: translateY(3px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Markdown rendering inside assistant chat bubbles */
 .chat-msg-assistant > *:first-child { margin-top: 0; }
 .chat-msg-assistant > *:last-child { margin-bottom: 0; }
