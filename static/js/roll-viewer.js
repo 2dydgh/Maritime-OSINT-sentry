@@ -71,6 +71,14 @@ var RollViewer = (function () {
 
     // ── Camera preset animation state ──
     var camPresetAnim = null;  // { from: {x,y,z}, to: {x,y,z}, start: elapsed, duration: 1.2 }
+    // 카메라 시점 프리셋 — UI 버튼과 AI(setCameraView)가 같은 정의를 공유한다.
+    // pos는 선체-로컬(+x=선수, +z=우현); animateCameraToPreset가 heading으로 월드 회전.
+    var CAM_PRESETS = [
+        { id: 'beam', icon: 'fa-arrows-left-right', label: '측면', pos: { x: 0, y: 12, z: 45 } },
+        { id: 'bow', icon: 'fa-arrow-up', label: '선수', pos: { x: 35, y: 15, z: 0 } },
+        { id: 'stern', icon: 'fa-arrow-down', label: '선미', pos: { x: -35, y: 15, z: 0 } },
+        { id: 'top', icon: 'fa-eye', label: '탑뷰', pos: { x: 0, y: 55, z: 1 } }
+    ];
 
     // ── Turning scenario state ──
     var turnScenarioActive = false;
@@ -716,7 +724,9 @@ var RollViewer = (function () {
         day: {
             top: 0x0055cc, mid: 0x0088ee, horizon: 0x40aaff, warm: 0x70c8ff,
             bg: 0x0077dd, fog: 0x3399ee, sunColor: 0xfffff0, sunIntensity: 2.0,
-            waterColor: 0x001e0f, exposure: 0.78, bloom: 0,
+            // 0x001e0f(거의 검은 녹색)은 순백 글린트와 만나 '검은 유리'처럼 보였다 →
+            // 딥 틸로 밝혀 물처럼. 여전히 어둑한 마린톤이되 검정은 아님.
+            waterColor: 0x06303c, exposure: 0.78, bloom: 0,
             turbidity: 10, rayleigh: 2
         },
         // 한낮 — sun high, clear blue sky (low turbidity), bright bluer sea.
@@ -2151,12 +2161,7 @@ var RollViewer = (function () {
         var camGroup = document.createElement('div');
         camGroup.className = 'rv-cam-presets';
 
-        var presets = [
-            { id: 'beam', icon: 'fa-arrows-left-right', label: '측면', pos: { x: 0, y: 12, z: 45 } },
-            { id: 'bow', icon: 'fa-arrow-up', label: '선수', pos: { x: 35, y: 15, z: 0 } },
-            { id: 'stern', icon: 'fa-arrow-down', label: '선미', pos: { x: -35, y: 15, z: 0 } },
-            { id: 'top', icon: 'fa-eye', label: '탑뷰', pos: { x: 0, y: 55, z: 1 } }
-        ];
+        var presets = CAM_PRESETS;
 
         presets.forEach(function (p) {
             var btn = document.createElement('button');
@@ -2203,6 +2208,24 @@ var RollViewer = (function () {
             start: elapsed,
             duration: 1.0
         };
+    }
+
+    // AI 어시스턴트용 — 프리셋 id('beam'|'bow'|'stern'|'top')로 카메라 시점 전환.
+    // 별칭(선수/선미/측면/탑/정면 등)도 받아 매핑한다.
+    function setCameraView(view) {
+        if (!view) return false;
+        var key = String(view).trim().toLowerCase();
+        var ALIAS = {
+            '선수': 'bow', '선두': 'bow', '뱃머리': 'bow', '정면': 'bow', 'front': 'bow', 'bow': 'bow',
+            '선미': 'stern', '후미': 'stern', '뒤': 'stern', 'back': 'stern', 'rear': 'stern', 'aft': 'stern', 'stern': 'stern',
+            '측면': 'beam', '옆': 'beam', 'side': 'beam', 'beam': 'beam',
+            '탑': 'top', '탑뷰': 'top', '위': 'top', '상단': 'top', 'top': 'top'
+        };
+        var id = ALIAS[key] || key;
+        var preset = CAM_PRESETS.filter(function (p) { return p.id === id; })[0];
+        if (!preset) return false;
+        animateCameraToPreset(preset.pos);
+        return true;
     }
 
     function updateCameraPresetAnim(elapsed) {
@@ -3191,6 +3214,10 @@ var RollViewer = (function () {
     // ── buildSpray() — 선수 포말 입자(정상 bow wave + 슬램 스프레이). sprayPoints는 매 프레임
     //    shipWorldPos에 부착되고 좌표는 선체-로컬. 입자는 뱃머리에서 솟구쳐 중력으로 떨어진다. ──
     function buildSpray() {
+        // 뱃머리 물보라·슬램 스프레이 비활성화 — 흰 포말이 인위적으로 보여 사용자 요청으로 제거.
+        // sprayPoints를 만들지 않으면 호출부(if(sprayPoints))와 animateSpray가 자동으로 스킵된다.
+        // 되살리려면 이 return 한 줄만 지우면 됨.
+        return;
         var THREE = window.THREE;
         var geometry = new THREE.BufferGeometry();
         var positions = new Float32Array(SPRAY_COUNT * 3);
@@ -3309,6 +3336,15 @@ var RollViewer = (function () {
             'https://raw.githubusercontent.com/mrdoob/three.js/r137/examples/textures/waternormals.jpg',
             function (texture) {
                 texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                // 타일링 완화 — 원거리에서 노멀맵 패턴이 규칙적으로 반복·반짝이는 걸
+                // mipmap + anisotropy로 흐려 자연스럽게 섞는다(반복감의 주원인 제거).
+                texture.minFilter = THREE.LinearMipmapLinearFilter;
+                texture.magFilter = THREE.LinearFilter;
+                texture.generateMipmaps = true;
+                if (renderer && renderer.capabilities && renderer.capabilities.getMaxAnisotropy) {
+                    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                }
+                texture.needsUpdate = true;
             }
         );
 
@@ -3320,12 +3356,12 @@ var RollViewer = (function () {
             textureHeight: 512,
             waterNormals: waterNormals,
             sunDirection: (sunPosition ? sunPosition.clone().normalize() : new THREE.Vector3(0.7, 0.5, 0.3).normalize()),
-            // day uses the reference pure-white glint; other times keep a warm sun tint.
-            sunColor: (tod === 'day') ? 0xffffff : pal.sunColor,
+            // day 글린트를 순백(0xffffff)에서 살짝 웜화이트로 — 블로운된 하이라이트가
+            // '금속 반사'처럼 읽히던 걸 누그러뜨린다.
+            sunColor: (tod === 'day') ? 0xfff0e0 : pal.sunColor,
             waterColor: pal.waterColor,
-            // floor 3.0 (≈ reference 3.7) so even a calm sea keeps a shimmering glint
-            // path instead of a dead flat mirror that just blows out the sky.
-            distortionScale: Math.max((weather.waveHeight || 0) * 1.5, 3.0),
+            // floor 3.0→2.2 — 잔잔한 바다에서 정반사 왜곡(번들거림)을 줄여 덜 인위적으로.
+            distortionScale: Math.max((weather.waveHeight || 0) * 1.5, 2.2),
             fog: scene.fog !== undefined
         });
 
@@ -3366,7 +3402,7 @@ var RollViewer = (function () {
                     );
                     fsh = fsh.replace(
                         'vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );',
-                        'vec3 detailN = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );\n\tvec3 surfaceNormal = normalize( detailN + vec3( vGerstnerNormal.x, 0.0, vGerstnerNormal.z ) * uCrestTilt );'
+                        'vec3 detailN = normalize( noise.xzy * vec3( 1.2, 1.0, 1.2 ) );\n\tvec3 surfaceNormal = normalize( detailN + vec3( vGerstnerNormal.x, 0.0, vGerstnerNormal.z ) * uCrestTilt );'
                     );
                     // rf0은 레퍼런스(water.png)와 동일하게 THREE.Water 기본값 0.3 유지.
                     // (0.16으로 낮췄더니 정면 반사가 줄어 물이 어둡고 초록끼가 돌았다 → 되돌림)
@@ -3381,7 +3417,7 @@ var RollViewer = (function () {
                     wmat.uniforms.uWaveCount = { value: 0 };
                     wmat.uniforms.uWaveDir = { value: dirArr };
                     wmat.uniforms.uWaveParams = { value: parArr };
-                    wmat.uniforms.uCrestTilt = { value: 0.85 };   // 0.6→0.85 — 매크로 파면 노멀을 라이팅에 더 반영(면이 또렷)
+                    wmat.uniforms.uCrestTilt = { value: 0.6 };   // 0.85→0.6 — 정반사 과장(은박지 번들거림) 완화로 덜 인위적
                     wmat.needsUpdate = true;
                     _waterPatched = true;
                     _applyWavesToWater();
@@ -3457,9 +3493,9 @@ var RollViewer = (function () {
         var pal = SKY_PALETTES[mood];
         var u = waterMesh.material.uniforms;
         if (u['waterColor']) u['waterColor'].value.setHex(pal.waterColor);
-        if (u['sunColor']) u['sunColor'].value.setHex((mood === 'day' || mood === 'noon') ? 0xffffff : pal.sunColor);
+        if (u['sunColor']) u['sunColor'].value.setHex(mood === 'day' ? 0xfff0e0 : (mood === 'noon' ? 0xffffff : pal.sunColor));
         if (u['sunDirection'] && sunPosition) u['sunDirection'].value.copy(sunPosition).normalize();
-        if (u['distortionScale']) u['distortionScale'].value = Math.max((weather.waveHeight || 0) * 1.5, 3.0);
+        if (u['distortionScale']) u['distortionScale'].value = Math.max((weather.waveHeight || 0) * 1.5, 2.2);
     }
 
     // Retune the scene lights (which light the ship) to the active mood.
@@ -4584,10 +4620,16 @@ var RollViewer = (function () {
             var encRel = ((weather.waveDirection || 0) - (baseHeading + (turnScenarioActive ? turnHeading : 0))) * Math.PI / 180;
             var beamFactor = 0.2 + 0.8 * Math.abs(Math.sin(encRel));   // 0.2(정면/뒷) ~ 1.0(옆파)
 
+            // Quasi-periodic swell — 성분 주파수를 무리수비(0.63, 1.0, 1.47)로 둬 서로
+            // 절대 안 맞아떨어지게(=비반복) 한다. 정수배 하모닉(1.7·3.1)은 짧게 반복돼
+            // 메트로놈처럼 기계적으로 보였다. 0.63배 저주파 너울이 느린 list 흔들림을 더한다.
             var primaryRoll = rollParams.amp * waveScale * resonanceMult * Math.sin(w1);
-            var secondaryRoll = rollParams.amp * 0.3 * waveScale * Math.sin(w1 * 1.7 + 1.2);
-            var tertiaryRoll = rollParams.amp * 0.12 * waveScale * Math.sin(w1 * 3.1 + 2.7);
-            var waveRoll = (primaryRoll + secondaryRoll + tertiaryRoll) * beamFactor;
+            var secondaryRoll = rollParams.amp * 0.35 * waveScale * Math.sin(w1 * 0.63 + 1.2);
+            var tertiaryRoll = rollParams.amp * 0.18 * waveScale * Math.sin(w1 * 1.47 + 2.7);
+            // Wave groups(파도 세트) — 느리고 서로 무관한 두 엔벨로프(주기 ~72s·~153s)로
+            // 흔들림 폭이 차오르고 잦아든다. 실제 바다의 '몇 번 크게 → 잠잠' 리듬.
+            var groupEnv = 0.78 + 0.22 * Math.sin(simWaveTime * 0.087) * Math.sin(simWaveTime * 0.041 + 0.6);
+            var waveRoll = (primaryRoll + secondaryRoll + tertiaryRoll) * beamFactor * groupEnv;
 
             // Turn-induced heel: 선회 방향으로 기울임 (좌선회→좌로 기울고 메트로놈도 좌로)
             var turnHeel = 0;
@@ -5851,6 +5893,7 @@ var RollViewer = (function () {
         clearCapsize: clearCapsize,
         isCapsizing: function () { return !!_capsize; },
         getCurrentMmsi: function () { return currentMmsi; },
+        setCameraView: setCameraView,
         isActive: isActive
     };
 
