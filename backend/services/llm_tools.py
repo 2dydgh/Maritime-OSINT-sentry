@@ -3,6 +3,12 @@ LLM Tool Definitions and Executor for Maritime OSINT Agent.
 
 Provides Ollama-compatible tool definitions and a dispatcher that calls
 the appropriate backend service functions.
+
+Each tool lives in exactly one place: the handler function is decorated with
+``@tool(...)``, which both records its Ollama JSON schema and registers it for
+dispatch. ``TOOL_DEFINITIONS`` (sent to Ollama) and the dispatch table are
+derived from that single registry — no separate schema list / name→handler map
+to keep in sync.
 """
 
 import json
@@ -31,485 +37,75 @@ KOREAN_PORTS: dict[str, dict] = {
 # Area search radius in nautical miles
 AREA_SEARCH_RADIUS_NM = 20.0
 
+
 # ---------------------------------------------------------------------------
-# Ollama-compatible TOOL_DEFINITIONS
+# Tool registry — single source of truth per tool
 # ---------------------------------------------------------------------------
-TOOL_DEFINITIONS: list[dict] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_ships",
-            "description": (
-                "현재 추적 중인 AIS 선박 목록을 반환합니다. "
-                "선박 유형(type) 또는 국적(country)으로 필터링하거나 전체 목록을 가져올 수 있습니다. "
-                "각 선박의 MMSI, 이름, 유형, 위치(위도·경도), 속도, 침로, 상태, 국적이 포함됩니다. "
-                "응답에는 'total_in_system' (시스템 전체 추적 척수)와 'returned' (이번 응답에 포함된 척수)가 같이 옵니다 — "
-                "두 값이 다르면 일부만 반환된 것이므로 답변에서 그렇게 명시하세요."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "description": (
-                            "필터링할 선박 유형. "
-                            "가능한 값: cargo, tanker, passenger, fishing, military, tug, other. "
-                            "생략하면 유형 필터 없음."
-                        ),
-                        "enum": ["cargo", "tanker", "passenger", "fishing", "military", "tug", "other"],
-                    },
-                    "country": {
-                        "type": "string",
-                        "description": (
-                            "국적으로 필터링 (대소문자 무시, 부분 일치 허용). "
-                            "예: 'Japan', 'Korea', 'China', 'USA', 'Russia', 'Norway'. "
-                            "사용자가 '○○ 국적'이라고 하면 반드시 이 인자를 사용하세요."
-                        ),
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "반환할 최대 선박 수. 기본값 50, 최대 500. 국적/유형 필터를 쓸 때는 매칭 결과가 적으니 limit를 넉넉하게 (예: 500) 잡으세요.",
-                        "default": 50,
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_collision_risks",
-            "description": (
-                "현재 충돌 위험이 있는 선박 쌍 목록을 반환합니다. "
-                "거리 기반(TCPA/DCPA) 위험과 ML 모델 기반 위험을 모두 포함합니다. "
-                "source 파라미터로 분석 방식을 선택할 수 있습니다."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "description": (
-                            "분석 소스 선택. "
-                            "'distance': TCPA/DCPA 거리 기반, "
-                            "'ml': ML 모델(XGBoost) 기반, "
-                            "'all': 두 분석 모두 포함 (기본값)."
-                        ),
-                        "enum": ["distance", "ml", "all"],
-                        "default": "all",
-                    },
-                    "severity": {
-                        "type": "string",
-                        "description": (
-                            "거리 기반 분석의 심각도 필터. "
-                            "'danger': 위험, 'caution': 경고, 'warning': 주의. "
-                            "생략하면 전체 심각도를 반환합니다."
-                        ),
-                        "enum": ["danger", "caution", "warning"],
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_area_status",
-            "description": (
-                "특정 항구 또는 해역 반경 내의 선박 현황을 반환합니다. "
-                "한국 주요 항구(부산, 인천, 울산, 광양, 평택, 목포, 제주) 또는 "
-                "임의의 위도·경도 좌표 + 반경(radius_nm)을 지정할 수 있습니다. "
-                "*해역* 단위 검색(예: '일본 주변 해역', '동중국해', '도쿄만')에는 lat/lon에 해당 중심 좌표를 넣고 "
-                "radius_nm을 100~400 정도로 넓게 잡으세요. 일본 중심: lat=36, lon=138 / 도쿄만: lat=35.5, lon=139.7 등."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "port": {
-                        "type": "string",
-                        "description": (
-                            "한국 항구 이름 (영문 소문자). "
-                            "busan, incheon, ulsan, gwangyang, pyeongtaek, mokpo, jeju 중 하나."
-                        ),
-                        "enum": ["busan", "incheon", "ulsan", "gwangyang", "pyeongtaek", "mokpo", "jeju"],
-                    },
-                    "lat": {
-                        "type": "number",
-                        "description": "중심 위도 (port 미지정 시 필수).",
-                    },
-                    "lon": {
-                        "type": "number",
-                        "description": "중심 경도 (port 미지정 시 필수).",
-                    },
-                    "radius_nm": {
-                        "type": "number",
-                        "description": "검색 반경(해리). 기본값 20nm.",
-                        "default": 20.0,
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "fly_to",
-            "description": (
-                "지도 카메라를 특정 위치로 이동합니다. "
-                "항구 이름, 선박 MMSI, 또는 직접 좌표를 지정할 수 있습니다. "
-                "프론트엔드 지도에 즉시 반영됩니다."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "port": {
-                        "type": "string",
-                        "description": "이동할 한국 항구 이름. busan, incheon, ulsan, gwangyang, pyeongtaek, mokpo, jeju 중 하나.",
-                        "enum": ["busan", "incheon", "ulsan", "gwangyang", "pyeongtaek", "mokpo", "jeju"],
-                    },
-                    "mmsi": {
-                        "type": "integer",
-                        "description": "이동할 선박의 MMSI 번호. 해당 선박 위치로 카메라를 이동합니다.",
-                    },
-                    "lat": {
-                        "type": "number",
-                        "description": "이동할 위도 (port, mmsi 미지정 시 사용).",
-                    },
-                    "lon": {
-                        "type": "number",
-                        "description": "이동할 경도 (port, mmsi 미지정 시 사용).",
-                    },
-                    "zoom": {
-                        "type": "number",
-                        "description": "카메라 줌 레벨 (1~20). 기본값 10.",
-                        "default": 10,
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "filter_ships",
-            "description": (
-                "지도에 표시되는 선박을 유형별로 필터링합니다. "
-                "특정 선박 유형만 보이거나 전체를 표시하도록 프론트엔드에 명령을 전달합니다."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "types": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": (
-                            "표시할 선박 유형 목록. "
-                            "가능한 값: cargo, tanker, passenger, fishing, military, tug, other. "
-                            "빈 배열이면 전체 표시."
-                        ),
-                    },
-                    "show_all": {
-                        "type": "boolean",
-                        "description": "true이면 모든 선박 유형을 표시합니다. types보다 우선합니다.",
-                        "default": False,
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_ship_detail",
-            "description": (
-                "특정 선박의 상세 정보를 반환합니다. "
-                "MMSI 또는 선박 이름으로 검색할 수 있습니다. "
-                "위치, 속도, 침로, 목적지, 선박 제원(길이·폭), 국적 등이 포함됩니다."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "mmsi": {
-                        "type": "integer",
-                        "description": "조회할 선박의 MMSI 번호.",
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "조회할 선박 이름 (부분 일치 검색 지원).",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "set_roll_scenario",
-            "description": (
-                "현재 열려있는 횡요각(roll) 화면에 가상의 기상 시나리오를 적용합니다. "
-                "사용자가 풍속, 파고, 파주기, 파향, 시간 가속을 임의로 설정해 시뮬레이션하고 싶을 때 사용합니다. "
-                "횡요각 화면이 닫혀 있으면 적용되지 않으며, 사용자에게 화면을 먼저 열도록 안내해야 합니다. "
-                "지정하지 않은 파라미터는 실제 관측값을 그대로 유지합니다. clear=true 이면 모든 override를 해제합니다."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "wind_speed": {
-                        "type": "number",
-                        "description": "풍속 (노트, kt). 일반 범위 0~80.",
-                    },
-                    "wave_height": {
-                        "type": "number",
-                        "description": "유의파고 (미터, m). 일반 범위 0~15.",
-                    },
-                    "wave_period": {
-                        "type": "number",
-                        "description": "파주기 (초, s). 일반 범위 3~20.",
-                    },
-                    "wave_direction": {
-                        "type": "number",
-                        "description": "파향 (도, degree, 0=북쪽, 90=동쪽).",
-                    },
-                    "time_scale": {
-                        "type": "number",
-                        "description": "시간 가속 배율 (1=실시간, 5=5배속). 범위 0.25~10.",
-                    },
-                    "ship_speed": {
-                        "type": "number",
-                        "description": "선박 속력/속도/SOG (노트, kt). 사용자가 '속력', '속도', 'speed', 'SOG', '노트' 등을 언급하면 이 인자로 전달. 일반 범위 0~30.",
-                    },
-                    "clear": {
-                        "type": "boolean",
-                        "description": "true 이면 적용 중인 모든 override를 초기화하고 실제 관측값으로 복귀.",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "return_to_globe",
-            "description": (
-                "현재 열려있는 전용 화면(횡요각 등)을 닫고 지구본 메인 지도로 돌아갑니다. "
-                "사용자가 '지구본으로', '메인으로', '뒤로', '닫아줘', '나가', '지도로 돌아가' 같은 표현을 쓰거나 "
-                "다른 위치로 이동을 요청하면 fly_to 호출 전에 이 도구를 먼저 호출하세요. "
-                "이미 지구본 화면이라면 아무 일도 일어나지 않습니다(안전한 no-op)."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "open_roll_viewer",
-            "description": (
-                "특정 선박의 횡요각(roll) 시뮬레이션 화면을 엽니다. "
-                "사용자가 '○○ 배 횡요각 보여줘', '○○ 선박 선택해서 횡요각', "
-                "'○○ 띄워줘' 같이 *특정 선박의 횡요각/롤 화면*을 요청하면 이 도구를 호출하세요. "
-                "MMSI를 알면 mmsi 인자로 직접, 이름만 알면 name 인자로 호출하세요 — 백엔드가 이름→MMSI 변환을 처리합니다. "
-                "이미 같은 선박의 횡요각 화면이 열려 있으면 안전한 no-op."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "mmsi": {
-                        "type": "integer",
-                        "description": "열고 싶은 선박의 MMSI 번호. 알면 우선 사용.",
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "선박 이름 (부분 일치 검색). mmsi 미지정 시 사용.",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "trigger_capsize",
-            "description": (
-                "현재 열려있는 횡요각 화면의 선박을 실제로 전복(capsize)시켜 시각화합니다. "
-                "선박이 한쪽으로 점점 기울어 복원력을 잃고 침몰하는 모습이 약 11초에 걸쳐 재생됩니다. "
-                "사용자가 '전복', '뒤집혀', '침몰', '가라앉아', 'capsize', 'sink' 등을 언급하면 이 도구를 호출하세요. "
-                "방향(direction)이 지정되지 않으면 무작위로 한쪽으로 기울어집니다. "
-                "clear=true 이면 진행 중인 전복 시뮬레이션을 즉시 해제합니다(선박 자세는 자연 복귀). "
-                "횡요각 화면이 닫혀 있으면 적용되지 않으니 사용자에게 화면을 먼저 열도록 안내해야 합니다."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "direction": {
-                        "type": "string",
-                        "description": "전복 방향. port=좌현(왼쪽), starboard=우현(오른쪽), random=무작위. 미지정 시 random.",
-                        "enum": ["port", "starboard", "random"],
-                    },
-                    "delay_seconds": {
-                        "type": "number",
-                        "description": (
-                            "전복 시작까지 대기할 시간(초, 0~60). 기본값 0(즉시 전복). "
-                            "set_turn_scenario와 함께 호출되는 '선회하다가 전복' 같은 복합 시나리오에서는 "
-                            "선회가 충분히 발달한 뒤 전복되도록 6~8초 정도 지연을 주세요. "
-                            "지연 동안에는 정상 물리(선회 헤들 등)가 그대로 작동합니다."
-                        ),
-                    },
-                    "clear": {
-                        "type": "boolean",
-                        "description": "true 이면 진행 중인 전복을 해제하고 정상 자세로 복귀합니다.",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "set_turn_scenario",
-            "description": (
-                "현재 열려있는 횡요각 화면에서 선회(코너링) 시뮬레이션을 시작하거나 중지합니다. "
-                "선박이 좌현/우현으로 선회할 때 발생하는 횡요각 변화를 시각화합니다. "
-                "사용자가 '선회', '회전', '코너링', '돌아', 'turn', 'cornering' 같은 표현을 쓰면 이 도구를 사용하세요. "
-                "방향(direction)을 지정하지 않으면 무작위(좌/우)로 선회합니다."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "active": {
-                        "type": "boolean",
-                        "description": "true=시나리오 시작, false=중지. 사용자가 '시작/멈춰/정지' 등 의도를 명확히 한 경우 그에 맞춰 지정.",
-                    },
-                    "direction": {
-                        "type": "string",
-                        "description": "선회 방향. port=좌현(왼쪽), starboard=우현(오른쪽), random=무작위. 미지정 시 random.",
-                        "enum": ["port", "starboard", "random"],
-                    },
-                },
-                "required": ["active"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "open_route_screen",
-            "description": (
-                "항로(경로 추론) 화면을 엽니다. 사용자가 '항로', '경로', '루트', '항로 화면' 등을 "
-                "언급하며 화면 전환을 원할 때 사용하세요. 특정 구간 경로까지 바로 그리려면 "
-                "open_route_screen 대신 plan_route를 사용하세요."
-            ),
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "plan_route",
-            "description": (
-                "항로 화면에서 출발지→도착지 해상 경로를 추론해 그립니다. 한국 항구 이름"
-                "(busan, incheon, ulsan, gwangyang, pyeongtaek, mokpo, jeju) 또는 'lat,lng' "
-                "좌표를 from/to에 넘기세요. 선박 크기 등급(A~E)을 지정하면 깊이 인식 경로에 반영됩니다. "
-                "예: '부산에서 광양까지 C급 항로'."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "from": {
-                        "type": "string",
-                        "description": "출발지. 한국 항구 키 또는 'lat,lng' (예: '35.1,129.05').",
-                    },
-                    "to": {
-                        "type": "string",
-                        "description": "도착지. 한국 항구 키 또는 'lat,lng'.",
-                    },
-                    "size_class": {
-                        "type": "string",
-                        "description": "선박 크기 등급. A(1~20m) B(21~40m) C(41~80m) D(81~200m) E(201m+). 미지정 시 변경 안 함.",
-                        "enum": ["A", "B", "C", "D", "E"],
-                    },
-                },
-                "required": ["from", "to"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "set_route_size_class",
-            "description": (
-                "항로 화면의 선박 크기 등급(A~E)을 변경합니다. 이미 경로가 그려져 있으면 "
-                "사용자가 다시 plan_route를 요청할 때 새 등급이 적용됩니다."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "size_class": {
-                        "type": "string",
-                        "description": "A(1~20m) B(21~40m) C(41~80m) D(81~200m) E(201m+).",
-                        "enum": ["A", "B", "C", "D", "E"],
-                    },
-                },
-                "required": ["size_class"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "toggle_hazard_zones",
-            "description": (
-                "지도 위 사고/위험 구역(해상 사고 위험 격자) 오버레이를 켜거나 끕니다. "
-                "사용자가 '사고', '위험구역', '사고 위험', 'hazard' 등을 언급하며 표시/숨김을 "
-                "원할 때 사용하세요."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "on": {
-                        "type": "boolean",
-                        "description": "true=사고 위험구역 표시, false=숨김. 기본값 true.",
-                    },
+_UNSET = object()
+_REGISTRY: list[dict] = []  # ordered: [{"name", "schema", "handler"}, ...]
+
+
+def param(
+    type: str,
+    description: str,
+    *,
+    enum: list | None = None,
+    items: dict | None = None,
+    default: Any = _UNSET,
+) -> dict:
+    """Build one JSON-schema property entry for a tool parameter.
+
+    ``enum`` / ``items`` / ``default`` are emitted only when supplied, so the
+    generated schema carries exactly the keys the tool declares.
+    """
+    spec: dict = {"type": type, "description": description}
+    if enum is not None:
+        spec["enum"] = enum
+    if items is not None:
+        spec["items"] = items
+    if default is not _UNSET:
+        spec["default"] = default
+    return spec
+
+
+def tool(
+    name: str,
+    description: str,
+    *,
+    params: dict | None = None,
+    required: list | None = None,
+):
+    """Decorator: attach an Ollama tool schema to a handler and register it.
+
+    The decorated function keeps its ``(arguments: dict) -> dict`` signature and
+    is returned unchanged; the decorator's only side effect is appending the
+    tool to ``_REGISTRY``.
+    """
+
+    def decorator(fn):
+        schema = {
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": description,
+                "parameters": {
+                    "type": "object",
+                    "properties": params or {},
+                    "required": required or [],
                 },
             },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_hazard_summary",
-            "description": (
-                "특정 해역의 해상 사고 위험을 요약합니다. 한국 항구 키 또는 lat/lon/반경(해리)을 "
-                "지정하면 해당 구역의 위험 등급 분포를 알려줍니다. 사용자가 '이 근처 사고 위험', "
-                "'부산 앞바다 위험도' 같은 질문을 할 때 사용하세요."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "port": {
-                        "type": "string",
-                        "description": "한국 항구 키 (busan, incheon, ...). 지정 시 lat/lon 불필요.",
-                    },
-                    "lat": {"type": "number", "description": "중심 위도 (port 미지정 시)."},
-                    "lon": {"type": "number", "description": "중심 경도 (port 미지정 시)."},
-                    "radius_nm": {"type": "number", "description": "검색 반경(해리). 기본 30nm."},
-                },
-            },
-        },
-    },
-]
+        }
+        _REGISTRY.append({"name": name, "schema": schema, "handler": fn})
+        return fn
+
+    return decorator
+
+
+# Reusable enum vocabularies
+_PORT_KEYS = ["busan", "incheon", "ulsan", "gwangyang", "pyeongtaek", "mokpo", "jeju"]
+_SHIP_TYPES = ["cargo", "tanker", "passenger", "fishing", "military", "tug", "other"]
+_SIZE_CLASSES = ["A", "B", "C", "D", "E"]
+_HEEL_DIRECTIONS = ["port", "starboard", "random"]
 
 
 # ---------------------------------------------------------------------------
@@ -531,6 +127,40 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
 # Individual tool implementations
 # ---------------------------------------------------------------------------
 
+@tool(
+    "get_ships",
+    (
+        "현재 추적 중인 AIS 선박 목록을 반환합니다. "
+        "선박 유형(type) 또는 국적(country)으로 필터링하거나 전체 목록을 가져올 수 있습니다. "
+        "각 선박의 MMSI, 이름, 유형, 위치(위도·경도), 속도, 침로, 상태, 국적이 포함됩니다. "
+        "응답에는 'total_in_system' (시스템 전체 추적 척수)와 'returned' (이번 응답에 포함된 척수)가 같이 옵니다 — "
+        "두 값이 다르면 일부만 반환된 것이므로 답변에서 그렇게 명시하세요."
+    ),
+    params={
+        "type": param(
+            "string",
+            (
+                "필터링할 선박 유형. "
+                "가능한 값: cargo, tanker, passenger, fishing, military, tug, other. "
+                "생략하면 유형 필터 없음."
+            ),
+            enum=_SHIP_TYPES,
+        ),
+        "country": param(
+            "string",
+            (
+                "국적으로 필터링 (대소문자 무시, 부분 일치 허용). "
+                "예: 'Japan', 'Korea', 'China', 'USA', 'Russia', 'Norway'. "
+                "사용자가 '○○ 국적'이라고 하면 반드시 이 인자를 사용하세요."
+            ),
+        ),
+        "limit": param(
+            "integer",
+            "반환할 최대 선박 수. 기본값 50, 최대 500. 국적/유형 필터를 쓸 때는 매칭 결과가 적으니 limit를 넉넉하게 (예: 500) 잡으세요.",
+            default=50,
+        ),
+    },
+)
 def _tool_get_ships(arguments: dict) -> dict:
     """Return AIS vessel list, optionally filtered by type and/or country."""
     ship_type = arguments.get("type")
@@ -579,6 +209,36 @@ def _tool_get_ships(arguments: dict) -> dict:
     }
 
 
+@tool(
+    "get_collision_risks",
+    (
+        "현재 충돌 위험이 있는 선박 쌍 목록을 반환합니다. "
+        "거리 기반(TCPA/DCPA) 위험과 ML 모델 기반 위험을 모두 포함합니다. "
+        "source 파라미터로 분석 방식을 선택할 수 있습니다."
+    ),
+    params={
+        "source": param(
+            "string",
+            (
+                "분석 소스 선택. "
+                "'distance': TCPA/DCPA 거리 기반, "
+                "'ml': ML 모델(XGBoost) 기반, "
+                "'all': 두 분석 모두 포함 (기본값)."
+            ),
+            enum=["distance", "ml", "all"],
+            default="all",
+        ),
+        "severity": param(
+            "string",
+            (
+                "거리 기반 분석의 심각도 필터. "
+                "'danger': 위험, 'caution': 경고, 'warning': 주의. "
+                "생략하면 전체 심각도를 반환합니다."
+            ),
+            enum=["danger", "caution", "warning"],
+        ),
+    },
+)
 def _tool_get_collision_risks(arguments: dict) -> dict:
     """Return current collision risk data from distance and/or ML analysis."""
     source = arguments.get("source", "all")
@@ -646,6 +306,29 @@ def _tool_get_collision_risks(arguments: dict) -> dict:
     return result
 
 
+@tool(
+    "get_area_status",
+    (
+        "특정 항구 또는 해역 반경 내의 선박 현황을 반환합니다. "
+        "한국 주요 항구(부산, 인천, 울산, 광양, 평택, 목포, 제주) 또는 "
+        "임의의 위도·경도 좌표 + 반경(radius_nm)을 지정할 수 있습니다. "
+        "*해역* 단위 검색(예: '일본 주변 해역', '동중국해', '도쿄만')에는 lat/lon에 해당 중심 좌표를 넣고 "
+        "radius_nm을 100~400 정도로 넓게 잡으세요. 일본 중심: lat=36, lon=138 / 도쿄만: lat=35.5, lon=139.7 등."
+    ),
+    params={
+        "port": param(
+            "string",
+            (
+                "한국 항구 이름 (영문 소문자). "
+                "busan, incheon, ulsan, gwangyang, pyeongtaek, mokpo, jeju 중 하나."
+            ),
+            enum=_PORT_KEYS,
+        ),
+        "lat": param("number", "중심 위도 (port 미지정 시 필수)."),
+        "lon": param("number", "중심 경도 (port 미지정 시 필수)."),
+        "radius_nm": param("number", "검색 반경(해리). 기본값 20nm.", default=20.0),
+    },
+)
 def _tool_get_area_status(arguments: dict) -> dict:
     """Return vessels within a radius of a port or coordinate."""
     port_key = arguments.get("port")
@@ -706,6 +389,25 @@ def _tool_get_area_status(arguments: dict) -> dict:
     }
 
 
+@tool(
+    "fly_to",
+    (
+        "지도 카메라를 특정 위치로 이동합니다. "
+        "항구 이름, 선박 MMSI, 또는 직접 좌표를 지정할 수 있습니다. "
+        "프론트엔드 지도에 즉시 반영됩니다."
+    ),
+    params={
+        "port": param(
+            "string",
+            "이동할 한국 항구 이름. busan, incheon, ulsan, gwangyang, pyeongtaek, mokpo, jeju 중 하나.",
+            enum=_PORT_KEYS,
+        ),
+        "mmsi": param("integer", "이동할 선박의 MMSI 번호. 해당 선박 위치로 카메라를 이동합니다."),
+        "lat": param("number", "이동할 위도 (port, mmsi 미지정 시 사용)."),
+        "lon": param("number", "이동할 경도 (port, mmsi 미지정 시 사용)."),
+        "zoom": param("number", "카메라 줌 레벨 (1~20). 기본값 10.", default=10),
+    },
+)
 def _tool_fly_to(arguments: dict) -> dict:
     """Resolve fly_to target and return action payload for the frontend."""
     port_key = arguments.get("port")
@@ -752,6 +454,29 @@ def _tool_fly_to(arguments: dict) -> dict:
     }
 
 
+@tool(
+    "filter_ships",
+    (
+        "지도에 표시되는 선박을 유형별로 필터링합니다. "
+        "특정 선박 유형만 보이거나 전체를 표시하도록 프론트엔드에 명령을 전달합니다."
+    ),
+    params={
+        "types": param(
+            "array",
+            (
+                "표시할 선박 유형 목록. "
+                "가능한 값: cargo, tanker, passenger, fishing, military, tug, other. "
+                "빈 배열이면 전체 표시."
+            ),
+            items={"type": "string"},
+        ),
+        "show_all": param(
+            "boolean",
+            "true이면 모든 선박 유형을 표시합니다. types보다 우선합니다.",
+            default=False,
+        ),
+    },
+)
 def _tool_filter_ships(arguments: dict) -> dict:
     """Return filter action payload for the frontend."""
     show_all = arguments.get("show_all", False)
@@ -779,6 +504,18 @@ def _tool_filter_ships(arguments: dict) -> dict:
     }
 
 
+@tool(
+    "get_ship_detail",
+    (
+        "특정 선박의 상세 정보를 반환합니다. "
+        "MMSI 또는 선박 이름으로 검색할 수 있습니다. "
+        "위치, 속도, 침로, 목적지, 선박 제원(길이·폭), 국적 등이 포함됩니다."
+    ),
+    params={
+        "mmsi": param("integer", "조회할 선박의 MMSI 번호."),
+        "name": param("string", "조회할 선박 이름 (부분 일치 검색 지원)."),
+    },
+)
 def _tool_get_ship_detail(arguments: dict) -> dict:
     """Return detailed information for a single vessel by MMSI or name."""
     mmsi = arguments.get("mmsi")
@@ -828,6 +565,15 @@ def _tool_get_ship_detail(arguments: dict) -> dict:
     }
 
 
+@tool(
+    "return_to_globe",
+    (
+        "현재 열려있는 전용 화면(횡요각 등)을 닫고 지구본 메인 지도로 돌아갑니다. "
+        "사용자가 '지구본으로', '메인으로', '뒤로', '닫아줘', '나가', '지도로 돌아가' 같은 표현을 쓰거나 "
+        "다른 위치로 이동을 요청하면 fly_to 호출 전에 이 도구를 먼저 호출하세요. "
+        "이미 지구본 화면이라면 아무 일도 일어나지 않습니다(안전한 no-op)."
+    ),
+)
 def _tool_return_to_globe(arguments: dict) -> dict:
     """Close any dedicated panel (roll viewer, etc.) and return to the globe view."""
     return {
@@ -836,6 +582,20 @@ def _tool_return_to_globe(arguments: dict) -> dict:
     }
 
 
+@tool(
+    "open_roll_viewer",
+    (
+        "특정 선박의 횡요각(roll) 시뮬레이션 화면을 엽니다. "
+        "사용자가 '○○ 배 횡요각 보여줘', '○○ 선박 선택해서 횡요각', "
+        "'○○ 띄워줘' 같이 *특정 선박의 횡요각/롤 화면*을 요청하면 이 도구를 호출하세요. "
+        "MMSI를 알면 mmsi 인자로 직접, 이름만 알면 name 인자로 호출하세요 — 백엔드가 이름→MMSI 변환을 처리합니다. "
+        "이미 같은 선박의 횡요각 화면이 열려 있으면 안전한 no-op."
+    ),
+    params={
+        "mmsi": param("integer", "열고 싶은 선박의 MMSI 번호. 알면 우선 사용."),
+        "name": param("string", "선박 이름 (부분 일치 검색). mmsi 미지정 시 사용."),
+    },
+)
 def _tool_open_roll_viewer(arguments: dict) -> dict:
     """Resolve target ship and return open_roll_viewer action for the frontend."""
     mmsi = arguments.get("mmsi")
@@ -874,6 +634,69 @@ def _tool_open_roll_viewer(arguments: dict) -> dict:
     }
 
 
+_ROLL_CAMERA_VIEWS = {"bow": "선수", "stern": "선미", "beam": "측면", "top": "탑뷰"}
+_ROLL_CAMERA_ALIAS = {
+    "선수": "bow", "선두": "bow", "뱃머리": "bow", "정면": "bow", "front": "bow",
+    "선미": "stern", "후미": "stern", "뒤": "stern", "back": "stern", "rear": "stern", "aft": "stern",
+    "측면": "beam", "옆": "beam", "side": "beam",
+    "탑": "top", "탑뷰": "top", "위": "top", "상단": "top",
+}
+
+
+@tool(
+    "set_roll_camera",
+    (
+        "횡요각(roll) 화면의 카메라 시점을 전환합니다. 사용자가 '선미에서 봐줘', '선수 시점', "
+        "'측면', '탑뷰로', '위에서 보여줘' 같이 보는 각도를 바꾸려 할 때 호출하세요. "
+        "view 값: bow(선수/정면), stern(선미/뒤), beam(측면/옆), top(탑뷰/위). "
+        "횡요각 화면이 열려 있어야 적용됩니다 — 닫혀 있으면 먼저 열도록 안내됩니다."
+    ),
+    params={
+        "view": param(
+            "string",
+            "카메라 시점. bow=선수(정면), stern=선미(뒤), beam=측면(옆), top=탑뷰(위).",
+            enum=["bow", "stern", "beam", "top"],
+        ),
+    },
+    required=["view"],
+)
+def _tool_set_roll_camera(arguments: dict) -> dict:
+    """Return camera-view action for the roll viewer frontend."""
+    raw = (arguments.get("view") or "").strip().lower()
+    view = raw if raw in _ROLL_CAMERA_VIEWS else _ROLL_CAMERA_ALIAS.get(raw)
+    if view not in _ROLL_CAMERA_VIEWS:
+        return {"error": "view는 bow·stern·beam·top 중 하나여야 합니다."}
+    return {"action": "set_roll_camera", "view": view, "label": f"카메라 시점: {_ROLL_CAMERA_VIEWS[view]}"}
+
+
+@tool(
+    "trigger_capsize",
+    (
+        "현재 열려있는 횡요각 화면의 선박을 실제로 전복(capsize)시켜 시각화합니다. "
+        "선박이 한쪽으로 점점 기울어 복원력을 잃고 침몰하는 모습이 약 11초에 걸쳐 재생됩니다. "
+        "사용자가 '전복', '뒤집혀', '침몰', '가라앉아', 'capsize', 'sink' 등을 언급하면 이 도구를 호출하세요. "
+        "방향(direction)이 지정되지 않으면 무작위로 한쪽으로 기울어집니다. "
+        "clear=true 이면 진행 중인 전복 시뮬레이션을 즉시 해제합니다(선박 자세는 자연 복귀). "
+        "횡요각 화면이 닫혀 있으면 적용되지 않으니 사용자에게 화면을 먼저 열도록 안내해야 합니다."
+    ),
+    params={
+        "direction": param(
+            "string",
+            "전복 방향. port=좌현(왼쪽), starboard=우현(오른쪽), random=무작위. 미지정 시 random.",
+            enum=_HEEL_DIRECTIONS,
+        ),
+        "delay_seconds": param(
+            "number",
+            (
+                "전복 시작까지 대기할 시간(초, 0~60). 기본값 0(즉시 전복). "
+                "set_turn_scenario와 함께 호출되는 '선회하다가 전복' 같은 복합 시나리오에서는 "
+                "선회가 충분히 발달한 뒤 전복되도록 6~8초 정도 지연을 주세요. "
+                "지연 동안에는 정상 물리(선회 헤들 등)가 그대로 작동합니다."
+            ),
+        ),
+        "clear": param("boolean", "true 이면 진행 중인 전복을 해제하고 정상 자세로 복귀합니다."),
+    },
+)
 def _tool_trigger_capsize(arguments: dict) -> dict:
     """Return capsize trigger/clear action for the frontend."""
     if arguments.get("clear"):
@@ -907,6 +730,27 @@ def _tool_trigger_capsize(arguments: dict) -> dict:
     }
 
 
+@tool(
+    "set_turn_scenario",
+    (
+        "현재 열려있는 횡요각 화면에서 선회(코너링) 시뮬레이션을 시작하거나 중지합니다. "
+        "선박이 좌현/우현으로 선회할 때 발생하는 횡요각 변화를 시각화합니다. "
+        "사용자가 '선회', '회전', '코너링', '돌아', 'turn', 'cornering' 같은 표현을 쓰면 이 도구를 사용하세요. "
+        "방향(direction)을 지정하지 않으면 무작위(좌/우)로 선회합니다."
+    ),
+    params={
+        "active": param(
+            "boolean",
+            "true=시나리오 시작, false=중지. 사용자가 '시작/멈춰/정지' 등 의도를 명확히 한 경우 그에 맞춰 지정.",
+        ),
+        "direction": param(
+            "string",
+            "선회 방향. port=좌현(왼쪽), starboard=우현(오른쪽), random=무작위. 미지정 시 random.",
+            enum=_HEEL_DIRECTIONS,
+        ),
+    },
+    required=["active"],
+)
 def _tool_set_turn_scenario(arguments: dict) -> dict:
     """Return turn-scenario start/stop action for the frontend."""
     active = bool(arguments.get("active"))
@@ -934,6 +778,27 @@ def _tool_set_turn_scenario(arguments: dict) -> dict:
     }
 
 
+@tool(
+    "set_roll_scenario",
+    (
+        "현재 열려있는 횡요각(roll) 화면에 가상의 기상 시나리오를 적용합니다. "
+        "사용자가 풍속, 파고, 파주기, 파향, 시간 가속을 임의로 설정해 시뮬레이션하고 싶을 때 사용합니다. "
+        "횡요각 화면이 닫혀 있으면 적용되지 않으며, 사용자에게 화면을 먼저 열도록 안내해야 합니다. "
+        "지정하지 않은 파라미터는 실제 관측값을 그대로 유지합니다. clear=true 이면 모든 override를 해제합니다."
+    ),
+    params={
+        "wind_speed": param("number", "풍속 (노트, kt). 일반 범위 0~80."),
+        "wave_height": param("number", "유의파고 (미터, m). 일반 범위 0~15."),
+        "wave_period": param("number", "파주기 (초, s). 일반 범위 3~20."),
+        "wave_direction": param("number", "파향 (도, degree, 0=북쪽, 90=동쪽)."),
+        "time_scale": param("number", "시간 가속 배율 (1=실시간, 5=5배속). 범위 0.25~10."),
+        "ship_speed": param(
+            "number",
+            "선박 속력/속도/SOG (노트, kt). 사용자가 '속력', '속도', 'speed', 'SOG', '노트' 등을 언급하면 이 인자로 전달. 일반 범위 0~30.",
+        ),
+        "clear": param("boolean", "true 이면 적용 중인 모든 override를 초기화하고 실제 관측값으로 복귀."),
+    },
+)
 def _tool_set_roll_scenario(arguments: dict) -> dict:
     """Return roll-scenario override action for the frontend.
 
@@ -1011,10 +876,37 @@ def _resolve_point(spec: str):
     return None
 
 
+@tool(
+    "open_route_screen",
+    (
+        "항로(경로 추론) 화면을 엽니다. 사용자가 '항로', '경로', '루트', '항로 화면' 등을 "
+        "언급하며 화면 전환을 원할 때 사용하세요. 특정 구간 경로까지 바로 그리려면 "
+        "open_route_screen 대신 plan_route를 사용하세요."
+    ),
+)
 def _tool_open_route_screen(arguments: dict) -> dict:
     return {"action": "open_route_screen", "label": "항로 화면 열기"}
 
 
+@tool(
+    "plan_route",
+    (
+        "항로 화면에서 출발지→도착지 해상 경로를 추론해 그립니다. 한국 항구 이름"
+        "(busan, incheon, ulsan, gwangyang, pyeongtaek, mokpo, jeju) 또는 'lat,lng' "
+        "좌표를 from/to에 넘기세요. 선박 크기 등급(A~E)을 지정하면 깊이 인식 경로에 반영됩니다. "
+        "예: '부산에서 광양까지 C급 항로'."
+    ),
+    params={
+        "from": param("string", "출발지. 한국 항구 키 또는 'lat,lng' (예: '35.1,129.05')."),
+        "to": param("string", "도착지. 한국 항구 키 또는 'lat,lng'."),
+        "size_class": param(
+            "string",
+            "선박 크기 등급. A(1~20m) B(21~40m) C(41~80m) D(81~200m) E(201m+). 미지정 시 변경 안 함.",
+            enum=_SIZE_CLASSES,
+        ),
+    },
+    required=["from", "to"],
+)
 def _tool_plan_route(arguments: dict) -> dict:
     frm = _resolve_point(arguments.get("from", ""))
     to = _resolve_point(arguments.get("to", ""))
@@ -1034,6 +926,21 @@ def _tool_plan_route(arguments: dict) -> dict:
     }
 
 
+@tool(
+    "set_route_size_class",
+    (
+        "항로 화면의 선박 크기 등급(A~E)을 변경합니다. 이미 경로가 그려져 있으면 "
+        "사용자가 다시 plan_route를 요청할 때 새 등급이 적용됩니다."
+    ),
+    params={
+        "size_class": param(
+            "string",
+            "A(1~20m) B(21~40m) C(41~80m) D(81~200m) E(201m+).",
+            enum=_SIZE_CLASSES,
+        ),
+    },
+    required=["size_class"],
+)
 def _tool_set_route_size_class(arguments: dict) -> dict:
     cls = (arguments.get("size_class") or "").strip().upper()
     if cls not in ("A", "B", "C", "D", "E"):
@@ -1041,6 +948,66 @@ def _tool_set_route_size_class(arguments: dict) -> dict:
     return {"action": "set_route_size_class", "size_class": cls, "label": f"선박 크기 등급 {cls} 적용"}
 
 
+_ROUTE_RATE_PRESETS = [1, 10, 100, 500, 2000]
+
+
+@tool(
+    "set_route_playback",
+    (
+        "항로 화면에서 그려진 경로를 따라 선박이 이동하는 재생(애니메이션)을 제어합니다. "
+        "재생/정지(play)와 배속(rate)을 설정할 수 있습니다. 배속 프리셋은 1·10·100·500·2000이며 "
+        "UI 라벨로는 x1·x10·x100·x500·x2k(=2000)입니다. 사용자가 'x2k로 재생', '2천배속으로 재생', "
+        "'재생해줘', '정지' 등을 말하면 이 도구를 호출하세요. 경로가 먼저 그려져 있어야 재생됩니다 — "
+        "경로가 없으면 plan_route를 먼저 호출하세요."
+    ),
+    params={
+        "play": param("boolean", "true=재생 시작, false=정지. 사용자가 '재생'이라고만 해도 true로 호출."),
+        "rate": param(
+            "integer",
+            "배속 프리셋(1·10·100·500·2000). 'x2k'/'2천배속'=2000. 미지정 시 현재 배속 유지.",
+            enum=_ROUTE_RATE_PRESETS,
+        ),
+    },
+)
+def _tool_set_route_playback(arguments: dict) -> dict:
+    play = arguments.get("play")
+    rate = arguments.get("rate")
+    out: dict = {"action": "set_route_playback"}
+    parts: list[str] = []
+
+    if rate is not None:
+        try:
+            rate = int(rate)
+        except (TypeError, ValueError):
+            rate = None
+        if rate is not None:
+            if rate not in _ROUTE_RATE_PRESETS:
+                rate = min(_ROUTE_RATE_PRESETS, key=lambda p: abs(p - rate))
+            out["rate"] = rate
+            parts.append("x2k" if rate == 2000 else f"x{rate}")
+
+    if play is not None:
+        out["play"] = bool(play)
+        parts.append("재생" if play else "정지")
+
+    if "rate" not in out and "play" not in out:
+        return {"error": "play 또는 rate 중 하나는 지정해야 합니다."}
+
+    out["label"] = "항로 재생: " + " · ".join(parts) if parts else "항로 재생 제어"
+    return out
+
+
+@tool(
+    "toggle_hazard_zones",
+    (
+        "지도 위 사고/위험 구역(해상 사고 위험 격자) 오버레이를 켜거나 끕니다. "
+        "사용자가 '사고', '위험구역', '사고 위험', 'hazard' 등을 언급하며 표시/숨김을 "
+        "원할 때 사용하세요."
+    ),
+    params={
+        "on": param("boolean", "true=사고 위험구역 표시, false=숨김. 기본값 true."),
+    },
+)
 def _tool_toggle_hazard_zones(arguments: dict) -> dict:
     on = arguments.get("on")
     on = True if on is None else bool(on)
@@ -1067,6 +1034,20 @@ def _load_hazard_cells() -> list:
     return _hazard_cells_cache
 
 
+@tool(
+    "get_hazard_summary",
+    (
+        "특정 해역의 해상 사고 위험을 요약합니다. 한국 항구 키 또는 lat/lon/반경(해리)을 "
+        "지정하면 해당 구역의 위험 등급 분포를 알려줍니다. 사용자가 '이 근처 사고 위험', "
+        "'부산 앞바다 위험도' 같은 질문을 할 때 사용하세요."
+    ),
+    params={
+        "port": param("string", "한국 항구 키 (busan, incheon, ...). 지정 시 lat/lon 불필요."),
+        "lat": param("number", "중심 위도 (port 미지정 시)."),
+        "lon": param("number", "중심 경도 (port 미지정 시)."),
+        "radius_nm": param("number", "검색 반경(해리). 기본 30nm."),
+    },
+)
 def _tool_get_hazard_summary(arguments: dict) -> dict:
     port_key = arguments.get("port")
     if port_key:
@@ -1121,26 +1102,10 @@ def _tool_get_hazard_summary(arguments: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Tool dispatcher
+# Derived lookups (built from the registry above) + dispatcher
 # ---------------------------------------------------------------------------
-_TOOL_HANDLERS = {
-    "open_route_screen":    _tool_open_route_screen,
-    "plan_route":           _tool_plan_route,
-    "set_route_size_class": _tool_set_route_size_class,
-    "toggle_hazard_zones":  _tool_toggle_hazard_zones,
-    "get_hazard_summary":   _tool_get_hazard_summary,
-    "get_ships":           _tool_get_ships,
-    "get_collision_risks": _tool_get_collision_risks,
-    "get_area_status":     _tool_get_area_status,
-    "fly_to":              _tool_fly_to,
-    "filter_ships":        _tool_filter_ships,
-    "get_ship_detail":     _tool_get_ship_detail,
-    "set_roll_scenario":   _tool_set_roll_scenario,
-    "set_turn_scenario":   _tool_set_turn_scenario,
-    "open_roll_viewer":    _tool_open_roll_viewer,
-    "trigger_capsize":     _tool_trigger_capsize,
-    "return_to_globe":     _tool_return_to_globe,
-}
+TOOL_DEFINITIONS: list[dict] = [entry["schema"] for entry in _REGISTRY]
+_TOOL_HANDLERS = {entry["name"]: entry["handler"] for entry in _REGISTRY}
 
 
 def execute_tool(name: str, arguments: dict) -> dict:

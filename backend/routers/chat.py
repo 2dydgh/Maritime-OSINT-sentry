@@ -19,10 +19,15 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     text: str
     actions: list = []
+    plan: dict | None = None  # present on planned (multi-step) turns
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def post_chat(req: ChatRequest):
     """Process a chat message through the maritime LLM agent."""
     result = await llm_agent.chat(req.message, req.history, req.context)
-    return ChatResponse(text=result["text"], actions=result["actions"])
+    return ChatResponse(
+        text=result["text"],
+        actions=result["actions"],
+        plan=result.get("plan"),
+    )

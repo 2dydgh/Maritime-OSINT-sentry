@@ -18,8 +18,10 @@ from backend.config_llm import (
     SYSTEM_PROMPT,
     MAX_RESPONSE_TOKENS,
     MAX_TOOL_CALLS,
+    ENABLE_PLANNER,
 )
 from backend.services.llm_tools import TOOL_DEFINITIONS, execute_tool
+from backend.services import llm_planner
 
 logger = logging.getLogger(__name__)
 
@@ -137,30 +139,19 @@ async def _call_ollama(client: httpx.AsyncClient, messages: list[dict]) -> dict:
 # Public interface
 # ---------------------------------------------------------------------------
 
-async def chat(user_message: str, history: list = None, context: dict = None) -> dict:
-    """Run a single user turn through the Maritime OSINT agent.
+async def _run_reactive(
+    client: httpx.AsyncClient,
+    messages: list[dict],
+    actions: list[dict[str, Any]],
+    tool_call_count: int = 0,
+) -> dict:
+    """The reactive ReAct loop: call Ollama, resolve tool calls, repeat until a
+    plain text answer or MAX_TOOL_CALLS. Returns {"text", "actions"}.
 
-    Iteratively resolves tool calls (up to MAX_TOOL_CALLS) before returning
-    the final text response. Frontend actions (flyTo, filter) are collected
-    from tool results that contain an "action" key.
-
-    Args:
-        user_message: The user's natural-language query.
-        history: Optional list of prior {role, content} message dicts.
-                 Only the last 10 entries are kept to cap context size.
-
-    Returns:
-        {
-            "text":    str   — final assistant response text,
-            "actions": list  — list of frontend action dicts (may be empty),
-        }
+    This is the original agent loop, factored out so it can serve as both the
+    fast path (simple turns) and the fallback when planning is unavailable.
     """
-    messages = _build_initial_messages(user_message, history, context)
-    actions: list[dict[str, Any]] = []
-    tool_call_count = 0
-
     try:
-        client = _get_client()
         if True:  # preserved indentation level so the inner block stays untouched
             while True:
                 # --- Call Ollama ---
@@ -262,8 +253,185 @@ async def chat(user_message: str, history: list = None, context: dict = None) ->
                 # Loop back to call Ollama with the tool results appended
 
     except Exception as exc:  # pylint: disable=broad-except
-        logger.exception("Unexpected error in MaritimeAgent.chat: %s", exc)
+        logger.exception("Unexpected error in reactive loop: %s", exc)
         return {
             "text": "예상치 못한 오류가 발생했습니다. 관리자에게 문의해 주세요.",
             "actions": actions,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Plan-and-Execute orchestration (hybrid)
+# ---------------------------------------------------------------------------
+def _plan_public(plan: dict) -> dict:
+    """Trim a plan to the fields worth surfacing to the frontend."""
+    return {
+        "goal": plan.get("goal", ""),
+        "steps": [
+            {"n": s["n"], "tool": s["tool"], "why": s.get("why", "")}
+            for s in plan.get("steps", [])
+        ],
+    }
+
+
+def _fallback_summary(executed: list[dict]) -> str:
+    """Deterministic answer assembled from action labels when the summary LLM
+    call is unavailable."""
+    labels = [
+        e["result"]["label"]
+        for e in executed
+        if isinstance(e.get("result"), dict) and e["result"].get("label")
+    ]
+    if labels:
+        return "요청을 처리했습니다: " + " · ".join(labels)
+    return "요청하신 작업을 수행했습니다."
+
+
+async def _summarize(
+    client: httpx.AsyncClient,
+    user_message: str,
+    executed: list[dict],
+    context_msg: str | None,
+) -> str:
+    """One tool-free LLM call that turns executed step results into the final
+    Korean answer. Degrades to a label-based summary on any error."""
+    digest = json.dumps(executed, ensure_ascii=False)[:2500]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if context_msg:
+        messages.append({"role": "system", "content": context_msg})
+    messages.append({"role": "user", "content": user_message})
+    messages.append({
+        "role": "system",
+        "content": (
+            "아래는 사용자 요청을 처리하며 실행한 단계와 그 결과(JSON)입니다. "
+            "이 결과만 근거로 한국어로 간결하게 최종 답변을 작성하세요. 도구를 더 호출하지 말고, "
+            "지도/화면 조작은 이미 수행됐다고 전제하세요.\n" + digest
+        ),
+    })
+
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": messages,
+        "stream": False,
+        "keep_alive": -1,
+        "options": {"num_predict": MAX_RESPONSE_TOKENS},
+    }
+    try:
+        response = await client.post(
+            f"{OLLAMA_BASE_URL}/api/chat", json=payload, timeout=OLLAMA_TIMEOUT
+        )
+        response.raise_for_status()
+        text = response.json().get("message", {}).get("content", "")
+        return text or _fallback_summary(executed)
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Summary call failed (%s) — using label fallback", exc)
+        return _fallback_summary(executed)
+
+
+async def _reactive_step(
+    client: httpx.AsyncClient,
+    step: dict,
+    results: dict,
+    context: dict | None,
+    actions: list[dict[str, Any]],
+) -> dict:
+    """Hybrid fallback: hand a single under-specified step to the reactive loop.
+
+    Used when a step's args reference prior results that didn't resolve — the
+    model decides the concrete call. Any frontend actions accumulate into the
+    shared ``actions`` list.
+    """
+    ctx_msg = _build_context_message(context)
+    note = (
+        f"지금은 다단계 작업 중 한 단계만 수행합니다. 목적: {step.get('why') or step['tool']}. "
+        f"'{step['tool']}' 도구를 적절한 인자로 한 번 호출하세요. "
+        f"참고 가능한 이전 단계 결과(JSON): {json.dumps(results, ensure_ascii=False)[:800]}"
+    )
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if ctx_msg:
+        messages.append({"role": "system", "content": ctx_msg})
+    messages.append({"role": "user", "content": note})
+
+    sub = await _run_reactive(client, messages, actions)
+    return {"delegated": True, "tool": step["tool"], "text": sub.get("text", "")}
+
+
+async def _execute_plan(
+    client: httpx.AsyncClient,
+    plan: dict,
+    user_message: str,
+    context: dict | None,
+    context_msg: str | None,
+) -> dict:
+    """Execute a validated plan step-by-step, then summarize. Resolved steps run
+    deterministically via execute_tool; unresolved ones fall back to reactive."""
+    if plan.get("clarify"):
+        return {"text": plan["clarify"], "actions": [], "plan": _plan_public(plan)}
+
+    actions: list[dict[str, Any]] = []
+    results: dict[int, dict] = {}
+    executed: list[dict] = []
+
+    for step in llm_planner.topo_sort(plan["steps"]):
+        args, resolved = llm_planner.resolve_refs(step.get("args", {}), results)
+        if resolved:
+            result = execute_tool(step["tool"], args)
+            if isinstance(result, dict) and "action" in result:
+                actions.append(result)
+        else:
+            logger.info("Step %s args unresolved — delegating to reactive", step.get("n"))
+            result = await _reactive_step(client, step, results, context, actions)
+
+        results[step["n"]] = result
+        executed.append({
+            "n": step["n"],
+            "tool": step["tool"],
+            "why": step.get("why", ""),
+            "result": result,
+        })
+
+    text = await _summarize(client, user_message, executed, context_msg)
+    return {"text": text, "actions": actions, "plan": _plan_public(plan)}
+
+
+# ---------------------------------------------------------------------------
+# Public interface
+# ---------------------------------------------------------------------------
+async def chat(user_message: str, history: list = None, context: dict = None) -> dict:
+    """Run a single user turn through the Maritime OSINT agent.
+
+    Multi-domain, multi-step requests are routed through an explicit
+    Plan-and-Execute path (planner → step execution → summary). Everything else
+    takes the fast reactive ReAct loop. Either way the return contract is
+    ``{"text", "actions"}``; planned turns add an optional ``"plan"``.
+
+    Args:
+        user_message: The user's natural-language query.
+        history: Optional list of prior {role, content} message dicts.
+                 Only the last 10 entries are kept to cap context size.
+        context: Optional frontend state snapshot (current screen, ship, etc.).
+
+    Returns:
+        {"text": str, "actions": list, ["plan": dict]}
+    """
+    try:
+        client = _get_client()
+        context_msg = _build_context_message(context)
+
+        # --- Planner gate: only clearly multi-step/multi-domain turns ---
+        if ENABLE_PLANNER and llm_planner.should_plan(user_message):
+            plan = await llm_planner.build_plan(client, user_message, context_msg)
+            if plan:
+                return await _execute_plan(client, plan, user_message, context, context_msg)
+            # plan is None → fall through to the reactive loop
+
+        # --- Reactive fast path / fallback ---
+        messages = _build_initial_messages(user_message, history, context)
+        return await _run_reactive(client, messages, [])
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.exception("Unexpected error in chat: %s", exc)
+        return {
+            "text": "예상치 못한 오류가 발생했습니다. 관리자에게 문의해 주세요.",
+            "actions": [],
         }

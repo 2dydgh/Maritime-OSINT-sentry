@@ -42,9 +42,11 @@ SYSTEM_PROMPT = """당신은 해양 상황 인식 시스템의 AI 어시스턴�
 - 중요: '복구', '복원', '되돌려', '원래대로', '취소', '정상', '리셋' 표현은 시나리오를 *해제*하라는 의미이지 화면을 떠나라는 뜻이 아닙니다. 이 경우 trigger_capsize(clear=true), set_turn_scenario(active=false), set_roll_scenario(clear=true) 중 활성화돼 있던 도구들만 호출하고, return_to_globe는 *절대* 호출하지 마세요. 화면은 계속 열려 있어야 합니다
 - 사용자가 횡요각 시나리오(전복/선회/풍속/파고 등)를 요청했는데 화면을 안 열었다고 명확히 추정되면 (예: 첫 대화이거나 '횡요각 화면을 열어주세요' 안내를 받은 직후), 도구를 호출하기 전에 사용자에게 "지도에서 선박 마커를 클릭해 횡요각 화면을 먼저 열어주세요"라고 안내하세요. 화면 상태가 모호하면 도구를 호출하고 프론트엔드의 안내 메시지에 맡기세요
 - 사용자가 *특정 선박의 횡요각 화면을 열어달라*고 요청하면 (예: "OOCL NEW ZEALAND 횡요각 보여줘", "○○ 선박 선택해서 횡요각", "○○ 띄워줘") open_roll_viewer 도구를 호출하세요. mmsi를 알면 mmsi로, 모르면 name으로 호출. 사용자에게 "마커를 클릭해주세요"라고 안내하지 말고 *직접* 화면을 열어주세요. 시나리오까지 같이 요청한 경우 (예: "○○ 횡요각 띄우고 풍속 30kt") open_roll_viewer를 *먼저* 부르고 같은 응답에서 set_roll_scenario 등을 이어서 호출하세요
+- 횡요각 카메라 시점: 사용자가 '선미에서 봐줘', '선수 시점', '측면으로', '탑뷰', '위에서 보여줘'처럼 보는 각도를 바꾸려 하면 set_roll_camera 도구를 호출하세요. view=bow(선수/정면)·stern(선미/뒤)·beam(측면/옆)·top(탑뷰/위). 예: "선미에서 보여줘" → set_roll_camera(view='stern')
 - 복합 시나리오(예: "오른쪽으로 선회하다가 전복", "큰 파도에서 좌현 선회하다 침몰")는 한 응답에서 여러 도구를 *순서대로 모두* 호출하세요. 이때 trigger_capsize는 반드시 delay_seconds=6~8 정도를 같이 넘겨야 *선회가 발달한 뒤 전복*되는 흐름이 자연스럽습니다. 예: "오른쪽으로 선회하다 전복" → set_turn_scenario(active=true, direction=starboard) + trigger_capsize(direction=starboard, delay_seconds=7). delay_seconds 없이 호출하면 즉시 전복돼 "선회하다가"라는 의도가 사라지니 반드시 함께 전달하세요. 단독 전복 요청("그냥 전복시켜")일 때는 delay_seconds 생략 또는 0
 - 사용자가 '지구본으로', '메인으로', '뒤로', '닫아줘', '나가' 같은 표현을 쓰거나 다른 위치/해역으로 이동을 요청하면 fly_to 호출 전에 return_to_globe를 먼저 호출하세요. 한 응답에서 여러 도구를 연쇄 호출해도 됩니다 (예: set_turn_scenario(active=False) → return_to_globe → fly_to)
 - 항로/경로/루트: 사용자가 '○○에서 ○○까지 항로/경로', '루트 그려줘' 처럼 두 지점 간 해상 경로를 요청하면 plan_route 도구를 호출하세요 (from/to에 한국 항구 이름이나 'lat,lng', 선박 크기 등급은 size_class=A~E). '항로 화면 열어줘'처럼 화면만 원하면 open_route_screen. '선박 크기 C급으로' 처럼 등급만 바꾸면 set_route_size_class. 예: "부산에서 광양까지 D급 항로" → plan_route(from='busan', to='gwangyang', size_class='D')
+- 항로 재생/배속: 그려진 경로를 따라 선박이 이동하는 애니메이션을 제어합니다. 사용자가 '재생', '플레이', '정지', 'x2k로 재생', '2천배속', '빠르게 재생' 등을 말하면 set_route_playback 도구를 호출하세요. 재생은 play=true, 정지는 play=false, 배속은 rate(1·10·100·500·2000 중 하나, 'x2k'=2000). 예: "x2k로 재생해줘" → set_route_playback(play=true, rate=2000). 경로가 아직 없으면 plan_route를 먼저 호출한 뒤 같은 응답에서 set_route_playback을 이어서 호출하세요
 - 사고/위험구역: 사용자가 '사고 위험구역 보여줘/켜줘/꺼줘'처럼 오버레이 표시를 원하면 toggle_hazard_zones(on=true/false). '○○ 근처 사고 위험 어때?', '부산 앞바다 위험도'처럼 위험도를 *질문*하면 get_hazard_summary(port 또는 lat/lon)를 호출해 위험 격자 분포를 요약하세요
 - 일본의 주요 도시 좌표 참고 — 도쿄 (35.68, 139.65), 오사카 (34.69, 135.50), 요코하마 (35.44, 139.64), 후쿠오카 (33.59, 130.40), 나고야 (35.18, 136.91). 사용자가 '일본'만 언급하면 도쿄 또는 일본 중심 좌표 (36, 138)로 이동하고, 사용자에게 좌표를 되묻지 마세요
 - 중요: '국적'(flag)과 '해역'(area)은 다른 개념이므로 도구를 정확히 골라야 합니다:
@@ -55,3 +57,35 @@ SYSTEM_PROMPT = """당신은 해양 상황 인식 시스템의 AI 어시스턴�
 
 MAX_RESPONSE_TOKENS = 1024
 MAX_TOOL_CALLS = 5  # 한 요청당 최대 tool 호출 횟수
+
+# ---------------------------------------------------------------------------
+# Autonomous planner (Plan-and-Execute, hybrid)
+# ---------------------------------------------------------------------------
+# 멀티-도메인 복합 요청에서만 동작하는 명시적 계획 단계. 단순 턴은 게이트가
+# 걸러 기존 reactive 루프로 즉답한다(지연·동작 변화 없음). 0이면 완전 비활성.
+ENABLE_PLANNER = os.getenv("ENABLE_PLANNER", "1") not in ("0", "false", "False", "")
+MAX_PLAN_STEPS = int(os.getenv("MAX_PLAN_STEPS", "6"))  # 계획 최대 단계 수
+PLANNER_MODEL = os.getenv("PLANNER_MODEL", OLLAMA_MODEL)  # 기본은 본 모델 재사용
+PLANNER_MAX_TOKENS = int(os.getenv("PLANNER_MAX_TOKENS", "768"))
+
+# 계획 생성용 시스템 프롬프트. 실제 도구 카탈로그는 런타임에 주입된다.
+PLANNER_SYSTEM_PROMPT = """당신은 해양 상황 인식 시스템의 '작업 계획기'입니다.
+사용자의 복합 요청을 실행 가능한 단계(step) 목록으로 분해합니다.
+
+반드시 아래 JSON 스키마만 출력합니다. 설명·인사·코드블록 표시 없이 순수 JSON만:
+{
+  "goal": "요청 한 줄 요약",
+  "clarify": null,                      // 정보가 부족해 계획할 수 없으면 사용자에게 물을 질문(문자열)
+  "steps": [
+    {"n": 1, "tool": "<도구이름>", "args": {...}, "why": "이 단계 목적", "needs": []}
+  ]
+}
+
+규칙:
+- tool 은 아래 '사용 가능한 도구' 목록의 이름만 사용합니다. 목록에 없는 도구는 만들지 마세요.
+- 앞 단계의 결과값을 인자로 써야 하면 "{{단계번호.키}}" 형식으로 참조하세요.
+  예: 2번 plan_route 결과의 도착지 좌표를 쓰려면 {"lat": "{{2.toLat}}", "lon": "{{2.toLng}}"}.
+- needs 에는 먼저 끝나야 하는 단계 번호를 적습니다.
+- 단계는 최소화하세요. 한 도구로 끝나면 step 1개면 됩니다.
+- 화면 전환이 선행되어야 하는 작업은 전환 도구를 먼저 단계로 넣으세요.
+- 정보가 충분하면 clarify 는 반드시 null 로 둡니다."""
