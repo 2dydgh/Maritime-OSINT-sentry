@@ -5,6 +5,9 @@
 # 개발용 에이전트 스킬 (앱과 무관)
 .agents/
 
+# oh-my-claudecode 운영 상태 (Claude Code 도구 레이어, 앱과 무관)
+.omc/
+
 # Python
 __pycache__/
 *.py[cod]
