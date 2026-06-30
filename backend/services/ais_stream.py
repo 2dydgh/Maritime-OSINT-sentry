@@ -172,6 +172,9 @@ _vessels_lock = threading.Lock()
 _ws_thread: threading.Thread | None = None
 _ws_running = False
 _ws_process = None  # 현재 떠 있는 node ais_proxy 프로세스 핸들 (종료 시 kill 용)
+# Interruptible reconnect-backoff wait — set by stop_ais_stream() so the loop
+# wakes immediately instead of blocking in time.sleep().
+_ws_stop_event = threading.Event()
 
 # -----------------------------------------------------------------------
 # Anomaly Detection — alert queue for Live Feed
@@ -587,7 +590,8 @@ def _ais_stream_loop():
             logger.error(f"AIS proxy connection error: {e}")
             if _ws_running:
                 logger.info(f"Restarting AIS proxy in {backoff}s (exponential backoff)...")
-                time.sleep(backoff)
+                # Interruptible wait — wakes immediately when stop_ais_stream() fires.
+                _ws_stop_event.wait(backoff)
                 backoff = min(backoff * 2, 60)  # Double up to 60s max
             continue
         # Reset backoff on successful connection (got at least some messages)
@@ -616,8 +620,9 @@ def start_ais_stream():
 
     # Load cached vessel data from disk
     _load_cache()
-    
+
     _ws_running = True
+    _ws_stop_event.clear()
     _ws_thread = threading.Thread(target=_run_ais_loop, daemon=True, name="ais-stream")
     _ws_thread.start()
     logger.info("AIS Stream background thread started")
@@ -627,6 +632,7 @@ def stop_ais_stream():
     """Stop the AIS WebSocket stream and save cache."""
     global _ws_running, _ws_process
     _ws_running = False
+    _ws_stop_event.set()  # wake the reconnect loop out of its backoff wait
 
     # node 프록시 자식을 그룹째 종료. 안 죽이면 --reload/재시작마다 고아가 쌓여
     # 같은 키로 동시 연결이 누적되고 aisstream 이 429 로 거부한다.

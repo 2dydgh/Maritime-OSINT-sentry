@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS trajectories (
 
 CREATE INDEX IF NOT EXISTS idx_trajectories_geom ON trajectories USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_trajectories_time ON trajectories (record_time);
+-- 최신 위치 스냅샷 / fallback 조회 가속용 복합 인덱스 (DISTINCT ON object_id + record_time DESC)
+CREATE INDEX IF NOT EXISTS idx_trajectories_object_id_time ON trajectories (object_id, record_time DESC);
+CREATE INDEX IF NOT EXISTS idx_trajectories_object_type_time ON trajectories (object_type, record_time);
 
 -- 3. 통제 구역 테이블 (다각형 데이터 - Polygon)
 CREATE TABLE IF NOT EXISTS restricted_areas (

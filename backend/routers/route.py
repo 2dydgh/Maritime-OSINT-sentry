@@ -65,10 +65,10 @@ def _interpolate_route(coords: list[list], max_gap_km: float = 20.0) -> list[lis
 
 @router.get("/route")
 def get_route(
-    from_lat: float = Query(...),
-    from_lng: float = Query(...),
-    to_lat: float = Query(...),
-    to_lng: float = Query(...),
+    from_lat: float = Query(..., ge=-90.0, le=90.0),
+    from_lng: float = Query(..., ge=-180.0, le=180.0),
+    to_lat: float = Query(..., ge=-90.0, le=90.0),
+    to_lng: float = Query(..., ge=-180.0, le=180.0),
 ):
     """Calculate shipping route between two coordinates."""
     # Round for cache key

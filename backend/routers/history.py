@@ -7,6 +7,7 @@ Provides endpoints for:
 - Getting available data time range for UI initialization
 """
 
+import asyncio
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Query, HTTPException, Request
@@ -18,6 +19,8 @@ from ..services.ais_stream import get_all_vessel_metadata, get_country_from_mmsi
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/history", tags=["history"])
+
+_DB_ACQUIRE_TIMEOUT = 5.0  # seconds
 
 
 class ShipPosition(BaseModel):
@@ -80,8 +83,9 @@ async def get_ships_at_time(
         # Get current vessel metadata for enrichment
         vessel_metadata = get_all_vessel_metadata()
 
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(query, time)
+        async with asyncio.timeout(_DB_ACQUIRE_TIMEOUT):
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(query, time)
 
             ships = []
             for row in rows:
@@ -110,9 +114,12 @@ async def get_ships_at_time(
             logger.info(f"History: Retrieved {len(ships)} ships at time {time}")
             return ships
 
-    except Exception as e:
-        logger.error(f"Error fetching ships at time {time}: {e}")
-        return []
+    except (asyncio.TimeoutError, TimeoutError):
+        logger.error(f"Timeout fetching ships at time {time}")
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
+    except Exception:
+        logger.exception(f"Error fetching ships at time {time}")
+        raise HTTPException(status_code=503, detail="Failed to fetch ship positions")
 
 
 @router.get("/ships/{mmsi}", response_model=List[TrajectoryPoint])
@@ -156,8 +163,9 @@ async def get_ship_trajectory(
     """
 
     try:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(query, mmsi, start, end)
+        async with asyncio.timeout(_DB_ACQUIRE_TIMEOUT):
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(query, mmsi, start, end)
 
             trajectory = []
             for row in rows:
@@ -172,9 +180,12 @@ async def get_ship_trajectory(
             logger.info(f"History: Retrieved {len(trajectory)} trajectory points for MMSI {mmsi}")
             return trajectory
 
-    except Exception as e:
-        logger.error(f"Error fetching trajectory for MMSI {mmsi}: {e}")
-        return []
+    except (asyncio.TimeoutError, TimeoutError):
+        logger.error(f"Timeout fetching trajectory for MMSI {mmsi}")
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
+    except Exception:
+        logger.exception(f"Error fetching trajectory for MMSI {mmsi}")
+        raise HTTPException(status_code=503, detail="Failed to fetch trajectory")
 
 
 @router.get("/trajectories")
@@ -278,8 +289,9 @@ async def get_bulk_trajectories(
         params = [start, end, limit_per_ship, max_ships]
 
     try:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(query, *params)
+        async with asyncio.timeout(_DB_ACQUIRE_TIMEOUT):
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(query, *params)
 
             # Group by mmsi
             ships = {}
@@ -305,9 +317,12 @@ async def get_bulk_trajectories(
             logger.info(f"History: Retrieved trajectories for {len(ships)} ships ({len(rows)} total points)")
             return {"ships": ships}
 
-    except Exception as e:
-        logger.error(f"Error fetching bulk trajectories: {e}")
-        return {"ships": {}}
+    except (asyncio.TimeoutError, TimeoutError):
+        logger.error("Timeout fetching bulk trajectories")
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
+    except Exception:
+        logger.exception("Error fetching bulk trajectories")
+        raise HTTPException(status_code=503, detail="Failed to fetch trajectories")
 
 
 @router.get("/range", response_model=TimeRange)
@@ -332,8 +347,9 @@ async def get_data_time_range():
     """
 
     try:
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(query)
+        async with asyncio.timeout(_DB_ACQUIRE_TIMEOUT):
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(query)
 
             result = TimeRange(
                 min_time=row["min_time"],
@@ -344,6 +360,9 @@ async def get_data_time_range():
             logger.info(f"History: Data range from {result.min_time} to {result.max_time}, {result.total_records} records")
             return result
 
-    except Exception as e:
-        logger.error(f"Error fetching data time range: {e}")
-        return TimeRange(min_time=None, max_time=None, total_records=0)
+    except (asyncio.TimeoutError, TimeoutError):
+        logger.error("Timeout fetching data time range")
+        raise HTTPException(status_code=503, detail="Database temporarily unavailable")
+    except Exception:
+        logger.exception("Error fetching data time range")
+        raise HTTPException(status_code=503, detail="Failed to fetch data time range")

@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from ..services.satellite_tracker import fetch_intel_satellites
 import logging
 
@@ -11,6 +11,6 @@ async def get_satellites():
     try:
         sats = fetch_intel_satellites()
         return sats
-    except Exception as e:
-        logger.error(f"Error fetching satellites: {e}")
-        return []
+    except Exception:
+        logger.exception("Error fetching satellites")
+        raise HTTPException(status_code=502, detail="Failed to fetch satellite orbits")

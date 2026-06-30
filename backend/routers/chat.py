@@ -25,7 +25,15 @@ class ChatResponse(BaseModel):
 @router.post("/chat", response_model=ChatResponse)
 async def post_chat(req: ChatRequest):
     """Process a chat message through the maritime LLM agent."""
-    result = await llm_agent.chat(req.message, req.history, req.context)
+    try:
+        result = await llm_agent.chat(req.message, req.history, req.context)
+    except Exception:
+        logger.exception("LLM agent chat() failed")
+        return ChatResponse(
+            text="죄송합니다. 지금은 응답을 생성할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+            actions=[],
+            plan=None,
+        )
     return ChatResponse(
         text=result["text"],
         actions=result["actions"],

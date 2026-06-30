@@ -20,6 +20,8 @@ FALLBACK_LOW_STREAK_TICKS = 2
 
 _SNAPSHOT_WINDOW = "30 minutes"
 _CACHE_TTL_S = 60
+# 최악의 경우 풀스캔을 막기 위한 스냅샷 상한 (선박 수 기준).
+_SNAPSHOT_LIMIT = 50000
 # 창은 wall-clock now() 가 아니라 "DB 에 기록된 최신 시각" 기준으로 잡는다.
 # 라이브가 끊기면 history_writer 도 새 행을 안 쓰므로, now()-30분 창은 항상
 # 비어 있게 된다(= fallback 이 필요한 바로 그 순간에 0척). 데이터 최신 시각을
@@ -34,6 +36,7 @@ WHERE object_type = 'ship'
         SELECT max(record_time) FROM trajectories WHERE object_type = 'ship'
       ) - interval '{_SNAPSHOT_WINDOW}'
 ORDER BY object_id, record_time DESC
+LIMIT {_SNAPSHOT_LIMIT}
 """
 
 _cache: list[dict] = []

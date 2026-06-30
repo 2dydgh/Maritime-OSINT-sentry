@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 # last_attempt = ts of last refresh *attempt* (debounces failure retries to 60s+)
 _sat_gp_cache = {"data": None, "last_fetch": 0, "last_attempt": 0}
 _refresh_lock = threading.Lock()
+# Interruptible pacing wait for the TLE fallback rate-limit. Set this event to
+# break out of the inter-request delay early on shutdown.
+_shutdown_event = threading.Event()
 
 _GP_URLS = [
     "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json",
@@ -144,9 +147,10 @@ def _fetch_satellites_from_tle_api():
 
     for i, term in enumerate(search_terms):
         try:
-            # Rate limit: 1.5초 간격으로 요청
+            # Rate limit: 1.5초 간격으로 요청 (interruptible — 종료 시 즉시 탈출)
             if i > 0:
-                time.sleep(1.5)
+                if _shutdown_event.wait(1.5):
+                    break
             url = f"https://tle.ivanstanojevic.me/api/tle/?search={term}&page_size=100&format=json"
             response = fetch_with_curl(url, timeout=10)
             if response.status_code != 200:

@@ -1,10 +1,16 @@
 from typing import List, Dict, Any
+import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
 import logging
 
 from backend.services.metrics import websocket_connections_active
 
 logger = logging.getLogger(__name__)
+
+# Per-client send timeout for the recurring fan-out. A single stalled client
+# (full TCP send buffer) must not block the broadcast loop and starve every
+# other client / the realtime tick — it gets evicted on timeout instead.
+BROADCAST_SEND_TIMEOUT_SEC = 5.0
 
 class ConnectionManager:
     def __init__(self):
@@ -26,8 +32,10 @@ class ConnectionManager:
         disconnected = []
         for connection in self.active_connections:
             try:
-                await connection.send_json(message)
-            except Exception as e:
+                await asyncio.wait_for(
+                    connection.send_json(message), timeout=BROADCAST_SEND_TIMEOUT_SEC
+                )
+            except (Exception, asyncio.TimeoutError) as e:
                 logger.error(f"Error broadcasting to client: {e}")
                 disconnected.append(connection)
 
@@ -39,8 +47,10 @@ class ConnectionManager:
         disconnected = []
         for connection in self.active_connections:
             try:
-                await connection.send_text(text)
-            except Exception as e:
+                await asyncio.wait_for(
+                    connection.send_text(text), timeout=BROADCAST_SEND_TIMEOUT_SEC
+                )
+            except (Exception, asyncio.TimeoutError) as e:
                 logger.error(f"Error broadcasting to client: {e}")
                 disconnected.append(connection)
 

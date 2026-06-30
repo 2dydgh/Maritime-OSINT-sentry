@@ -34,8 +34,20 @@ def _get_client() -> httpx.AsyncClient:
     """Return the shared httpx client, creating it on first call."""
     global _http_client
     if _http_client is None:
-        _http_client = httpx.AsyncClient(timeout=OLLAMA_TIMEOUT)
+        _http_client = httpx.AsyncClient(
+            timeout=OLLAMA_TIMEOUT,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
     return _http_client
+
+
+async def close_client() -> None:
+    """Close the shared httpx client. Called from the app lifespan shutdown so the
+    connection pool is released cleanly. Safe to call when no client was created."""
+    global _http_client
+    if _http_client is not None:
+        client, _http_client = _http_client, None
+        await client.aclose()
 
 
 # ---------------------------------------------------------------------------

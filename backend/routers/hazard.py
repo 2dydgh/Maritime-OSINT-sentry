@@ -114,8 +114,8 @@ def _load_cells_from_disk() -> list[dict] | None:
             data = json.load(f)
         if data.get("with_land") and data.get("cells"):
             return data["cells"]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("hazard disk cache load skipped: %s", e)
     return None
 
 

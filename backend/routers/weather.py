@@ -1,8 +1,10 @@
+import logging
 import time
 import httpx
 from fastapi import APIRouter
 from backend.services import korea_hex_grid as _khg
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["weather"])
 
 _cache = {"data": None, "ts": 0}
@@ -84,6 +86,7 @@ async def get_wind_data():
                 entries = raw if isinstance(raw, list) else [raw]
                 all_entries.extend(entries)
     except Exception:
+        logger.exception("wind weather upstream request failed")
         # API down — return stale cache or empty
         if _wind_cache.get("data"):
             return _wind_cache["data"]
@@ -150,8 +153,8 @@ async def get_korea_grid_weather():
                     entries = [entries]
                 for i, e in enumerate(entries):
                     marine_by_idx[start + i] = e.get("current", {})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("korea-grid marine batch failed: %s", e)
 
         # Forecast (wind, visibility) — wind in knots
         for start in range(0, len(cells), BATCH):
@@ -172,8 +175,8 @@ async def get_korea_grid_weather():
                     entries = [entries]
                 for i, e in enumerate(entries):
                     forecast_by_idx[start + i] = e.get("current", {})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("korea-grid forecast batch failed: %s", e)
 
     merged = []
     for i, (lat, lng) in enumerate(cells):
