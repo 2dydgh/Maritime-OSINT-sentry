@@ -7249,13 +7249,13 @@ input[type="range"]#routeSpeedSlider::-moz-range-thumb {
    danger (matches the palette's "danger is the only loud step" philosophy). */
 .hazard-hex.hex-danger {
     filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6));
-    animation: pulseDangerHex 2s 3 ease-in-out;
+    animation: pulseDangerHex 2s ease-in-out 3;
 }
 
 /* ── Center dot glow ── */
 .hazard-dot.dot-danger {
     filter: drop-shadow(0 0 5px rgba(255, 60, 60, 0.9));
-    animation: pulseDangerDot 2s 3 ease-in-out;
+    animation: pulseDangerDot 2s ease-in-out 3;
 }
 
 /* ── Hazard Legend Panel — dark glassmorphism ── */
