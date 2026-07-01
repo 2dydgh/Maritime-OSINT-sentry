@@ -1397,7 +1397,7 @@
     text-transform: uppercase;
     font-family: var(--font-body);
     font-weight: 600;
-    animation: rv-scenario-pulse 2s ease-in-out infinite;
+    animation: rv-scenario-pulse 2s ease-in-out 3;
 }
 .rv-scenario-badge i { font-size: 0.625rem; }
 .rv-scenario-badge-label { line-height: 1; }
@@ -1699,7 +1699,7 @@
     color: rgba(91, 142, 245, 0.9);
     margin-bottom: 14px;
     filter: drop-shadow(0 0 14px rgba(47, 111, 237, 0.5));
-    animation: routeEmptyFloat 3s ease-in-out infinite;
+    animation: routeEmptyFloat 3s ease-in-out 3;
 }
 
 /* ── Roll empty-state quick ship picker ── */
@@ -1957,7 +1957,7 @@
 .rv-canvas-hud-val.rv-turn-danger,
 .rv-scenario-turn-val.rv-turn-danger {
     color: var(--sev-danger) !important;
-    animation: rv-blink 0.6s ease-in-out infinite alternate;
+    animation: rv-blink 0.6s ease-in-out 3 alternate;
 }
 
 @keyframes rv-blink {
@@ -2371,14 +2371,14 @@
     background: rgba(251, 122, 44, 0.2);
     border: 1px solid rgba(251, 122, 44, 0.4);
     color: var(--sev-warning);
-    animation: rv-badge-pulse 1.5s ease-in-out infinite;
+    animation: rv-badge-pulse 1.5s ease-in-out 3;
 }
 
 .rv-danger-badge[data-level="danger"] {
     background: rgba(var(--sev-danger-rgb), 0.25);
     border: 1px solid rgba(var(--sev-danger-rgb), 0.5);
     color: var(--sev-danger);
-    animation: rv-badge-pulse 0.8s ease-in-out infinite;
+    animation: rv-badge-pulse 0.8s ease-in-out 3;
 }
 
 @keyframes rv-badge-pulse {
@@ -3052,7 +3052,7 @@ body {
     );
     -webkit-mask: radial-gradient(circle at 50% 50%, transparent 5%, #000 6%);
     mask: radial-gradient(circle at 50% 50%, transparent 5%, #000 6%);
-    animation: ld-sweep 4s linear infinite;
+    animation: ld-sweep 4s linear 3;
 }
 @keyframes ld-sweep { to { transform: rotate(360deg); } }
 
@@ -3135,7 +3135,7 @@ body {
     border-radius: 50%;
     border: 1.5px solid var(--loader-accent);
     opacity: 0;
-    animation: ld-ping 2.4s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+    animation: ld-ping 2.4s cubic-bezier(0.2, 0.6, 0.3, 1) 3;
 }
 .ld-ping-wave:nth-child(2) { animation-delay: 1.2s; }
 
@@ -4777,7 +4777,7 @@ body {
 }
 
 #mapSearchIcon.searching {
-    animation: spin 0.8s linear infinite;
+    animation: spin 0.8s linear 3;
 }
 
 @keyframes spin {
@@ -5391,7 +5391,7 @@ body {
 
 /* Risk stat glow on high values */
 .risk-stat.glow {
-    animation: glowPulse 2s ease-in-out infinite;
+    animation: glowPulse 2s ease-in-out 3;
 }
 
 /* Smooth layer group expand/collapse */
@@ -5567,7 +5567,7 @@ body {
     margin-right: 8px;
     vertical-align: middle;
     box-shadow: 0 0 8px var(--primary);
-    animation: routeModeBarPulse 1.5s ease-in-out infinite;
+    animation: routeModeBarPulse 1.5s ease-in-out 3;
 }
 
 @keyframes routeModeBarPulse {
@@ -6263,7 +6263,7 @@ input[type="range"]#routeSpeedSlider::-moz-range-thumb {
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-top-color: #fff;
     border-radius: 50%;
-    animation: route-spin 0.6s linear infinite;
+    animation: route-spin 0.6s linear 3;
     vertical-align: middle;
     margin-right: 4px;
 }
@@ -7230,7 +7230,7 @@ input[type="range"]#routeSpeedSlider::-moz-range-thumb {
     100% { stroke-opacity: 0.90; }
 }
 .hazard-ring {
-    animation: hazardRingPulse 3s ease-in-out infinite;
+    animation: hazardRingPulse 3s ease-in-out 3;
 }
 .hazard-ring.ring-danger {
     animation-name: hazardRingPulseDanger;
@@ -7249,13 +7249,13 @@ input[type="range"]#routeSpeedSlider::-moz-range-thumb {
    danger (matches the palette's "danger is the only loud step" philosophy). */
 .hazard-hex.hex-danger {
     filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6));
-    animation: pulseDangerHex 2s infinite ease-in-out;
+    animation: pulseDangerHex 2s 3 ease-in-out;
 }
 
 /* ── Center dot glow ── */
 .hazard-dot.dot-danger {
     filter: drop-shadow(0 0 5px rgba(255, 60, 60, 0.9));
-    animation: pulseDangerDot 2s infinite ease-in-out;
+    animation: pulseDangerDot 2s 3 ease-in-out;
 }
 
 /* ── Hazard Legend Panel — dark glassmorphism ── */
@@ -7572,7 +7572,7 @@ body:has(.chat-panel.chat-panel-open) .hazard-legend-panel {
    the selection stands out against the light-blue nautical chart basemap. */
 .area-select-rect {
     filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.55));
-    animation: areaSelectPulse 1.2s ease-in-out infinite;
+    animation: areaSelectPulse 1.2s ease-in-out 3;
 }
 
 .area-result-rect {
@@ -8028,7 +8028,7 @@ button, .btn, [class*="-btn"] {
     background: rgba(239, 68, 68, 0.15);
     border-color: rgba(239, 68, 68, 0.4);
     color: #fca5a5;
-    animation: rv-blink 0.8s ease-in-out infinite alternate;
+    animation: rv-blink 0.8s ease-in-out 3 alternate;
 }
 
 /* 전복 버튼은 마우스 호버 시에만 Danger 색상으로 전환해 위험 인지 */
@@ -8220,7 +8220,7 @@ button, .btn, [class*="-btn"] {
     border-radius: 50%;
     background: var(--accent-green, #22c55e);
     box-shadow: 0 0 8px var(--accent-green, #22c55e);
-    animation: rv-pulse-green 2s infinite;
+    animation: rv-pulse-green 2s 3;
 }
 @keyframes rv-pulse-green {
     0% { opacity: 1; }
@@ -9189,7 +9189,7 @@ button, .btn, [class*="-btn"] {
     border-top: 2px solid var(--primary);
     background: linear-gradient(180deg, rgba(47, 111, 237, 0.18), rgba(47, 111, 237, 0.06));
     box-shadow: inset 0 1px 0 rgba(120, 160, 240, 0.25);
-    animation: rvProgPulse 1.8s ease-in-out infinite;
+    animation: rvProgPulse 1.8s ease-in-out 3;
 }
 @keyframes rvProgPulse {
     0%, 100% { background: linear-gradient(180deg, rgba(47, 111, 237, 0.18), rgba(47, 111, 237, 0.06)); }
