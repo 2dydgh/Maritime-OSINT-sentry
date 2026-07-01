@@ -1,10 +1,3 @@
-@font-face {
-    font-family: 'S-CoreDream-6Bold';
-    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/S-CoreDream-6Bold.woff') format('woff');
-    font-weight: 700;
-    font-style: normal;
-}
-
 :root {
     /* ══ Admiralty Navy ══ deeper, more deliberate than the stock tech-blue.
        Background carries a faint navy-ink tint (not neutral black); the single
@@ -17,9 +10,10 @@
          display → titles & buttons  (Rajdhani / S-CoreDream)
          body    → running text      (Inter / Pretendard)
          data    → numbers & gauges  (B612 Mono — cockpit instrument face) */
-    --font-display: 'Rajdhani', 'S-CoreDream-6Bold', 'Pretendard Variable', sans-serif;
-    --font-body: 'Inter', 'Pretendard Variable', sans-serif;
-    --font-data: 'B612 Mono', 'JetBrains Mono', 'Pretendard Variable', monospace;
+    --font-brand:   'Orbitron', sans-serif;
+    --font-display: 'Rajdhani', 'Pretendard Variable', sans-serif;
+    --font-body:    'Inter', 'Pretendard Variable', sans-serif;
+    --font-data:    'IBM Plex Mono', 'Pretendard Variable', monospace;
     --bg-color: #0a0e16;          /* navy-ink, not neutral black */
     --panel-bg: #131a29;
     --panel-bg-solid: rgba(19, 26, 41, 0.95);
@@ -71,7 +65,7 @@
     --accent-glow: #4d9bff;
     --accent-red: var(--sev-danger);   /* alias → single danger source */
     --accent-green: #22c55e;
-    --accent-amber: #f59e0b;
+    --accent-amber: var(--caution); /* alias: transient warning-state shares caution hue */
     --accent-yellow: #eab308;
     --text-main: #f4f4f5;
     --text-sub: #a1a1aa;
@@ -732,10 +726,10 @@
 
 .bottom-detail-popup.visible {
     display: block;
-    animation: slideUp 0.15s ease-out;
+    animation: slideUpPanel 0.15s ease-out;
 }
 
-@keyframes slideUp {
+@keyframes slideUpPanel {
     from {
         opacity: 0;
         transform: translateY(8px);
@@ -849,7 +843,7 @@
 
 .detail-area-name {
     flex: 1;
-    color: var(--text-secondary);
+    color: var(--text-sub);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -864,7 +858,7 @@
 
 .detail-area-total {
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-main);
     min-width: 16px;
     text-align: right;
 }
@@ -1726,7 +1720,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 7px;
     padding: 8px 10px;
-    color: #e2e8f0;
+    color: var(--text-main);
     cursor: pointer;
     font-family: var(--font-body);
     transition: background 0.15s, border-color 0.15s;
@@ -1898,7 +1892,7 @@
     z-index: 5;
     background: rgba(8, 18, 38, 0.82);
     border: 1px solid rgba(47, 111, 237, 0.55);
-    color: #e2e8f0;
+    color: var(--text-main);
     padding: 6px 14px;
     border-radius: 8px;
     font-size: 0.75rem;
@@ -1935,7 +1929,7 @@
 /* Turn scenario value color overrides */
 .rv-canvas-hud-val.rv-turn-active,
 .rv-scenario-turn-val.rv-turn-active {
-    color: #fbbf24 !important;
+    color: var(--sev-caution) !important;
 }
 
 .rv-canvas-hud-val.rv-turn-danger,
@@ -2072,10 +2066,10 @@
 }
 
 .rv-period-marker-te[data-level="caution"] {
-    background: #fbbf24;
+    background: var(--sev-caution);
     box-shadow: 0 0 6px rgba(251, 191, 36, 0.5);
 }
-.rv-period-marker-te[data-level="caution"] span { color: #fbbf24; }
+.rv-period-marker-te[data-level="caution"] span { color: var(--sev-caution); }
 
 .rv-period-marker-te[data-level="danger"] {
     background: var(--accent-red);
@@ -2301,17 +2295,17 @@
     font-family: var(--font-data);
     font-size: 1.05rem;
     font-weight: 700;
-    color: #e2e8f0;
+    color: var(--text-main);
     line-height: 1;
     transition: color 0.3s ease;
 }
 
 .rv-canvas-hud-val[data-level="safe"] {
-    color: #e2e8f0;
+    color: var(--text-main);
 }
 
 .rv-canvas-hud-val[data-level="caution"] {
-    color: #fbbf24;
+    color: var(--sev-caution);
 }
 
 .rv-canvas-hud-val[data-level="warning"] {
@@ -2530,7 +2524,7 @@ body {
     color: var(--text-main);   /* wordmark neutral; the M mark keeps the single brand-blue accent */
     font-size: 22px;
     font-weight: 700;
-    font-family: 'Rajdhani', sans-serif;  /* header wordmark — original face, exception to display token */
+    font-family: var(--font-brand);
     letter-spacing: 1.5px;
 }
 
@@ -3481,7 +3475,7 @@ body {
    map markers/overlays they label; keep these in sync with the renderers). */
 .color-precip        { background-color: #2f6fed; }
 .color-wave          { background-color: #06b6d4; }
-.color-wind          { background-color: #a78bfa; }
+.color-wind          { background-color: #22d3ee; }
 .color-sat           { background-color: #2f6fed; }
 .color-sat-sar       { background-color: #f97316; }
 .color-sat-optical   { background-color: #94a3b8; }
@@ -3725,23 +3719,7 @@ body {
     pointer-events: none;
 }
 
-.collision-table-header {
-    display: grid;
-    grid-template-columns: 60px 1fr auto;
-    gap: 8px;
-    padding: 8px 12px;
-    font: 600 0.7rem/1 'Pretendard Variable', 'Inter', sans-serif;
-    color: var(--text-dim);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    text-align: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(0, 0, 0, 0.3);
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    flex-shrink: 0;
-}
+/* collision-table-header: card layout uses display:none variant below */
 
 .collision-list {
     overflow-y: auto;
@@ -4011,7 +3989,7 @@ body {
 }
 
 .hud-stat-alert .hud-stat-value {
-    color: var(--accent-red, #f43f5e);
+    color: var(--sev-danger);
     text-shadow: 0 0 20px rgba(244, 63, 94, 0.5), 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
@@ -4179,7 +4157,7 @@ body {
 }
 
 .drag-panel-body td {
-    color: #e2e8f0;
+    color: var(--text-main);
     text-align: right;
 }
 
@@ -6732,7 +6710,7 @@ input[type="range"]#routeSpeedSlider::-moz-range-thumb {
     font-family: var(--font-data);
     font-size: 0.85rem;
     font-weight: 700;
-    color: #e2e8f0;
+    color: var(--text-main);
 }
 
 /* ── Chat Panel ── */
@@ -7059,7 +7037,7 @@ input[type="range"]#routeSpeedSlider::-moz-range-thumb {
     border-radius: 4px;
     font-family: var(--font-data);
     font-size: 0.72rem;
-    color: #fbbf24;
+    color: var(--sev-caution);
 }
 .chat-msg-assistant pre {
     background: rgba(0, 0, 0, 0.35);
@@ -7884,7 +7862,7 @@ button, .btn, [class*="-btn"] {
 .rv-split-left { left: 0; }
 .rv-split-right { right: 0; }
 .rv-split-label { font-size: 12px; letter-spacing: 1px; color: #94a3b8; font-weight: 600; }
-.rv-split-roll { font-size: 20px; font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; }
+.rv-split-roll { font-size: 20px; font-weight: 700; color: var(--text-main); font-variant-numeric: tabular-nums; }
 .rv-split-side .roll-gauge { width: 120px; }
 .rv-roll-safe { color: #10b981; }
 .rv-roll-caution { color: var(--sev-caution); }
@@ -8128,7 +8106,7 @@ button, .btn, [class*="-btn"] {
     box-shadow: 0 0 0 1px var(--primary), 0 1px 4px rgba(0, 0, 0, 0.45);
 }
 .rv-sim-val { flex: 0 0 52px; text-align: right; font-size: 12px; font-weight: 600;
-  color: #e2e8f0; font-variant-numeric: tabular-nums; }
+  color: var(--text-main); font-variant-numeric: tabular-nums; }
 .rv-sim-dir {
     flex: 1 1 auto;
     display: flex;
@@ -8861,19 +8839,19 @@ button, .btn, [class*="-btn"] {
 .rv-layout-b .rv-canvas-hud-scenario {
     position: static; inset: auto;
     flex: 0 0 auto; order: 0;
-    width: 100%; max-width: none; max-height: none;
-    height: 0; overflow: hidden;
+    width: 100%; max-width: none;
+    height: auto; max-height: 0; overflow: hidden;   /* content-driven height — open caps at max-height, never clips */
     transform: none; opacity: 1; z-index: auto;
     border: none; border-top: 1px solid var(--rv-edge); border-radius: 0;
     background: linear-gradient(180deg, var(--rv-surf-top) 0%, var(--rv-surf-bot) 100%);
     backdrop-filter: none; -webkit-backdrop-filter: none;
     box-shadow: inset 0 1px 0 var(--rv-hi), 0 -8px 26px rgba(0, 0, 0, 0.42);
     display: flex; flex-direction: column; gap: 0; padding: 0;
-    transition: height .28s cubic-bezier(.4, 0, .2, 1);
+    transition: max-height .28s cubic-bezier(.4, 0, .2, 1);
 }
-.rv-layout-b .rv-canvas-hud-scenario.rv-sim-open { height: 200px; }
-/* 선회 중에는 진행(재생) 바가 추가로 뜨므로 덱을 키워 컨트롤과 겹치지 않게 */
-.rv-layout-b .rv-canvas-hud-scenario.rv-sim-open.rv-deck-turning { height: 240px; }
+.rv-layout-b .rv-canvas-hud-scenario.rv-sim-open { max-height: 46vh; }
+/* 선회 중에는 진행(재생) 바가 추가로 뜨므로 상한을 키워 컨트롤과 겹치지 않게 */
+.rv-layout-b .rv-canvas-hud-scenario.rv-sim-open.rv-deck-turning { max-height: 52vh; }
 
 /* header → slim full-width strip with a brand tick */
 .rv-layout-b .rv-canvas-hud-scenario .rv-scenario-header {
@@ -8892,7 +8870,7 @@ button, .btn, [class*="-btn"] {
 /* body → 4 equal columns across the width, hairline dividers between */
 .rv-layout-b .rv-scenario-body {
     flex: 1 1 auto; display: flex; flex-direction: row; align-items: stretch;
-    gap: 0; padding: 0; margin: 0; overflow: hidden;
+    gap: 0; padding: 0; margin: 0; overflow-y: auto; overflow-x: hidden;   /* safety net: tall content scrolls, never clipped */
 }
 .rv-layout-b .rv-scenario-body .rv-sim-group {
     flex: 1 1 0; min-width: 0;
@@ -8993,7 +8971,7 @@ button, .btn, [class*="-btn"] {
 }
 .rv-layout-b .rv-console-rack .rv-mod { padding: 0 24px; }
 .rv-layout-b .rv-mod-error { margin-left: auto; min-width: 0; }       /* accuracy floats to the right edge */
-.rv-layout-b .rv-mod-clino .rv-clino { height: 62px; }
+.rv-layout-b .rv-mod-clino .rv-clino { height: 96px; }
 .rv-layout-b .rv-mod-heel .rv-clino-readout { gap: 14px; margin-top: 4px; }
 .rv-layout-b .rv-mod-heel .rv-clino-val { font-size: 1.28rem; }
 .rv-layout-b .rv-mod-heel .rv-clino-gap-val { font-size: 0.9rem; }
@@ -9126,6 +9104,10 @@ button, .btn, [class*="-btn"] {
 .rv-compass-bow { fill: var(--primary); }
 .rv-compass-stern { fill: rgba(140, 170, 220, 0.5); }
 .rv-compass-hub { fill: var(--text-sub); stroke: var(--bg-color); stroke-width: 1; }
+/* 계기 베젤 — 고정 위치명 라벨 + 옆파(직각) 레드라인 */
+.rv-compass-bezel .rv-bezel-redline { fill: none; stroke: var(--sev-danger); stroke-width: 3.2; stroke-linecap: round; opacity: 0.9; }
+.rv-bezel-lab { fill: var(--text-dim); font-family: var(--font-data); font-size: 6.2px; font-weight: 700; letter-spacing: 0.2px; dominant-baseline: middle; }
+.rv-bezel-lab-beam { fill: var(--sev-danger); }
 .rv-compass-cap { display: flex; align-items: center; gap: 6px; justify-content: center; }
 .rv-compass-tag { font-size: 0.6rem; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
 .rv-compass-cap .rv-sim-val { flex: 0 0 auto; }
