@@ -120,7 +120,7 @@ var RouteViewer = (function() {
             m.on('mouseover', function() {
                 // Preview the pick: green if this click sets 출발, red if 도착.
                 var slot = activeTargetSlot();
-                var c = slot === 'from' ? '#10b981' : slot === 'to' ? '#ef4444' : '#fbbf24';
+                var c = slot === 'from' ? '#10b981' : slot === 'to' ? '#ef4444' : '#d9a441';
                 m.setStyle({ radius: 8, fillColor: c });
             });
             m.on('mouseout', function() { m.setStyle({ radius: 6, fillColor: '#4d9bff' }); });
@@ -256,7 +256,7 @@ var RouteViewer = (function() {
     }
     var SHIP_ICON_URL = 'data:image/svg+xml,' + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">' +
-        '<polygon points="16,2 28,28 16,22 4,28" fill="#eab308" stroke="#a16207" stroke-width="1.5"/>' +
+        '<polygon points="16,2 28,28 16,22 4,28" fill="#5b8ef5" stroke="#2f6fed" stroke-width="1.5"/>' +
         '</svg>'
     );
 
@@ -962,7 +962,7 @@ var RouteViewer = (function() {
         var latlngs = routeCoords.map(function(c) { return [c[1], c[0]]; });
 
         routeLine = L.polyline(latlngs, {
-            color: '#eab308',
+            color: '#2f6fed',
             weight: 4,
             opacity: 0.95,
             dashArray: '8,8',
@@ -989,7 +989,7 @@ var RouteViewer = (function() {
             className: 'route-ship-divicon',
             html: '<div class="route-ship-ico">' +
                   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28">' +
-                  '<polygon points="16,2 28,28 16,22 4,28" fill="#eab308" stroke="#a16207" stroke-width="1.5"/>' +
+                  '<polygon points="16,2 28,28 16,22 4,28" fill="#5b8ef5" stroke="#2f6fed" stroke-width="1.5"/>' +
                   '</svg></div>',
             iconSize: [28, 28],
             iconAnchor: [14, 14]
