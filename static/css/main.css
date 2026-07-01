@@ -104,6 +104,13 @@
     --btn-overlay-glow-hover: 0 0 16px rgba(47, 111, 237, 0.35), 0 2px 12px rgba(0, 0, 0, 0.5);
 }
 
+/* 키보드 포커스 링 — 전역 */
+:focus-visible {
+    outline: 2px solid rgba(47, 111, 237, 0.7);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
 #app-layout {
     display: flex;
     flex-direction: column;
@@ -191,7 +198,7 @@
 }
 
 .rail-icon.active {
-    background: transparent;   /* no blue fill — the edge bar is the persistent marker */
+    background: rgba(47, 111, 237, 0.07);
     color: var(--text-main);   /* selected = full-brightness icon/label + the blue edge bar */
 }
 
@@ -209,8 +216,9 @@
     transform: translateY(-50%);
     width: 3px;
     height: 24px;
-    background: var(--primary);
+    background: linear-gradient(180deg, var(--accent-glow), var(--primary));
     border-radius: 0 3px 3px 0;
+    box-shadow: 0 0 6px rgba(47, 111, 237, 0.5);
 }
 
 /* Panel toggles (피드/충돌/설정) — independent on/off, layered over the live view.
@@ -376,6 +384,20 @@
     border-bottom: 1px solid var(--panel-border);
     background: var(--bg-color);
     flex-shrink: 0;
+    position: relative;
+}
+
+.right-panel-header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+        rgba(47, 111, 237, 0.6) 0%,
+        rgba(91, 142, 245, 0.3) 40%,
+        transparent 100%
+    );
+    pointer-events: none;
 }
 
 /* Small primary marker leads every panel title — a quiet, consistent
@@ -5053,6 +5075,8 @@ body {
 
 .map-mode-btn:hover:not(.active) {
     color: var(--text-main);
+    border-color: var(--btn-overlay-border-hover);
+    box-shadow: var(--btn-overlay-glow-hover);
 }
 
 .ship-tooltip-2d {
