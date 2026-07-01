@@ -7,9 +7,10 @@
     /* ══ Typography tokens ══ each role is a Latin→Korean fallback chain:
        the browser picks per-glyph, so English renders in the Latin face and
        Korean falls through to the Hangul face on the same line.
-         display → titles & buttons  (Rajdhani / S-CoreDream)
-         body    → running text      (Inter / Pretendard)
-         data    → numbers & gauges  (B612 Mono — cockpit instrument face) */
+         brand   → wordmark & hero numbers (Orbitron)
+         display → titles & buttons (Rajdhani)
+         body    → running text (Inter)
+         data    → numbers & gauges (IBM Plex Mono) */
     --font-brand:   'Orbitron', sans-serif;
     --font-display: 'Rajdhani', 'Pretendard Variable', sans-serif;
     --font-body:    'Inter', 'Pretendard Variable', sans-serif;
@@ -8220,7 +8221,7 @@ button, .btn, [class*="-btn"] {
     border-radius: 50%;
     background: var(--accent-green, #22c55e);
     box-shadow: 0 0 8px var(--accent-green, #22c55e);
-    animation: rv-pulse-green 2s 3;
+    animation: rv-pulse-green 2s ease 3;
 }
 @keyframes rv-pulse-green {
     0% { opacity: 1; }
