@@ -1165,9 +1165,13 @@ function _korShipType(t) {
 
 // Country flag chip — only when `country` is a 2-letter ISO code (flag-icons).
 // Otherwise returns '' so we never show a broken flag for full-name/unknown data.
+// 하단 바 TOP5와 동일한 국기+ISO 코드 칩 문법(.flag-chip) — 국기는 인식, 코드는 판독.
 function _flagHtml(country) {
     if (country && /^[A-Za-z]{2}$/.test(country)) {
-        return '<span class="fi fi-' + country.toLowerCase() + ' ship-id-flag"></span>';
+        return '<span class="flag-chip">' +
+            '<span class="fi fi-' + country.toLowerCase() + ' ship-id-flag"></span>' +
+            '<span class="flag-chip-code">' + country.toUpperCase() + '</span>' +
+            '</span>';
     }
     return '';
 }

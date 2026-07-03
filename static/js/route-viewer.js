@@ -256,7 +256,7 @@ var RouteViewer = (function() {
     }
     var SHIP_ICON_URL = 'data:image/svg+xml,' + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">' +
-        '<polygon points="16,2 28,28 16,22 4,28" fill="#5b8ef5" stroke="#2f6fed" stroke-width="1.5"/>' +
+        '<polygon points="16,2 28,28 16,22 4,28" fill="#eab308" stroke="#a16207" stroke-width="1.5"/>' +
         '</svg>'
     );
 
@@ -310,7 +310,7 @@ var RouteViewer = (function() {
         searchPanel.className = 'route-overlay-panel';
         searchPanel.innerHTML =
             '<div class="route-panel-header">' +
-                '<span class="route-panel-title"><i class="fa-solid fa-route"></i> 관습 항로 추론</span>' +
+                '<span class="route-panel-title">관습 항로 추론</span>' +
                 '<button id="routePanelToggle" class="route-panel-toggle" title="접기"><i class="fa-solid fa-chevron-up"></i></button>' +
             '</div>' +
             '<div id="routePanelBody" class="route-panel-body">' +
@@ -409,7 +409,7 @@ var RouteViewer = (function() {
         infoPanel.style.display = 'none';
         infoPanel.innerHTML =
             '<div class="route-panel-header">' +
-                '<span class="route-panel-title"><i class="fa-solid fa-chart-line"></i> 경로 정보</span>' +
+                '<span class="route-panel-title">경로 정보</span>' +
             '</div>' +
             '<div class="route-info-body">' +
                 '<div class="route-info-route-name">' +
@@ -962,7 +962,9 @@ var RouteViewer = (function() {
         var latlngs = routeCoords.map(function(c) { return [c[1], c[0]]; });
 
         routeLine = L.polyline(latlngs, {
-            color: '#2f6fed',
+            // 위성 지도 위에서 파랑은 바다에 묻힌다 — 항로선은 노랑(사용자 확정).
+            // 선박 마커는 파랑을 유지해 선(항로) vs 점(선박)이 서로 구분된다.
+            color: '#eab308',
             weight: 4,
             opacity: 0.95,
             dashArray: '8,8',
@@ -989,7 +991,7 @@ var RouteViewer = (function() {
             className: 'route-ship-divicon',
             html: '<div class="route-ship-ico">' +
                   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28">' +
-                  '<polygon points="16,2 28,28 16,22 4,28" fill="#5b8ef5" stroke="#2f6fed" stroke-width="1.5"/>' +
+                  '<polygon points="16,2 28,28 16,22 4,28" fill="#eab308" stroke="#a16207" stroke-width="1.5"/>' +
                   '</svg></div>',
             iconSize: [28, 28],
             iconAnchor: [14, 14]

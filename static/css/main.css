@@ -103,6 +103,14 @@
     --btn-overlay-border-hover: rgba(47, 111, 237, 0.85);
     --btn-overlay-glow:       0 2px 10px rgba(0, 0, 0, 0.5);
     --btn-overlay-glow-hover: 0 0 16px rgba(47, 111, 237, 0.35), 0 2px 12px rgba(0, 0, 0, 0.5);
+
+    /* 계기판 깊이 문법 — 광원 하나(위). well=파인 면(읽는 것), raise=솟은 컨트롤(만지는 것) */
+    --well-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+    --raise-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.35);
+    --press-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+    --seg-active-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --knob-bg: radial-gradient(circle at 35% 30%, #26354f, #0a0e16 72%);
+    --knob-shadow: 0 0 6px rgba(47, 111, 237, 0.45), 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 
 /* 키보드 포커스 링 — 전역 */
@@ -424,7 +432,7 @@
     display: inline-flex;
     align-items: baseline;
     gap: 5px;
-    font-family: var(--font-data);
+    font-family: var(--font-display);
 }
 .drawer-total b {
     font-size: 1.05rem;
@@ -926,11 +934,33 @@
 .flag-emojis {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 5px;
 }
 
-.flag-emojis .fi {
-    font-size: 1.1rem;
+/* 국기+ISO 코드 칩 — 국기(즉각 인식) + 모노폰트 코드(정확한 판독).
+   원색 국기를 칩 보더 안에 가둬 navy 화면에 흩뿌려지지 않게 한다. 하단 바 TOP5 · 선박 상세 공용. */
+.flag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 6px 2px 4px;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.02);
+}
+.flag-chip .fi {
+    font-size: 0.85rem;
+    line-height: 1;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.flag-chip-code {
+    font-family: var(--font-data);
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-sub);
+    line-height: 1;
 }
 
 
@@ -1376,71 +1406,7 @@
     font-weight: 600;
 }
 
-/* ── LLM scenario override styling ── */
-.rv-weather-title {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-.rv-scenario-badge[hidden] { display: none; }
-.rv-scenario-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 6px 2px 8px;
-    border-radius: 999px;
-    background: var(--primary-muted);
-    border: 1px solid rgba(47, 111, 237, 0.35);
-    color: var(--accent-glow);
-    font-size: 0.625rem;
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
-    font-family: var(--font-body);
-    font-weight: 600;
-    animation: rv-scenario-pulse 2s ease-in-out 3;
-}
-.rv-scenario-badge i { font-size: 0.625rem; }
-.rv-scenario-badge-label { line-height: 1; }
-.rv-scenario-clear-btn {
-    background: rgba(47, 111, 237, 0.2);
-    border: none;
-    color: var(--primary, #2f6fed);
-    font-size: 0.625rem;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 999px;
-    cursor: pointer;
-    margin-left: 2px;
-    font-family: inherit;
-    letter-spacing: 0.5px;
-}
-.rv-scenario-clear-btn:hover {
-    background: rgba(47, 111, 237, 0.35);
-    color: #dbeafe;
-}
-.rv-info-overridden {
-    color: var(--primary, #2f6fed) !important;
-    text-shadow: 0 0 8px rgba(47, 111, 237, 0.3);
-}
-.rv-info-overridden::after {
-    content: '·SIM';
-    margin-left: 4px;
-    font-size: 0.625rem;
-    opacity: 0.7;
-    letter-spacing: 0.5px;
-}
-.roll-viewer-section.rv-scenario-active {
-    border: 1px solid rgba(167, 139, 250, 0.25);
-    background: rgba(167, 139, 250, 0.04);
-    border-radius: 8px;
-    padding: 10px;
-    margin: -1px -1px 0;
-}
-@keyframes rv-scenario-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(47, 111, 237, 0.35); }
-    50%      { box-shadow: 0 0 0 4px rgba(47, 111, 237, 0); }
-}
+/* (옛 LLM scenario override 배지/버튼 CSS 제거 — 현행 UI는 .rv-scenario-override-* 사용) */
 
 .roll-gauge {
     position: relative;
@@ -1896,16 +1862,6 @@
     margin-top: 4px;
 }
 
-.roll-viewer-back:hover {
-    background: rgba(70, 70, 75, 0.95);
-    color: var(--text-main);
-    border-color: rgba(255, 255, 255, 0.25);
-}
-
-.roll-viewer-back:active {
-    background: rgba(80, 80, 85, 0.95);
-}
-
 /* ── Turn Scenario UI ── */
 .rv-scenario-btn {
     position: absolute;
@@ -2249,7 +2205,7 @@
 .rv-scenario-override-val {
     color: var(--primary, #2f6fed);
     font-weight: 600;
-    font-family: var(--font-body);
+    font-family: var(--font-data);
     font-variant-numeric: tabular-nums;
     text-shadow: 0 0 6px rgba(47, 111, 237, 0.25);
 }
@@ -2279,16 +2235,17 @@
 }
 .rv-scenario-turn-label {
     font-size: 0.65rem;
-    color: #64748b;
+    color: var(--text-dim);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-family: var(--font-display);
 }
 .rv-scenario-turn-val {
     font-size: 0.85rem;
     font-weight: 700;
-    color: #f1f5f9;
-    font-family: var(--font-body);
+    color: var(--text-main);
+    font-family: var(--font-data);
     font-variant-numeric: tabular-nums;
 }
 
@@ -3921,7 +3878,7 @@ body {
     font-size: 0.85rem;
     font-weight: 700;
     color: var(--text-main);
-    font-family: var(--font-data);
+    font-family: var(--font-display);
     font-variant-numeric: tabular-nums;
     line-height: 1;
 }
@@ -7889,7 +7846,7 @@ button, .btn, [class*="-btn"] {
 .rv-split-label { font-size: 12px; letter-spacing: 1px; color: #94a3b8; font-weight: 600; }
 .rv-split-roll { font-size: 20px; font-weight: 700; color: var(--text-main); font-variant-numeric: tabular-nums; }
 .rv-split-side .roll-gauge { width: 120px; }
-.rv-roll-safe { color: #10b981; }
+.rv-roll-safe { color: var(--text-main); }
 .rv-roll-caution { color: var(--sev-caution); }
 .rv-roll-warning { color: var(--sev-warning); }
 .rv-roll-danger { color: var(--sev-danger); }
@@ -7936,7 +7893,7 @@ button, .btn, [class*="-btn"] {
 /* (옛 .rv-compare 미니 HUD는 .rv-prediction-hud로 대체되어 제거됨) */
 
 /* ── Sim panel sections (조건 → 선박 → 조작) ── */
-.rv-sim-group { margin-bottom: 14px; }
+.rv-sim-group { margin-bottom: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 7px; padding: 10px 12px; }
 .rv-sim-group:last-child { margin-bottom: 0; }
 .rv-sim-eyebrow {
     display: flex;
@@ -7947,9 +7904,10 @@ button, .btn, [class*="-btn"] {
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-sub);
+    font-family: var(--font-display);
     margin-bottom: 9px;
     padding-bottom: 6px;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    border-bottom: 1px solid var(--panel-border);
 }
 /* Douglas sea-state readout in the 해상 상태 eyebrow — color tracks severity. */
 .rv-sea-state {
@@ -8075,7 +8033,7 @@ button, .btn, [class*="-btn"] {
 
 /* ── 시뮬레이션 패널 조절 컨트롤 (슬라이더 + 선회 방향) ── */
 .rv-sim-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 28px; }
-.rv-sim-row > label { flex: 0 0 44px; font-size: 11.5px; color: #94a3b8; font-weight: 500; }
+.rv-sim-row > label { flex: 0 0 44px; font-size: 11.5px; color: var(--text-sub); font-weight: 600; font-family: var(--font-display); }
 /* Unified with the playbar / route speed slider — 4px track, blue fill to the
    thumb (JS keeps --rv-sim-fill in sync), 12px ring handle that grows on hover. */
 .rv-sim-row input[type="range"] {
@@ -8089,49 +8047,48 @@ button, .btn, [class*="-btn"] {
     outline: none;
 }
 .rv-sim-row input[type="range"]::-webkit-slider-runnable-track {
-    height: 4px;
-    border-radius: 2px;
+    height: 5px;
+    border-radius: 3px;
     background: linear-gradient(to right,
-        var(--rv-sim-fill-color, var(--primary)) 0 var(--rv-sim-fill, 0%),
-        rgba(255, 255, 255, 0.1) var(--rv-sim-fill, 0%) 100%);
+        var(--rv-sim-fill-color, var(--accent-glow)) 0 var(--rv-sim-fill, 0%),
+        rgba(255, 255, 255, 0.08) var(--rv-sim-fill, 0%) 100%);
 }
 .rv-sim-row input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 12px;
-    height: 12px;
-    margin-top: -4px;
+    width: 14px;
+    height: 14px;
+    margin-top: -4.5px;
     border-radius: 50%;
-    background: var(--primary);
-    border: 2px solid var(--panel-bg-solid);
-    box-shadow: 0 0 0 1px var(--primary), 0 1px 4px rgba(0, 0, 0, 0.45);
-    transition: width 0.12s ease, height 0.12s ease, margin-top 0.12s ease;
+    background: var(--panel-bg-solid, #0a0e16);
+    border: 2px solid var(--primary);
+    box-shadow: 0 0 6px rgba(47, 111, 237, 0.45);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .rv-sim-row input[type="range"]:hover::-webkit-slider-thumb {
-    width: 15px;
-    height: 15px;
-    margin-top: -5.5px;
+    box-shadow: 0 0 10px rgba(47, 111, 237, 0.7);
+    border-color: var(--accent-glow, #7cb9f4);
 }
 .rv-sim-row input[type="range"]::-moz-range-track {
-    height: 4px;
-    border-radius: 2px;
-    background: rgba(255, 255, 255, 0.1);
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.08);
 }
 .rv-sim-row input[type="range"]::-moz-range-progress {
-    height: 4px;
-    border-radius: 2px;
-    background: var(--rv-sim-fill-color, var(--primary));
+    height: 5px;
+    border-radius: 3px;
+    background: var(--rv-sim-fill-color, var(--accent-glow));
 }
 .rv-sim-row input[type="range"]::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
-    border: 2px solid var(--panel-bg-solid);
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--primary);
     border-radius: 50%;
-    background: var(--primary);
-    box-shadow: 0 0 0 1px var(--primary), 0 1px 4px rgba(0, 0, 0, 0.45);
+    background: var(--panel-bg-solid, #0a0e16);
+    box-shadow: 0 0 6px rgba(47, 111, 237, 0.45);
 }
-.rv-sim-val { flex: 0 0 52px; text-align: right; font-size: 12px; font-weight: 600;
-  color: var(--text-main); font-variant-numeric: tabular-nums; }
+.rv-sim-val { flex: 0 0 52px; text-align: right; font-size: 13px; font-weight: 700;
+  color: var(--text-main); font-variant-numeric: tabular-nums; font-family: var(--font-data); }
 .rv-sim-dir {
     flex: 1 1 auto;
     display: flex;
@@ -8150,9 +8107,10 @@ button, .btn, [class*="-btn"] {
     font-size: 11.5px;
     font-weight: 600;
     background: transparent;
-    color: #64748b;
+    color: var(--text-dim);
     border: none;
     border-radius: 6px;
+    font-family: var(--font-display);
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     text-align: center;
     position: relative;
@@ -8311,22 +8269,22 @@ button, .btn, [class*="-btn"] {
 
 /* Etched severity sectors — calm recedes, danger is the only loud step */
 .rv-clino-band { fill: none; stroke-width: 7; stroke-linecap: butt; }
-.rv-clino-band-safe    { stroke: var(--sea-foam); opacity: 0.10; }
+.rv-clino-band-safe    { stroke: var(--text-sub); opacity: 0.10; }
 .rv-clino-band-caution { stroke: var(--sev-caution); opacity: 0.22; }
 .rv-clino-band-danger  { stroke: var(--sev-danger); opacity: 0.34; }
 
 .rv-clino-rim   { fill: none; stroke: var(--primary); stroke-width: 1.4; opacity: 0.7; }
-.rv-clino-tick  { stroke: var(--sea-foam); stroke-width: 1; opacity: 0.4; }
+.rv-clino-tick  { stroke: var(--text-sub); stroke-width: 1; opacity: 0.4; }
 .rv-clino-tick-major { stroke: var(--primary); stroke-width: 1.4; opacity: 0.85; }
 .rv-clino-thr   { stroke: var(--sev-danger); stroke-width: 2; opacity: 0.85; }
 .rv-clino-num {
-    fill: var(--sea-foam);
+    fill: var(--text-sub);
     font-family: var(--font-data);
     font-size: 11px;
     opacity: 0.65;
     text-anchor: middle;
 }
-.rv-clino-plumb { stroke: var(--sea-foam); stroke-width: 1; stroke-dasharray: 2 4; opacity: 0.35; }
+.rv-clino-plumb { stroke: var(--text-sub); stroke-width: 1; stroke-dasharray: 2 4; opacity: 0.35; }
 .rv-clino-hub   { fill: var(--primary); stroke: var(--ocean-depth); stroke-width: 1.5; }
 
 /* Error wedge between the two needles (opacity driven from JS) — the one warm element */
@@ -8399,7 +8357,7 @@ button, .btn, [class*="-btn"] {
 }
 
 /* Shared severity ramp for heel readouts — calm recedes, danger is loud */
-.rv-roll-safe    { color: var(--sea-foam); }
+.rv-roll-safe    { color: var(--text-main); }
 .rv-roll-caution { color: var(--sev-caution); }
 .rv-roll-warning { color: var(--sev-warning); }
 .rv-roll-danger  { color: var(--sev-danger); text-shadow: 0 0 10px var(--sev-danger-glow); }
@@ -8441,8 +8399,8 @@ button, .btn, [class*="-btn"] {
     color: var(--text-main);
 }
 .rv-pred-hud-bar { background: rgba(120, 150, 200, 0.12); height: 4px; }
-.rv-pred-hud-bar-fill.rv-ok   { background: var(--sea-foam); }
-.rv-pred-hud-val.rv-ok        { color: var(--sea-foam); }
+.rv-pred-hud-bar-fill.rv-ok   { background: var(--text-sub); }
+.rv-pred-hud-val.rv-ok        { color: var(--text-main); }
 
 /* ── Camera presets → quiet ghost cluster, bottom-right ── */
 .rv-cam-presets {
@@ -8506,18 +8464,6 @@ button, .btn, [class*="-btn"] {
 .roll-gauge-warning .roll-gauge-fill { background: var(--sev-warning); }
 .roll-gauge-danger .roll-gauge-fill  { background: var(--sev-danger); }
 .roll-gauge-value { font-family: var(--font-data); }
-
-/* ── Scenario (LLM what-if) badge: brass/amber, not off-palette purple ── */
-.rv-scenario-badge {
-    background: var(--caution-muted);
-    border: 1px solid rgba(245, 166, 35, 0.45);
-    color: var(--caution);
-}
-.rv-info-overridden { color: var(--caution) !important; text-shadow: 0 0 8px var(--caution-glow); }
-.roll-viewer-section.rv-scenario-active {
-    border: 1px solid rgba(245, 166, 35, 0.22);
-    background: rgba(245, 166, 35, 0.05);
-}
 
 /* ── Responsive: shrink the instrument on narrow viewports ── */
 @media (max-width: 720px) {
@@ -8676,7 +8622,7 @@ button, .btn, [class*="-btn"] {
     flex: 1 1 auto; height: 3px; border-radius: 2px;
     background: rgba(120,150,200,0.12); overflow: hidden;
 }
-.rv-mod-error .rv-pred-hud-bar-fill { display: block; height: 100%; width: 0%; background: var(--sea-foam); border-radius: 2px; transition: width .25s, background-color .25s; }
+.rv-mod-error .rv-pred-hud-bar-fill { display: block; height: 100%; width: 0%; background: var(--text-sub); border-radius: 2px; transition: width .25s, background-color .25s; }
 
 /* Camera presets float in the stage, bottom-right */
 .rv-layout-b .rv-cam-presets { bottom: 14px; right: 14px; top: auto; left: auto; transform: none; }
@@ -8703,24 +8649,30 @@ button, .btn, [class*="-btn"] {
 .rv-layout-b .rv-canvas-hud-scenario .rv-scenario-header {
     height: 46px; padding: 0 16px; margin: 0; box-sizing: border-box;
     border-bottom: 1px solid var(--panel-border);
-    color: var(--text-main); font-size: 0.82rem; font-weight: 700; letter-spacing: .3px;
+    /* 패널 타이틀 — 그룹 눈썹(0.72rem)보다 한 급 위로 분명히 */
+    color: var(--text-main); font-size: 0.85rem; font-weight: 700; letter-spacing: .3px;
     flex: 0 0 auto;
 }
 /* collapse chevron is redundant in a slide-in — the 시뮬레이션 button toggles it */
 .rv-layout-b .rv-scenario-collapse { display: none; }
 .rv-layout-b .rv-scenario-body { padding: 16px; gap: 0; margin: 0; overflow-y: auto; }
 .rv-layout-b .rv-sim-group {
-    margin: 0 0 14px; padding: 0 0 14px;
-    border-bottom: 1px solid rgba(120,150,200,0.08);
+    margin: 0 0 8px; padding: 11px 13px;
+    background: rgba(47, 111, 237, 0.05);
+    border: 1px solid rgba(47, 111, 237, 0.14);
+    border-radius: 8px;
 }
-.rv-layout-b .rv-sim-group:last-of-type { border-bottom: none; padding-bottom: 0; }
+.rv-layout-b .rv-sim-group:last-of-type { margin-bottom: 0; }
 .rv-layout-b .rv-sim-eyebrow {
-    border-bottom: none; padding: 0 0 8px; margin: 0; color: var(--text-sub);
-    font-size: 0.66rem; letter-spacing: 1.5px;
+    border-bottom: none; padding: 0 0 8px; margin: 0;
+    color: var(--text-sub); font-family: var(--font-display);
+    /* 한글 가독선(≥11px) 위로 + 넓은 자간은 라틴용 관습이라 축소 */
+    font-size: 0.72rem; letter-spacing: 0.5px;
 }
-.rv-layout-b .rv-sim-row > label { color: var(--text-sub); font-weight: 600; }
+.rv-layout-b .rv-sim-eyebrow .rv-eyebrow-ic { color: var(--primary); }
+.rv-layout-b .rv-sim-row > label { color: var(--text-sub); font-weight: 600; font-family: var(--font-display); }
 .rv-layout-b .rv-sim-val {
-    color: var(--text-main); font-family: var(--font-data); font-weight: 700;
+    color: var(--accent-glow); font-family: var(--font-data); font-weight: 700;
 }
 .rv-layout-b .rv-sim-dir { background: var(--bg-color); border: 1px solid var(--map-glass-border); box-shadow: none; }
 .rv-layout-b .rv-sim-actions { margin-top: 4px; }
@@ -8795,7 +8747,9 @@ button, .btn, [class*="-btn"] {
 .rv-deg-err.rv-roll-danger  { border-color: var(--sev-danger); color: var(--sev-danger); box-shadow: 0 0 12px var(--sev-danger-glow); }
 
 /* AI 챗 FAB — 롤뷰어에서는 좌하단에 낮게, 단 좌측 레일(48px)은 침범하지 않게 */
-.chat-bubble.rv-chat-shift { bottom: 16px; left: 64px; }
+/* 트레이스 리본(≈130px) 위로 올림 — 리본을 접으면(헤더 30px만) 따라 내려온다 */
+.chat-bubble.rv-chat-shift { bottom: 146px; left: 64px; }
+.chat-bubble.rv-chat-shift.rv-chat-trace-collapsed { bottom: 48px; }
 /* 하단 시뮬 덱이 열려 있는 동안엔 좌하단 챗이 덱을 가리므로 페이드아웃해 숨긴다 */
 .chat-bubble.rv-chat-deck-hide,
 .chat-panel.rv-chat-deck-hide {
@@ -9047,7 +9001,8 @@ button, .btn, [class*="-btn"] {
     flex: 1 1 0; min-width: 0;
     display: flex; flex-direction: column; gap: 10px;
     margin: 0; padding: 14px 22px;
-    border-bottom: none; border-right: 1px solid var(--panel-border);
+    background: rgba(255,255,255,0.018);
+    border: none; border-right: 1px solid var(--panel-border); border-radius: 0;
 }
 .rv-layout-b .rv-sim-cols .rv-sim-group > .rv-sim-eyebrow { flex: 0 0 auto; }
 /* 컨트롤을 상단정렬 — 컬럼마다 '첫 줄'(슬라이더/세그먼트)이 가로 한 라인에 맞아 계기판처럼 정렬됨 */
@@ -9058,10 +9013,27 @@ button, .btn, [class*="-btn"] {
 /* 선박 zone — 좌(속도+롤강도) | 우(컴퍼스+캡) 가로 배치로 T자 불균형 제거, 넓은 컬럼을 가로로 채움 */
 .rv-layout-b .rv-sim-vessel { display: flex; flex-direction: row; align-items: flex-start; gap: 18px; }
 .rv-layout-b .rv-sim-vessel-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.rv-layout-b .rv-compass-wrap { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-/* 롤 강도 게이지를 짧게 — 그 폭을 컴퍼스(선수 다이얼) 키우는 데 양보 */
-/* 롤 강도 게이지 — 속도 슬라이더와 같은 길이로(vessel-left 전체폭 채움) */
-.rv-layout-b .rv-sim-vessel .rv-roll-gauge { max-width: none; margin-top: 2px; }
+.rv-layout-b .rv-compass-wrap { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* 횡요 강도 게이지 — 속도 행과 같은 그리드(라벨 58px · 트랙 ≤210px · 값 56px).
+   입력(속도)/출력(강도) 구분은 길이가 아니라 썸 유무가 전달한다. */
+.rv-layout-b .rv-sim-vessel .rv-roll-gauge { max-width: none; margin-top: 2px; gap: 12px; }
+.rv-layout-b .rv-sim-group-vessel .rv-sim-row > label { flex-basis: 58px; }
+.rv-layout-b .rv-sim-vessel .rv-roll-gauge-label {
+    flex: 0 0 58px; font-size: 11.5px; letter-spacing: normal; text-transform: none;
+    color: var(--text-sub); font-weight: 600; font-family: var(--font-display);
+}
+/* 출력 계기 = 분절(LED) 미터 — 연속 트랙+썸(입력 슬라이더)과 문법을 분리.
+   마스크가 트랙·필 모두를 6px 셀 + 3px 갭으로 쪼개 '읽는 계기'로 보이게 한다. */
+.rv-layout-b .rv-sim-vessel .rv-roll-gauge-track {
+    flex: 0 1 210px; height: 7px; border-radius: 1px;
+    -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 9px);
+    mask-image: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 9px);
+}
+.rv-layout-b .rv-sim-vessel .rv-roll-gauge-fill { border-radius: 0; }
+.rv-layout-b .rv-sim-vessel .rv-roll-gauge-val {
+    flex: 0 0 56px; min-width: 0; text-align: right;
+    font-size: 0.74rem; font-weight: 700; white-space: nowrap;
+}
 
 /* 슬라이더 폭 제한 + 좌측 클러스터 — thumb 과 값(5.1 m 등) 사이 빈 공간 제거 */
 .rv-layout-b .rv-sim-row { justify-content: flex-start; }
@@ -9096,13 +9068,13 @@ button, .btn, [class*="-btn"] {
 .rv-scn-btn[data-scn="capsize"].active { background: var(--sev-danger); }
 .rv-sim-row.rv-disabled { opacity: 0.4; pointer-events: none; }
 
-/* 하늘 분위기 세그먼트 — 시나리오와 동일하게 1×4 한 줄.
-   컬럼을 시나리오/선박과 같은 flex로 넓혀 4개 버튼이 가로로 들어간다(그리드 압축 해제). */
-.rv-layout-b .rv-sim-cols .rv-sim-group-sky { flex: 1 1 0; }
+/* 하늘 분위기 세그먼트 — 환경 그룹의 한 행(label + segment). 슬라이더와 같은 폭 문법. */
+.rv-sim-row-sky .rv-scn-seg { flex: 1 1 auto; min-width: 0; padding: 2px; }
+.rv-sim-row-sky .rv-scn-btn { padding: 4px 2px; font-size: 0.68rem; }
 
-/* 선수 컴퍼스 다이얼 */
+/* 선수 컴퍼스 다이얼 — 104px: 캡션(선수 각도)이 덱 하단에 눌리지 않는 최대 크기 */
 .rv-compass {
-    width: 112px; height: 112px; flex: 0 0 auto;
+    width: 104px; height: 104px; flex: 0 0 auto;
     cursor: grab; touch-action: none; outline: none; border-radius: 50%;
 }
 .rv-compass:active { cursor: grabbing; }
@@ -9230,8 +9202,8 @@ button, .btn, [class*="-btn"] {
     font-family: var(--font-body);
     pointer-events: none;
 }
-/* 히어로(오차) 블록 + 보조 쌍(실측/예측) */
-.rv-hud-hero { margin: 1px 0 8px; }
+/* 히어로(실측 횡요각) 블록 + 보조 쌍(예측/오차) */
+.rv-hud-hero { display: flex; align-items: center; gap: 8px; margin: 1px 0 8px; }
 .rv-hud-pair { display: flex; gap: 14px; align-items: center; }
 .rv-hud-pair-item { display: flex; align-items: center; gap: 6px; }
 /* 정확도(누적 성능)는 보조 정보 — 살짝 작게/얇게 해서 현재값 뒤로 물러나게 */
@@ -9239,7 +9211,8 @@ button, .btn, [class*="-btn"] {
 .rv-hud-sec-acc .rv-pred-hud-bar { height: 4px; }
 .rv-hud-eyebrow {
     display: flex; align-items: center; margin-bottom: 7px;
-    font-size: 0.6rem; font-weight: 700; letter-spacing: 1px; color: var(--text-dim);
+    /* 0.6rem(9.6px)은 한글 가독선 미달 — 데이터 우위는 유지하되 읽히는 크기로 */
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.5px; color: var(--text-sub);
 }
 .rv-hud-eyebrow::before {
     content: ''; width: 4px; height: 4px; margin-right: 6px; border-radius: 50%;
@@ -9250,9 +9223,8 @@ button, .btn, [class*="-btn"] {
 .rv-hud-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
 .rv-hud-dot-real { background: var(--primary); box-shadow: 0 0 6px var(--primary-glow); }
 .rv-hud-dot-pred { background: transparent; border: 2px solid var(--accent-glow); }
-.rv-hud-dot-err { visibility: hidden; }
 .rv-hud-tag { flex: 1 1 auto; font-size: 0.72rem; color: var(--text-sub); }
-/* 보조 쌍(실측/예측)은 작게, 히어로(오차)는 크게 — 위계 분리 */
+/* 보조 쌍(예측/오차)은 작게, 히어로(실측)는 크게 — 위계 분리 */
 .rv-hud .rv-clino-val {
     font-family: var(--font-data); font-weight: 700;
     font-size: 1.0rem; letter-spacing: -0.01em; font-variant-numeric: tabular-nums;
@@ -9295,6 +9267,42 @@ button, .btn, [class*="-btn"] {
 .rv-hud .rv-scenario-turn-val.rv-turn-active { color: var(--accent-glow); }
 .rv-hud .rv-scenario-turn-val.rv-turn-danger { color: var(--sev-warning); }
 .rv-hud .rv-turn-progress { margin-top: 7px; }
+
+/* ── 횡요 트레이스 리본 — 무대 아래 in-flow 스트립 (실측 vs 예측 시간축 비교) ── */
+.rv-trace {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column;
+    background: color-mix(in srgb, var(--bg-color) 88%, transparent);
+    border-top: 1px solid var(--panel-border);
+}
+.rv-trace-head { display: flex; align-items: center; gap: 14px; height: 30px; padding: 0 14px; }
+.rv-trace-title {
+    display: flex; align-items: center;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+    color: var(--text-sub); font-family: var(--font-display);
+}
+.rv-trace-title::before {
+    content: ''; width: 4px; height: 4px; margin-right: 6px; border-radius: 50%;
+    background: var(--primary); box-shadow: 0 0 5px var(--primary-glow);
+}
+.rv-trace-legend { display: flex; gap: 14px; margin-left: auto; }
+.rv-trace-key { display: inline-flex; align-items: center; gap: 6px; font-size: 0.66rem; color: var(--text-sub); }
+.rv-trace-swatch { width: 14px; height: 0; border-top: 2px solid var(--primary); }
+.rv-trace-swatch-pred { border-top-style: dashed; border-top-color: var(--accent-glow); }
+.rv-trace-swatch-band { height: 8px; border-top: none; background: rgba(217, 164, 65, 0.28); }
+.rv-trace-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 22px; padding: 0;
+    background: transparent; border: 1px solid transparent; border-radius: 5px;
+    color: var(--text-sub); cursor: pointer; font-size: 0.66rem;
+    transition: color 0.15s, border-color 0.15s;
+}
+.rv-trace-toggle:hover { color: var(--text-main); border-color: var(--panel-border); }
+.rv-trace-toggle i { transition: transform 0.2s; }
+.rv-trace--collapsed .rv-trace-toggle i { transform: rotate(180deg); }
+.rv-trace-body { height: 92px; padding: 0 14px 8px; }
+.rv-trace-body canvas { display: block; width: 100%; height: 100%; }
+.rv-trace--collapsed .rv-trace-body { display: none; }
 /* end telemetry HUD */
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -9393,3 +9401,78 @@ button, .btn, [class*="-btn"] {
 /* 낡은 숫자로 오해시키지 않게 배지 숨김 */
 #app-layout.feed-degraded #collisionBadge,
 #app-layout.feed-degraded #slimAlertCount { display: none !important; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   계기판 깊이 패스 — 전역 (토큰: --well-shadow / --raise-shadow / --press-shadow)
+   광원은 하나, 위에서. 문법 두 가지뿐:
+   · 파인 것(well) = 읽는 면 — 게이지 홈·세그먼트 홈·트레이스 유리창 (상단 안쪽 그림자)
+   · 솟은 것(raised) = 만지는 컨트롤 — 버튼·썸·활성 세그 (상단 1px 하이라이트 + 밑그림자)
+   색은 추가하지 않는다 — 깊이는 전부 명도로만. 표면이 있는 컨트롤만 열거해서 적용
+   (고스트/닫기 ×/언더라인 탭은 평면 유지가 의도라 제외).
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* 솟은 컨트롤: 표면 있는 버튼류 전역 — 상단 하이라이트 + 프레스 시 0.5px 가라앉음 */
+.rv-layout-b .rv-tb-btn,
+.rv-layout-b .rv-tb-back,
+.rv-layout-b .rv-cam-btn,
+.rv-layout-b .rv-action-btn,
+.map-mode-btn, .map-area-select-btn, .map-nav-btn, .vmode-btn,
+.route-swap-btn, .route-search-btn, .route-size-btn, .route-reset-btn,
+.route-rate-btn, .route-click-btn, .route-play-btn, .preset-btn,
+.chat-send-btn, .chat-suggestion-btn,
+.leaflet-control-custom, .leaflet-control-zoom-in, .leaflet-control-zoom-out {
+    box-shadow: var(--raise-shadow);
+}
+.rv-layout-b .rv-tb-btn:active,
+.rv-layout-b .rv-tb-back:active,
+.rv-layout-b .rv-cam-btn:active,
+.rv-layout-b .rv-action-btn:active,
+.map-mode-btn:active, .map-area-select-btn:active, .map-nav-btn:active, .vmode-btn:active,
+.route-swap-btn:active, .route-search-btn:active, .route-size-btn:active, .route-reset-btn:active,
+.route-rate-btn:active, .route-click-btn:active, .route-play-btn:active, .preset-btn:active,
+.chat-send-btn:active, .chat-suggestion-btn:active,
+.leaflet-control-custom:active, .leaflet-control-zoom-in:active, .leaflet-control-zoom-out:active {
+    transform: translateY(0.5px);
+    box-shadow: var(--press-shadow);
+}
+
+/* 세그먼트 스위치: 홈(well)에 파여 있고, 활성 버튼만 솟는다 */
+.rv-layout-b .rv-scn-seg,
+.rv-layout-b .rv-viewseg {
+    box-shadow: var(--well-shadow);
+}
+.rv-layout-b .rv-scn-btn.active,
+.rv-layout-b .rv-viewseg-btn.active,
+.map-mode-btn.active, .vmode-btn.active,
+.route-size-btn.active, .route-rate-btn.active {
+    box-shadow: var(--seg-active-shadow);
+}
+
+/* 슬라이더: 트랙 = 파인 홈, 썸 = 가공된 노브(radial 하이라이트 + 바닥 그림자).
+   #routeSpeedSlider은 제외 — 항로 재생 바(.route-progress-*)와 같은 파란 링 썸으로 통일. */
+.rv-layout-b .rv-sim-row input[type="range"]::-webkit-slider-runnable-track {
+    box-shadow: var(--well-shadow);
+}
+.rv-layout-b .rv-sim-row input[type="range"]::-webkit-slider-thumb {
+    background: var(--knob-bg);
+    box-shadow: var(--knob-shadow);
+}
+.rv-layout-b .rv-sim-row input[type="range"]::-moz-range-track {
+    box-shadow: var(--well-shadow);
+}
+.rv-layout-b .rv-sim-row input[type="range"]::-moz-range-thumb {
+    background: var(--knob-bg);
+    box-shadow: var(--knob-shadow);
+}
+
+/* LED 게이지: 켜진 셀에 심각도색 블룸 — 어넌시에이터 점등 느낌 */
+.rv-layout-b .rv-sim-vessel .rv-roll-gauge-fill { filter: drop-shadow(0 0 2px rgba(47, 111, 237, 0.6)); }
+.rv-layout-b .rv-sim-vessel .rv-roll-gauge-fill[data-level="caution"] { filter: drop-shadow(0 0 2px rgba(217, 164, 65, 0.6)); }
+.rv-layout-b .rv-sim-vessel .rv-roll-gauge-fill[data-level="danger"] { filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.7)); }
+
+/* 트레이스 리본: 계기 유리창(well) — 파인 면 위에 곡선이 그려진다 */
+.rv-trace-body canvas {
+    background: rgba(0, 0, 0, 0.16);
+    border-radius: 6px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.025);
+}

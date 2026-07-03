@@ -530,10 +530,15 @@ var BottomBar = (function() {
     }
 
     // Return flag icon HTML using flag-icons CSS
+    // 국기+ISO 코드 칩 — 국기는 즉각 인식, 코드는 정확한 판독 (아는 나라는 국기로,
+    // 모르는 기국(PA/LR/MH 등)은 코드로 읽힌다). 칩 스타일은 .flag-chip 공용.
     function _countryFlagHTML(name) {
         var iso = _countryToISO(name);
         if (!iso) return '';
-        return '<span class="fi fi-' + iso.toLowerCase() + '"></span>';
+        return '<span class="flag-chip">' +
+            '<span class="fi fi-' + iso.toLowerCase() + '"></span>' +
+            '<span class="flag-chip-code">' + iso.toUpperCase() + '</span>' +
+            '</span>';
     }
 
     function _buildFlagDetail() {
