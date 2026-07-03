@@ -19,10 +19,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.12-slim-bookworm AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl unzip \
+    curl unzip nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# AIS 스트림 프록시(backend/ais_proxy.js)용 Node 의존성
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 # 육지 차폐 필터용 GSHHG 고해상도 해안선 데이터
 RUN mkdir -p backend/data/land && \

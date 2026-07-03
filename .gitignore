@@ -46,6 +46,8 @@ uvicorn_modular.log
 
 # Production secrets
 deploy/.env.prod
+*.key
+*.pem
 
 # Land shapefile data
 backend/data/land/*.shp
