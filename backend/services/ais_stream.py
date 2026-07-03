@@ -190,6 +190,21 @@ _vessel_prev: dict[int, dict] = {}  # mmsi → {sog, destination, last_seen}
 _alert_cooldown: dict[str, float] = {}  # f"{mmsi}_{alert_type}" → last_alert_ts
 _ALERT_COOLDOWN_S = 300  # 5 minutes
 
+# -----------------------------------------------------------------------
+# Dark Ship 추적 — 신호두절 30분 경과 시 진입, 복귀/12시간 경과 시 해제
+# -----------------------------------------------------------------------
+_dark_vessels: dict[int, dict] = {}  # mmsi → {mmsi, name, lat, lng, vessel_type, lost_at}
+_DARK_ENTER_S = 1800          # 30분 미수신 → 다크 진입 (기존 warn_cutoff와 동일 기준)
+_DARK_MAX_AGE_S = 12 * 3600   # 12시간 경과 → 추적 포기
+_DARK_MAX_RADIUS_NM = 50      # 반경이 이 값을 넘으면 조회 결과에서 제외
+_DARK_ELIGIBLE_TYPES = ("military_vessel", "cargo", "tanker")
+_SPEED_CEILING_KN = {
+    "military_vessel": 35,
+    "cargo": 24,
+    "tanker": 20,
+}
+_DEFAULT_SPEED_CEILING_KN = 20
+
 
 def _maybe_alert(alert_type: str, mmsi: int, data: dict):
     """Push an anomaly alert to the queue with cooldown."""
@@ -216,10 +231,11 @@ def get_alerts(max_count: int = 50) -> list[dict]:
 
 
 def check_signal_loss():
-    """Scan for vessels that stopped transmitting (called periodically)."""
+    """Scan for vessels that stopped transmitting (called periodically).
+    Also maintains the dark-ship tracking list (see get_dark_vessels)."""
     now = time.time()
     cutoff = now - 3600  # 60 minutes = signal lost
-    warn_cutoff = now - 1800  # 30 minutes = warn
+    warn_cutoff = now - _DARK_ENTER_S  # 30 minutes = warn / dark-ship entry threshold
     with _vessels_lock:
         for mmsi, v in list(_vessels.items()):
             updated = v.get("_updated", now)
@@ -229,17 +245,61 @@ def check_signal_loss():
             if lat is None or lng is None:
                 continue
             minutes_ago = int((now - updated) / 60)
-            if updated < warn_cutoff and v.get("type") in ("military_vessel", "cargo", "tanker"):
+            v_type = v.get("type", "unknown")
+            is_dark_eligible = v_type in _DARK_ELIGIBLE_TYPES
+            if updated < warn_cutoff and is_dark_eligible:
                 _maybe_alert("signal_lost", mmsi, {
                     "name": name,
                     "lat": lat,
                     "lng": lng,
                     "minutes_ago": minutes_ago,
-                    "vessel_type": v.get("type", "unknown"),
+                    "vessel_type": v_type,
                     "country": get_country_from_mmsi(mmsi),
                     "message": f"AIS 신호 소실 ({minutes_ago}분 전 마지막 수신)",
                     "severity": "high" if updated < cutoff else "medium",
                 })
+                if mmsi not in _dark_vessels:
+                    _dark_vessels[mmsi] = {
+                        "mmsi": mmsi,
+                        "name": name,
+                        "lat": lat,
+                        "lng": lng,
+                        "vessel_type": v_type,
+                        "lost_at": updated,
+                    }
+            elif mmsi in _dark_vessels:
+                del _dark_vessels[mmsi]  # 신호 복귀
+
+        for stale_mmsi in list(_dark_vessels.keys()):
+            if now - _dark_vessels[stale_mmsi]["lost_at"] > _DARK_MAX_AGE_S:
+                del _dark_vessels[stale_mmsi]
+
+
+def get_dark_vessels() -> list[dict]:
+    """현재 다크 상태인 선박 목록. 각 항목:
+    {mmsi, name, lat, lng, vessel_type, lost_at(ISO8601), minutes_dark, radius_nm}
+    반경이 _DARK_MAX_RADIUS_NM 초과인 항목은 제외."""
+    now = time.time()
+    result = []
+    with _vessels_lock:
+        for mmsi, d in _dark_vessels.items():
+            elapsed_s = now - d["lost_at"]
+            elapsed_h = elapsed_s / 3600
+            ceiling = _SPEED_CEILING_KN.get(d["vessel_type"], _DEFAULT_SPEED_CEILING_KN)
+            radius_nm = elapsed_h * ceiling
+            if radius_nm > _DARK_MAX_RADIUS_NM:
+                continue
+            result.append({
+                "mmsi": mmsi,
+                "name": d["name"],
+                "lat": d["lat"],
+                "lng": d["lng"],
+                "vessel_type": d["vessel_type"],
+                "lost_at": datetime.fromtimestamp(d["lost_at"], tz=timezone.utc).isoformat(),
+                "minutes_dark": int(elapsed_s / 60),
+                "radius_nm": round(radius_nm, 1),
+            })
+    return result
 
 import os
 CACHE_FILE = os.path.join(os.path.dirname(__file__), "ais_cache.json")
