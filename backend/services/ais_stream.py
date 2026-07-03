@@ -17,7 +17,7 @@ from backend.services.metrics import ais_messages_total, ais_vessels_active, ale
 logger = logging.getLogger(__name__)
 
 AIS_WS_URL = "wss://stream.aisstream.io/v0/stream"
-from backend.config import AIS_API_KEY, AIS_DISABLED
+from backend.config import AIS_API_KEY, AIS_DISABLED, AIS_BOUNDING_BOX
 API_KEY = AIS_API_KEY
 
 # AIS vessel type code classification
@@ -368,7 +368,7 @@ def _ais_stream_loop():
             # 핸들을 모듈 전역에 저장해 stop_ais_stream() 에서 확실히 죽인다
             # (안 그러면 dev 재시작마다 고아 프록시가 쌓여 같은 키로 동시 연결 → 429).
             process = subprocess.Popen(
-                ['node', proxy_script, API_KEY],
+                ['node', proxy_script, API_KEY, AIS_BOUNDING_BOX],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,

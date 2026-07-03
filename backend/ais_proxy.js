@@ -8,12 +8,11 @@ if (!API_KEY) {
     process.exit(1);
 }
 
-const FILTER = [
-    // US Aircraft Carriers and major naval groups
-    { "MMSI": 338000000 }, { "MMSI": 338100000 }, // US Navy general prefixes
-    // Plus let's grab some global shipping for density
-    { "BoundingBoxes": [[[-90, -180], [90, 180]]] }
-];
+// "minLat,minLng,maxLat,maxLng" — 저사양 서버가 전세계 물량을 못 버텨서 기본은
+// 한국/동아시아 근해로 좁힘 (backend/config.py:AIS_BOUNDING_BOX 기본값 참고).
+const bboxArg = args[1] || process.env.AIS_BOUNDING_BOX || "-90,-180,90,180";
+const [minLat, minLng, maxLat, maxLng] = bboxArg.split(",").map(Number);
+const BOUNDING_BOXES = [[[minLat, minLng], [maxLat, maxLng]]];
 
 // ── Reconnect 정책 ──────────────────────────────────────────────
 // 고정 5초 재접속은 서버가 429(Too Many Requests)로 거부하기 시작하면
@@ -48,9 +47,7 @@ function connect() {
     ws.on('open', () => {
         const subMsg = {
             APIKey: API_KEY,
-            BoundingBoxes: [
-                [[-90, -180], [90, 180]]
-            ],
+            BoundingBoxes: BOUNDING_BOXES,
             FilterMessageTypes: [
                 "PositionReport",
                 "ShipStaticData",
