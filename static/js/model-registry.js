@@ -70,7 +70,7 @@ var ModelRegistry = (function() {
                     return {
                         label: '다크쉽',
                         status: entry.minutes_dark + '분 전 소실',
-                        level: 'danger',
+                        level: 'caution',
                         icon: 'fa-ghost'
                     };
                 }

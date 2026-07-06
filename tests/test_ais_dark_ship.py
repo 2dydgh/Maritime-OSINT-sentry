@@ -105,3 +105,80 @@ def test_non_target_type_not_registered_as_dark():
         assert mmsi not in {d["mmsi"] for d in ais_stream.get_dark_vessels()}
     finally:
         _cleanup(mmsi)
+
+
+def _simulate_ingest_prune():
+    """Simulates the ingest loop's periodic prune block (ais_stream.py, inside the
+    main message-processing loop): vessels stale beyond 900s (15 min) are handed off
+    to _dark_vessels (if eligible) before being deleted from _vessels. This is the
+    integration path that was broken — check_signal_loss()'s 30-min threshold never
+    got a chance to see vessels because the ingest loop pruned them at 15 min first."""
+    with ais_stream._vessels_lock:
+        prune_cutoff = time.time() - 900
+        stale = [k for k, v in ais_stream._vessels.items() if v.get("_updated", 0) < prune_cutoff]
+        for k in stale:
+            v = ais_stream._vessels[k]
+            v_type = v.get("type", "unknown")
+            lat = v.get("lat")
+            lng = v.get("lng")
+            if v_type in ais_stream._DARK_ELIGIBLE_TYPES and k not in ais_stream._dark_vessels and lat is not None and lng is not None:
+                ais_stream._dark_vessels[k] = {
+                    "mmsi": k,
+                    "name": v.get("name", "UNKNOWN"),
+                    "lat": lat,
+                    "lng": lng,
+                    "vessel_type": v_type,
+                    "lost_at": v.get("_updated", prune_cutoff),
+                }
+            del ais_stream._vessels[k]
+
+
+def test_prune_seeds_dark_vessel_before_30min_check_would_see_it():
+    mmsi = 999100007
+    now = time.time()
+    # Past the 900s (15 min) prune cutoff but well under the 1800s (30 min) dark-entry
+    # threshold — this is exactly the window where the vessel used to fall through the
+    # cracks: pruned out of _vessels before check_signal_loss() could ever observe it.
+    lost_at = now - 1000
+    _set_vessel(mmsi, 34.5, 129.1, "cargo", lost_at)
+    try:
+        _simulate_ingest_prune()
+
+        # Vessel is gone from _vessels (pruned) but seeded into _dark_vessels with the
+        # real last-transmission time, not the prune cutoff.
+        with ais_stream._vessels_lock:
+            assert mmsi not in ais_stream._vessels
+            assert mmsi in ais_stream._dark_vessels
+            assert ais_stream._dark_vessels[mmsi]["lost_at"] == lost_at
+
+        # Not yet surfaced by the API — only 1000s elapsed, below the 1800s dark-entry gate.
+        assert mmsi not in {d["mmsi"] for d in ais_stream.get_dark_vessels()}
+
+        # Advance the clock past the 30-min threshold: now it should surface.
+        with ais_stream._vessels_lock:
+            ais_stream._dark_vessels[mmsi]["lost_at"] = now - ais_stream._DARK_ENTER_S - 60
+        dark = {d["mmsi"]: d for d in ais_stream.get_dark_vessels()}
+        assert mmsi in dark
+    finally:
+        _cleanup(mmsi)
+
+
+def test_prune_does_not_overwrite_existing_dark_entry():
+    mmsi = 999100008
+    now = time.time()
+    original_lost_at = now - 5000
+    with ais_stream._vessels_lock:
+        ais_stream._dark_vessels[mmsi] = {
+            "mmsi": mmsi, "name": "ORIGINAL", "lat": 1.0, "lng": 1.0,
+            "vessel_type": "cargo", "lost_at": original_lost_at,
+        }
+    # Vessel reappears in _vessels stale (e.g. a late/duplicate message) — prune should
+    # not reset lost_at for an mmsi that's already tracked as dark.
+    _set_vessel(mmsi, 2.0, 2.0, "cargo", now - 1000)
+    try:
+        _simulate_ingest_prune()
+        with ais_stream._vessels_lock:
+            assert ais_stream._dark_vessels[mmsi]["lost_at"] == original_lost_at
+            assert ais_stream._dark_vessels[mmsi]["name"] == "ORIGINAL"
+    finally:
+        _cleanup(mmsi)

@@ -284,6 +284,8 @@ def get_dark_vessels() -> list[dict]:
     with _vessels_lock:
         for mmsi, d in _dark_vessels.items():
             elapsed_s = now - d["lost_at"]
+            if elapsed_s < _DARK_ENTER_S:
+                continue
             elapsed_h = elapsed_s / 3600
             ceiling = _SPEED_CEILING_KN.get(d["vessel_type"], _DEFAULT_SPEED_CEILING_KN)
             radius_nm = elapsed_h * ceiling
@@ -639,6 +641,22 @@ def _ais_stream_loop():
                         prune_cutoff = time.time() - 900
                         stale = [k for k, v in _vessels.items() if v.get("_updated", 0) < prune_cutoff]
                         for k in stale:
+                            v = _vessels[k]
+                            v_type = v.get("type", "unknown")
+                            lat = v.get("lat")
+                            lng = v.get("lng")
+                            # Hand off to dark-ship tracking before deleting — otherwise
+                            # vessels never survive long enough for check_signal_loss()'s
+                            # 30-min threshold to see them (prune fires at 15 min).
+                            if v_type in _DARK_ELIGIBLE_TYPES and k not in _dark_vessels and lat is not None and lng is not None:
+                                _dark_vessels[k] = {
+                                    "mmsi": k,
+                                    "name": v.get("name", "UNKNOWN"),
+                                    "lat": lat,
+                                    "lng": lng,
+                                    "vessel_type": v_type,
+                                    "lost_at": v.get("_updated", prune_cutoff),
+                                }
                             del _vessels[k]
                         count = len(_vessels)
                     if stale:
