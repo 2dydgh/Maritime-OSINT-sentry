@@ -58,12 +58,22 @@ var ModelRegistry = (function() {
             title: 'Dark Ship 탐지',
             init: function() {},
             activate: function() {
-                // TODO: show dark ship markers + uncertainty circles
+                if (typeof window.activateDarkShips === 'function') window.activateDarkShips();
             },
             deactivate: function() {
-                // TODO: hide dark ship entities
+                if (typeof window.deactivateDarkShips === 'function') window.deactivateDarkShips();
             },
             getShipSummary: function(mmsi) {
+                var entry = (typeof window.getDarkShipEntry === 'function')
+                    ? window.getDarkShipEntry(mmsi) : null;
+                if (entry) {
+                    return {
+                        label: '다크쉽',
+                        status: entry.minutes_dark + '분 전 소실',
+                        level: 'danger',
+                        icon: 'fa-ghost'
+                    };
+                }
                 return { label: '다크쉽', status: '정상', level: 'safe', icon: 'fa-ghost' };
             }
         },
