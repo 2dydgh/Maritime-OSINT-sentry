@@ -21,7 +21,7 @@ class Decision(BaseModel):
 @router.get("/proposals")
 async def list_proposals(status: str | None = None, limit: int = Query(50, ge=1, le=500)):
     items = watch_officer.list_proposals(status=status, limit=limit)
-    return {"proposals": items, "total": len(items)}
+    return {"proposals": items, "total": watch_officer.count_proposals(status)}
 
 
 @router.post("/proposals/{proposal_id}/decision")

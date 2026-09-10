@@ -182,6 +182,10 @@ def list_proposals(status: str | None = None, limit: int = 50) -> list[dict]:
     return items[:limit]
 
 
+def count_proposals(status: str | None = None) -> int:
+    return len([p for p in _proposals.values() if status is None or p["status"] == status])
+
+
 JSONL_PATH = Path(__file__).resolve().parent.parent / "cache" / "proposals.jsonl"
 
 

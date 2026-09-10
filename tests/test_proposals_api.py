@@ -36,6 +36,13 @@ def test_list_and_filter(_state):
     assert client.get("/api/v1/proposals?status=approved").json()["total"] == 0
 
 
+def test_list_total_ignores_limit(_state):
+    wo.evaluate([_ml3(), _ml3(a=333, b=444)], [], now=1000.0)
+    r = client.get("/api/v1/proposals?limit=1")
+    assert len(r.json()["proposals"]) == 1
+    assert r.json()["total"] == 2
+
+
 def test_decision_flow_and_409(_state, tmp_path):
     r = client.post(f"/api/v1/proposals/{_state}/decision", json={"outcome": "dismissed", "reason": "monitor"})
     assert r.status_code == 200 and r.json()["status"] == "dismissed"
