@@ -3,18 +3,22 @@
 규칙이 탐지·조치를 결정한다. LLM은 브리핑 문장만 다듬는다 (Task 5).
 입력은 collision_analyzer 캐시의 위험 리스트뿐이다. vessel dict 전체를 넘기지 말 것.
 """
+import asyncio
 import json
 import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from backend.config import WATCH_COOLDOWN_MIN, WATCH_DCPA_NM, WATCH_TCPA_MIN
+from backend.config import WATCH_BRIEF_LLM, WATCH_COOLDOWN_MIN, WATCH_DCPA_NM, WATCH_TCPA_MIN
+from backend.config_llm import OLLAMA_BASE_URL, OLLAMA_MODEL
+from backend.services import watch_graph
 
 logger = logging.getLogger(__name__)
 
 MAX_PROPOSALS = 500
 ENCOUNTER_KO = {"head-on": "정면", "crossing": "횡단", "overtaking": "추월"}
+BRIEF_TIMEOUT_SEC = 8
 
 # 상태 — 단일 이벤트 루프에서만 만지므로 락 없음
 _proposals: dict[str, dict] = {}            # id → record (삽입순)
@@ -206,4 +210,79 @@ def restore(path: Path | None = None) -> int:
                 rec["status"] = "expired"
             _proposals[rec["id"]] = rec
     _trim()
+    watch_graph.reset()
+    for rec in _proposals.values():
+        watch_graph.add_proposal(rec)
+        watch_graph.add_decision(rec)
     return len(_proposals)
+
+
+# ── LLM 브리핑 다듬기 ─────────────────────────────────────────────────────
+
+def brief_is_faithful(record: dict, text: str) -> bool:
+    """수치·등급·선박명이 전부 그대로 들어 있어야 교체한다."""
+    if not text:
+        return False
+    t = record["trigger"]
+    required = [f"{t['dcpa_nm']:.2f}", f"{t['tcpa_min']:.1f}", t["risk_label"]] + [s["name"] for s in record["subjects"]]
+    return all(r in text for r in required)
+
+
+async def _ask_ollama(prompt: str) -> str:
+    from backend.services.llm_agent import _get_client   # 지연 import: 순환 방지
+    resp = await _get_client().post(
+        f"{OLLAMA_BASE_URL}/api/chat",
+        json={"model": OLLAMA_MODEL, "stream": False, "keep_alive": -1,
+              "messages": [{"role": "user", "content": prompt}],
+              "options": {"num_predict": 200}},
+        timeout=BRIEF_TIMEOUT_SEC,
+    )
+    resp.raise_for_status()
+    return (resp.json().get("message") or {}).get("content", "")
+
+
+async def polish_brief(record: dict) -> str | None:
+    prompt = (
+        "다음 해상 충돌 위험 브리핑을 한국어 2문장으로 자연스럽게 다듬어라. "
+        "선박 이름, 숫자(DCPA·TCPA 값과 소수 자릿수), 등급 단어는 한 글자도 바꾸지 말고 그대로 포함하라. "
+        "설명·머리말 없이 문장만 출력하라.\n\n" + record["brief"]
+    )
+    try:
+        text = await asyncio.wait_for(_ask_ollama(prompt), timeout=BRIEF_TIMEOUT_SEC)
+    except Exception as e:                       # 타임아웃·연결 실패·HTTP 오류 전부 템플릿 유지
+        logger.warning("brief polish failed: %s", type(e).__name__)
+        return None
+    text = text.strip()
+    return text if brief_is_faithful(record, text) else None
+
+
+# ── 오케스트레이션 ────────────────────────────────────────────────────────
+
+async def _broadcast(payload: dict) -> None:
+    from backend import websocket                      # 지연 import: 테스트에서 monkeypatch
+    await websocket.manager.broadcast_text(json.dumps(payload, ensure_ascii=False))
+
+
+async def _publish(kind: str, rec: dict) -> None:
+    await asyncio.to_thread(append_jsonl, rec, JSONL_PATH)
+    await _broadcast({"type": kind, "proposal": rec})
+
+
+async def _polish_and_publish(rec: dict) -> None:
+    text = await polish_brief(rec)
+    if text is None or rec["status"] != "open":
+        return
+    rec["brief"], rec["brief_source"] = text, "ollama"
+    await _publish("proposal_update", rec)
+
+
+async def on_collision_update(ml_risks: list[dict], distance_risks: list[dict]) -> None:
+    """collision_scanner가 캐시를 갱신한 직후 호출. 입력은 집계된 위험 리스트뿐."""
+    new, updated, expired = evaluate(ml_risks, distance_risks)
+    for rec in new:
+        watch_graph.add_proposal(rec)
+        await _publish("proposal", rec)
+        if WATCH_BRIEF_LLM:
+            asyncio.create_task(_polish_and_publish(rec))
+    for rec in updated + expired:
+        await _publish("proposal_update", rec)

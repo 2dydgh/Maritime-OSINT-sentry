@@ -254,3 +254,79 @@ def test_graph_serialize_formats():
     assert isinstance(jl, list) and any("Proposal" in str(n.get("@type", "")) for n in jl)
     with pytest.raises(ValueError):
         wg.serialize(new[0]["id"], "xml")
+
+
+import asyncio
+
+
+def test_brief_is_faithful_requires_all_numbers_and_names():
+    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
+    rec = new[0]
+    ok = "ALPHA와 BRAVO가 위험 등급으로 접근 중입니다. DCPA 0.50 nm, TCPA 8.0분이므로 추적을 권합니다."
+    assert wo.brief_is_faithful(rec, ok)
+    assert not wo.brief_is_faithful(rec, ok.replace("0.50", "0.5"))
+    assert not wo.brief_is_faithful(rec, ok.replace("BRAVO", "B"))
+    assert not wo.brief_is_faithful(rec, ok.replace("위험", "높음"))
+    assert not wo.brief_is_faithful(rec, "")
+
+
+def test_polish_brief_replaces_only_when_faithful(monkeypatch):
+    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
+    rec = new[0]
+
+    async def fake_ask(_prompt):
+        return "ALPHA와 BRAVO 위험. DCPA 0.50 nm, TCPA 8.0분."
+    monkeypatch.setattr(wo, "_ask_ollama", fake_ask)
+    assert asyncio.run(wo.polish_brief(rec)).startswith("ALPHA와 BRAVO")
+
+    async def bad_ask(_prompt):
+        return "두 선박이 가까워지고 있습니다."
+    monkeypatch.setattr(wo, "_ask_ollama", bad_ask)
+    assert asyncio.run(wo.polish_brief(rec)) is None
+
+    async def boom(_prompt):
+        raise TimeoutError()
+    monkeypatch.setattr(wo, "_ask_ollama", boom)
+    assert asyncio.run(wo.polish_brief(rec)) is None
+
+
+def test_on_collision_update_persists_graphs_and_broadcasts(monkeypatch, tmp_path):
+    sent = []
+    async def fake_broadcast(payload):
+        sent.append(payload)
+    monkeypatch.setattr(wo, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(wo, "JSONL_PATH", tmp_path / "p.jsonl")
+    monkeypatch.setattr(wo, "WATCH_BRIEF_LLM", False)
+    wg.reset()
+
+    asyncio.run(wo.on_collision_update([_ml(3)], []))
+    assert [m["type"] for m in sent] == ["proposal"]
+    pid = sent[0]["proposal"]["id"]
+    assert (wg.MOS[f"proposal/{pid}"], RDF.type, wg.MOS.Proposal) in wg.subgraph(pid)
+    assert len((tmp_path / "p.jsonl").read_text().splitlines()) == 1
+
+    asyncio.run(wo.on_collision_update([_ml(3, dcpa=0.2)], []))
+    assert sent[-1]["type"] == "proposal_update" and sent[-1]["proposal"]["trigger"]["dcpa_nm"] == 0.2
+
+    asyncio.run(wo.on_collision_update([], []))
+    assert sent[-1]["type"] == "proposal_update" and sent[-1]["proposal"]["status"] == "expired"
+    assert len((tmp_path / "p.jsonl").read_text().splitlines()) == 3
+
+
+def test_on_collision_update_schedules_polish_when_llm_enabled(monkeypatch, tmp_path):
+    sent = []
+    async def fake_broadcast(payload):
+        sent.append(payload)
+    async def fake_ask(_prompt):
+        return "ALPHA와 BRAVO 위험. DCPA 0.50 nm, TCPA 8.0분."
+    monkeypatch.setattr(wo, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(wo, "_ask_ollama", fake_ask)
+    monkeypatch.setattr(wo, "JSONL_PATH", tmp_path / "p.jsonl")
+    monkeypatch.setattr(wo, "WATCH_BRIEF_LLM", True)
+
+    async def run():
+        await wo.on_collision_update([_ml(3)], [])
+        await asyncio.sleep(0.05)          # create_task 완료 대기
+    asyncio.run(run())
+    assert [m["type"] for m in sent] == ["proposal", "proposal_update"]
+    assert sent[-1]["proposal"]["brief_source"] == "ollama"
