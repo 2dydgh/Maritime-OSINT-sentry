@@ -24,12 +24,14 @@ BRIEF_TIMEOUT_SEC = 8
 _proposals: dict[str, dict] = {}            # id → record (삽입순)
 _open_by_pair: dict[tuple[int, int], str] = {}
 _cooldown_until: dict[tuple[int, int], float] = {}
+_bg_tasks: set[asyncio.Task] = set()          # polish 태스크의 강한 참조 보관 (GC 방지)
 
 
 def reset() -> None:
     _proposals.clear()
     _open_by_pair.clear()
     _cooldown_until.clear()
+    _bg_tasks.clear()
 
 
 def pair_key(a: int, b: int) -> tuple[int, int]:
@@ -270,7 +272,11 @@ async def _publish(kind: str, rec: dict) -> None:
 
 async def _polish_and_publish(rec: dict) -> None:
     text = await polish_brief(rec)
-    if text is None or rec["status"] != "open":
+    # polish_brief가 진행 중인 동안 나중의 on_collision_update가 같은 rec를
+    # 제자리에서 바꿨을 수 있다 (evaluate가 rec["trigger"]를 덮어쓰거나
+    # decide가 rec["status"]를 바꿈). brief_is_faithful은 호출 시점의 trigger로
+    # 검증됐을 뿐이므로, 발행 직전에 status와 faithfulness를 현재 rec 기준으로 다시 확인한다.
+    if text is None or rec["status"] != "open" or not brief_is_faithful(rec, text):
         return
     rec["brief"], rec["brief_source"] = text, "ollama"
     await _publish("proposal_update", rec)
@@ -283,6 +289,8 @@ async def on_collision_update(ml_risks: list[dict], distance_risks: list[dict]) 
         watch_graph.add_proposal(rec)
         await _publish("proposal", rec)
         if WATCH_BRIEF_LLM:
-            asyncio.create_task(_polish_and_publish(rec))
+            task = asyncio.create_task(_polish_and_publish(rec))
+            _bg_tasks.add(task)
+            task.add_done_callback(_bg_tasks.discard)
     for rec in updated + expired:
         await _publish("proposal_update", rec)

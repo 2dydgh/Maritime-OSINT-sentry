@@ -330,3 +330,29 @@ def test_on_collision_update_schedules_polish_when_llm_enabled(monkeypatch, tmp_
     asyncio.run(run())
     assert [m["type"] for m in sent] == ["proposal", "proposal_update"]
     assert sent[-1]["proposal"]["brief_source"] == "ollama"
+
+
+def test_polish_does_not_publish_after_proposal_closed(monkeypatch, tmp_path):
+    sent = []
+    async def fake_broadcast(payload):
+        sent.append(payload)
+    release = asyncio.Event()
+
+    async def fake_ask(_prompt):
+        await release.wait()
+        return "ALPHA와 BRAVO 위험. DCPA 0.50 nm, TCPA 8.0분."
+    monkeypatch.setattr(wo, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(wo, "_ask_ollama", fake_ask)
+    monkeypatch.setattr(wo, "JSONL_PATH", tmp_path / "p.jsonl")
+    monkeypatch.setattr(wo, "WATCH_BRIEF_LLM", True)
+
+    async def run():
+        await wo.on_collision_update([_ml(3)], [])
+        pid = sent[0]["proposal"]["id"]
+        wo.decide(pid, "dismissed", "monitor")
+        release.set()
+        await asyncio.sleep(0.05)
+        return pid
+    pid = asyncio.run(run())
+    assert [m["type"] for m in sent] == ["proposal"]
+    assert wo.get_proposal(pid)["brief_source"] == "template"
