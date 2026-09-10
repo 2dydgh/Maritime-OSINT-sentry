@@ -3,9 +3,11 @@
 규칙이 탐지·조치를 결정한다. LLM은 브리핑 문장만 다듬는다 (Task 5).
 입력은 collision_analyzer 캐시의 위험 리스트뿐이다. vessel dict 전체를 넘기지 말 것.
 """
+import json
 import logging
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from backend.config import WATCH_COOLDOWN_MIN, WATCH_DCPA_NM, WATCH_TCPA_MIN
 
@@ -172,3 +174,34 @@ def get_proposal(proposal_id: str) -> dict | None:
 def list_proposals(status: str | None = None, limit: int = 50) -> list[dict]:
     items = [p for p in reversed(_proposals.values()) if status is None or p["status"] == status]
     return items[:limit]
+
+
+JSONL_PATH = Path(__file__).resolve().parent.parent / "cache" / "proposals.jsonl"
+
+
+def append_jsonl(record: dict, path: Path | None = None) -> None:
+    """레코드 한 줄 append. 실패해도 제안 전달은 계속돼야 하므로 로그만 남긴다."""
+    try:
+        with open(path or JSONL_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as e:
+        logger.warning("proposal jsonl append failed: %s", e)
+
+
+def restore(path: Path | None = None) -> int:
+    """파일을 읽어 id별 마지막 줄로 복원. 열려 있던 제안은 expired로 닫는다."""
+    path = path or JSONL_PATH
+    if not path.exists():
+        return 0
+    reset()
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if rec.get("status") == "open":
+                rec["status"] = "expired"
+            _proposals[rec["id"]] = rec
+    _trim()
+    return len(_proposals)

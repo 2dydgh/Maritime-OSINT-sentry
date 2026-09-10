@@ -1,4 +1,5 @@
 """당직사관 에이전트 테스트 — 규칙·중복억제·저장·그래프·브리핑."""
+import json
 from pathlib import Path
 
 import rdflib
@@ -145,3 +146,39 @@ def test_memory_cap_drops_oldest_decided_first(monkeypatch):
 def test_brief_template_distance_source_uses_cpa_label():
     new, _, _ = wo.evaluate([], [_dist(0.1, 5.0)], now=1000.0)
     assert "CPA 임계" in new[0]["brief"] and "횡단" in new[0]["brief"]
+
+
+def test_append_and_restore_last_line_wins(tmp_path):
+    path = tmp_path / "p.jsonl"
+    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
+    wo.append_jsonl(new[0], path)
+    wo.decide(new[0]["id"], "approved", now=1005.0)
+    wo.append_jsonl(new[0], path)
+    new2, _, _ = wo.evaluate([_ml(3, a=5, b=6)], [], now=1000.0)
+    wo.append_jsonl(new2[0], path)
+    assert len(path.read_text().strip().splitlines()) == 3
+
+    wo.reset()
+    assert wo.restore(path) == 2
+    a = wo.get_proposal(new[0]["id"])
+    b = wo.get_proposal(new2[0]["id"])
+    assert a["status"] == "approved" and a["decision"]["at"].endswith("Z")
+    assert b["status"] == "expired"                 # open이던 건 expired로
+    assert wo.list_proposals(status="open") == []
+
+
+def test_restore_missing_file_is_zero(tmp_path):
+    assert wo.restore(tmp_path / "none.jsonl") == 0
+
+
+def test_restore_skips_corrupt_lines(tmp_path):
+    path = tmp_path / "p.jsonl"
+    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
+    path.write_text(json.dumps(new[0], ensure_ascii=False) + "\n{broken\n")
+    wo.reset()
+    assert wo.restore(path) == 1
+
+
+def test_append_failure_is_swallowed(tmp_path):
+    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
+    wo.append_jsonl(new[0], tmp_path / "no_dir" / "x" / "p.jsonl")   # 디렉터리 없음 → 예외 삼킴
