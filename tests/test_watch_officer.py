@@ -18,18 +18,21 @@ def test_config_defaults():
     assert config.WATCH_BRIEF_LLM is True
 
 
-def test_ontology_declares_six_classes_and_four_properties():
+def test_ontology_declares_six_classes_and_five_properties():
     g = rdflib.Graph().parse(TTL_PATH, format="turtle")
     classes = {s for s in g.subjects(RDF.type, OWL.Class) if str(s).startswith(str(MOS))}
     assert len(classes) == 6
     props = set(g.subjects(RDF.type, OWL.ObjectProperty)) | set(g.subjects(RDF.type, OWL.DatatypeProperty))
-    assert len(props) == 4
+    assert len(props) == 5
     assert (MOS.Proposal, None, None) in g
 
 
 import pytest
 
 from backend.services import watch_officer as wo
+from rdflib.namespace import PROV, SOSA
+
+from backend.services import watch_graph as wg
 
 
 def _info(mmsi, name="SHIP", typ="cargo", lat=35.0, lng=129.0):
@@ -204,3 +207,50 @@ def test_restore_skips_non_dict_and_idless_lines(tmp_path):
     )
     wo.reset()
     assert wo.restore(path) == 1  # 유효한 레코드 1개만
+
+
+def test_graph_has_prov_lineage_for_proposal():
+    wg.reset()
+    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
+    rec = new[0]
+    wg.add_proposal(rec)
+    g = wg.subgraph(rec["id"])
+    prop = wg.MOS[f"proposal/{rec['id']}"]
+    enc = next(g.objects(prop, PROV.wasDerivedFrom))
+    assert (enc, RDF.type, wg.MOS.Encounter) in g
+    assert int(next(g.objects(enc, wg.MOS.riskLevel))) == 3
+    assess = next(g.objects(enc, PROV.wasGeneratedBy))
+    obs = list(g.objects(assess, PROV.used))
+    assert len(obs) == 2
+    vessels = {next(g.objects(o, SOSA.hasFeatureOfInterest)) for o in obs}
+    assert vessels == {wg.MOS["vessel/111"], wg.MOS["vessel/222"]}
+    assert (prop, PROV.wasAttributedTo, wg.MOS["agent/watch-officer"]) in g
+    assert (prop, PROV.used, None) not in g          # 결심 전에는 Decision 없음
+
+
+def test_graph_decision_links_and_subgraph_excludes_other_proposals():
+    wg.reset()
+    new, _, _ = wo.evaluate([_ml(3, a=1, b=2), _ml(3, a=1, b=3)], [], now=1000.0)   # 선박 1 공유
+    for r in new:
+        wg.add_proposal(r)
+    wo.decide(new[0]["id"], "dismissed", "monitor", now=1005.0)
+    wg.add_decision(new[0])
+    g0 = wg.subgraph(new[0]["id"])
+    dec = wg.MOS[f"decision/{new[0]['id']}"]
+    assert (dec, PROV.used, wg.MOS[f"proposal/{new[0]['id']}"]) in g0
+    assert str(next(g0.objects(dec, wg.MOS.outcome))) == "dismissed"
+    assert (wg.MOS[f"proposal/{new[1]['id']}"], None, None) not in g0
+    g1 = wg.subgraph(new[1]["id"])
+    assert (dec, None, None) not in g1
+
+
+def test_graph_serialize_formats():
+    wg.reset()
+    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
+    wg.add_proposal(new[0])
+    ttl = wg.serialize(new[0]["id"], "turtle")
+    assert "prov:wasDerivedFrom" in ttl or "wasDerivedFrom" in ttl
+    jl = json.loads(wg.serialize(new[0]["id"], "json-ld"))
+    assert isinstance(jl, list) and any("Proposal" in str(n.get("@type", "")) for n in jl)
+    with pytest.raises(ValueError):
+        wg.serialize(new[0]["id"], "xml")

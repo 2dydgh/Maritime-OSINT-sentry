@@ -20,3 +20,4 @@ mos:involves        a owl:ObjectProperty   ; rdfs:domain mos:Encounter ; rdfs:ra
 mos:riskLevel       a owl:DatatypeProperty ; rdfs:domain mos:Encounter ; rdfs:range xsd:integer ; rdfs:label "위험 등급"@ko .
 mos:proposesAction  a owl:DatatypeProperty ; rdfs:domain mos:Proposal  ; rdfs:range xsd:string ; rdfs:label "제안 조치(JSON)"@ko .
 mos:outcome         a owl:DatatypeProperty ; rdfs:domain mos:Decision  ; rdfs:range xsd:string ; rdfs:label "결심 결과"@ko .
+mos:reason          a owl:DatatypeProperty ; rdfs:domain mos:Decision  ; rdfs:range xsd:string ; rdfs:label "기각 사유"@ko .
