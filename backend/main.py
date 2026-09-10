@@ -12,9 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import database, config, websocket
 from .services import ais_stream, data_fetcher, history_writer, aircraft_tracker, ais_fallback, llm_agent
-from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision, weather, route, aircraft, chat, hazard
+from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision, weather, route, aircraft, chat, hazard, proposals
 from .routers.hazard import warm_cache as warm_hazard_cache
-from .services import collision_analyzer, land_filter
+from .services import collision_analyzer, land_filter, watch_officer
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -205,8 +205,17 @@ async def lifespan(app: FastAPI):
                 # Off-loop: global snapshot is ~30k vessels under a contended lock
                 vessels = await asyncio.to_thread(ais_stream.get_ais_vessels)
                 await collision_analyzer.update_collision_cache(vessels)
+                await watch_officer.on_collision_update(
+                    collision_analyzer.get_ml_risks(), collision_analyzer.get_distance_risks()
+                )
             except Exception as e:
                 logger.error(f"Collision analysis error: {e}")
+
+    try:
+        restored = watch_officer.restore()
+        logger.info(f"Watch officer restored {restored} proposals")
+    except Exception as e:
+        logger.error(f"Watch officer restore failed (continuing): {e}")
 
     collision_task = asyncio.create_task(collision_scanner())
     
@@ -360,6 +369,7 @@ app.include_router(route.router, prefix="/api/v1")
 app.include_router(aircraft.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(hazard.router, prefix="/api/v1")
+app.include_router(proposals.router, prefix="/api/v1")
 
 # Static Files — resolve path for both normal and PyInstaller frozen mode
 import sys as _sys
