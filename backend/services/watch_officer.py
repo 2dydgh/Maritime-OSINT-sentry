@@ -184,7 +184,7 @@ def append_jsonl(record: dict, path: Path | None = None) -> None:
     try:
         with open(path or JSONL_PATH, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except OSError as e:
+    except Exception as e:
         logger.warning("proposal jsonl append failed: %s", e)
 
 
@@ -199,6 +199,8 @@ def restore(path: Path | None = None) -> int:
             try:
                 rec = json.loads(line)
             except ValueError:
+                continue
+            if not isinstance(rec, dict) or "id" not in rec:
                 continue
             if rec.get("status") == "open":
                 rec["status"] = "expired"

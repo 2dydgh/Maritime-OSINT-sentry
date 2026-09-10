@@ -182,3 +182,25 @@ def test_restore_skips_corrupt_lines(tmp_path):
 def test_append_failure_is_swallowed(tmp_path):
     new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
     wo.append_jsonl(new[0], tmp_path / "no_dir" / "x" / "p.jsonl")   # 디렉터리 없음 → 예외 삼킴
+
+
+def test_append_failure_on_unserializable_is_swallowed(tmp_path):
+    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
+    bad_record = {**new[0], "bad": {1, 2}}  # set는 JSON 직렬화 불가
+    path = tmp_path / "p.jsonl"
+    wo.append_jsonl(bad_record, path)  # TypeError 삼킴
+    # 파일이 없거나 비어있어야 함 (부분 쓰기 없음)
+    assert not path.exists() or not path.read_text().strip()
+
+
+def test_restore_skips_non_dict_and_idless_lines(tmp_path):
+    path = tmp_path / "p.jsonl"
+    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
+    # 유효한 레코드, 리스트, id 없는 dict를 순서대로 작성
+    path.write_text(
+        json.dumps(new[0], ensure_ascii=False) + "\n"
+        + json.dumps([1, 2], ensure_ascii=False) + "\n"
+        + json.dumps({"status": "open"}, ensure_ascii=False) + "\n"
+    )
+    wo.reset()
+    assert wo.restore(path) == 1  # 유효한 레코드 1개만
