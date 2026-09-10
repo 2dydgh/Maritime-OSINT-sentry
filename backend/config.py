@@ -34,3 +34,9 @@ DEV_NO_CACHE = os.getenv("DEV_NO_CACHE", "False").lower() == "true"
 # Phase 1
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 METRICS_ENABLED = os.getenv("METRICS_ENABLED", "true").lower() == "true"
+
+# Watch officer (충돌 위험 제안 에이전트)
+WATCH_DCPA_NM = float(os.getenv("WATCH_DCPA_NM", "0.3"))        # 거리 규칙: DCPA 미만이면 후보
+WATCH_TCPA_MIN = float(os.getenv("WATCH_TCPA_MIN", "10"))       # 거리 규칙: TCPA 미만(분)이면 후보
+WATCH_COOLDOWN_MIN = float(os.getenv("WATCH_COOLDOWN_MIN", "30"))  # 같은 쌍 재제안 억제(분)
+WATCH_BRIEF_LLM = os.getenv("WATCH_BRIEF_LLM", "true").lower() in ("1", "true")  # Ollama로 브리핑 다듬기

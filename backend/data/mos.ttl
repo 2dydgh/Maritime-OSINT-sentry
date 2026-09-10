@@ -1,0 +1,22 @@
+@prefix mos:  <https://maritime-osint-sentry/ontology#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<https://maritime-osint-sentry/ontology> a owl:Ontology ;
+    rdfs:label "Maritime OSINT Sentry 당직사관 온톨로지"@ko ;
+    owl:imports <http://www.w3.org/ns/prov-o#>, <http://www.w3.org/ns/sosa/> .
+
+mos:Vessel          a owl:Class ; rdfs:subClassOf sosa:FeatureOfInterest, prov:Entity ; rdfs:label "선박"@ko .
+mos:Encounter       a owl:Class ; rdfs:subClassOf prov:Entity ; rdfs:label "조우 상태"@ko .
+mos:RiskAssessment  a owl:Class ; rdfs:subClassOf prov:Activity ; rdfs:label "위험 평가"@ko .
+mos:Proposal        a owl:Class ; rdfs:subClassOf prov:Entity ; rdfs:label "조치 제안"@ko .
+mos:Decision        a owl:Class ; rdfs:subClassOf prov:Activity ; rdfs:label "운용자 결심"@ko .
+mos:WatchOfficer    a owl:Class ; rdfs:subClassOf prov:SoftwareAgent ; rdfs:label "당직사관 에이전트"@ko .
+
+mos:involves        a owl:ObjectProperty   ; rdfs:domain mos:Encounter ; rdfs:range mos:Vessel ; rdfs:label "관련 선박"@ko .
+mos:riskLevel       a owl:DatatypeProperty ; rdfs:domain mos:Encounter ; rdfs:range xsd:integer ; rdfs:label "위험 등급"@ko .
+mos:proposesAction  a owl:DatatypeProperty ; rdfs:domain mos:Proposal  ; rdfs:range xsd:string ; rdfs:label "제안 조치(JSON)"@ko .
+mos:outcome         a owl:DatatypeProperty ; rdfs:domain mos:Decision  ; rdfs:range xsd:string ; rdfs:label "결심 결과"@ko .
