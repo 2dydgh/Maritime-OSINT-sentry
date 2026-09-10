@@ -376,6 +376,24 @@ function renderCollisionList() {
     _ensureCollisionDelegation();
 }
 
+// 당직사관 제안 승인 시 호출 — 카드 클릭과 같은 추적 경로를 탄다 (CPA 재검증은 서버 규칙이 이미 했으므로 생략).
+function focusCollisionPair(mmsiA, mmsiB, riskLevel) {
+    var shipA = shipDataMap[mmsiA] || shipDataMap[String(mmsiA)];
+    var shipB = shipDataMap[mmsiB] || shipDataMap[String(mmsiB)];
+    if (!shipA || !shipB) return;
+    EventBus.emit('command:flyTo', { lat: (shipA.lat + shipB.lat) / 2, lng: (shipA.lng + shipB.lng) / 2, height: 15000 });
+    EventBus.emit('ship:selected', {
+        mmsi: mmsiA, target: mmsiB, mode: 'pair', riskLevel: riskLevel || 3,
+        latA: shipA.lat, lngA: shipA.lng, latB: shipB.lat, lngB: shipB.lng,
+        sogA: shipA.sog || 0, cogA: shipA.cog || 0, nameA: shipA.name || ''
+    });
+    _collisionTrackingActive = true;
+    startCollisionTracking(mmsiA, mmsiB);
+    showShipInfo(mmsiA);
+    highlightShip(mmsiA);
+}
+window.focusCollisionPair = focusCollisionPair;
+
 function _handleCollisionCardClick(card) {
     // Collision card selection highlight
     document.querySelectorAll('.collision-row.selected').forEach(function(c) { c.classList.remove('selected'); });

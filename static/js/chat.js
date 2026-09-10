@@ -290,6 +290,11 @@ var ChatUI = (function () {
                 if (typeof window.deactivateHazardZones === 'function') window.deactivateHazardZones();
             }
         }
+        ,
+        highlight_pair: function (a) {
+            var m = a.mmsi || [];
+            if (typeof window.focusCollisionPair === 'function') window.focusCollisionPair(m[0], m[1], a.risk_level || 3);
+        }
     };
 
     function _dispatchAction(action) {
@@ -297,6 +302,8 @@ var ChatUI = (function () {
         var handler = ACTION_HANDLERS[action.action];
         if (handler) handler(action);
     }
+
+    window.dispatchAgentAction = _dispatchAction;   // 당직사관 트레이가 승인된 조치를 같은 경로로 실행
 
     // Friendly Korean labels for tools, used only when a step has no `why`.
     var TOOL_LABELS = {
