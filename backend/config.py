@@ -29,7 +29,7 @@ PORT = int(os.getenv("PORT", 8001))
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 # Dev only: send Cache-Control: no-store on static assets so a plain refresh always
 # fetches the latest CSS/JS (no manual ?v= cache-busting). Keep OFF in production.
-DEV_NO_CACHE = os.getenv("DEV_NO_CACHE", "False").lower() == "true"
+DEV_NO_CACHE = os.getenv("DEV_NO_CACHE", "false").lower() in ("1", "true")
 
 # Phase 1
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
