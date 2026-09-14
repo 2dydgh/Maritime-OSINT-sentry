@@ -917,6 +917,9 @@ function initWebSocket() {
                 // DataService handles state + emits 'aircraft:updated'
                 DataService.updateAircraft(data.aircraft || []);
             }
+            else if (data.type === "proposal" || data.type === "proposal_update") {
+                EventBus.emit('proposal:message', { type: data.type, proposal: data.proposal });
+            }
         } catch (error) {
             console.error("Error parsing WebSocket message:", error);
         }

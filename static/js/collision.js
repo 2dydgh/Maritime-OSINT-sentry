@@ -81,7 +81,11 @@ function switchCollisionTab(tab) {
     document.querySelectorAll('.collision-tab-btn').forEach(function(b) {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
-    renderCollisionList();
+    var sec = document.getElementById('collisionSection');
+    var prop = document.getElementById('proposalSection');
+    if (sec) sec.hidden = (tab === 'proposals');
+    if (prop) prop.hidden = (tab !== 'proposals');
+    if (tab !== 'proposals') renderCollisionList();
 }
 window.switchCollisionTab = switchCollisionTab;
 
@@ -90,6 +94,8 @@ var tabDist = document.getElementById('collisionTabDistance');
 var tabMl = document.getElementById('collisionTabMl');
 if (tabDist) tabDist.addEventListener('click', function() { switchCollisionTab('distance'); });
 if (tabMl) tabMl.addEventListener('click', function() { switchCollisionTab('ml'); });
+var tabProp = document.getElementById('collisionTabProposals');
+if (tabProp) tabProp.addEventListener('click', function() { switchCollisionTab('proposals'); });
 
 function collisionSeverityBadge(severity) {
     // Dot carries the colour; text stays calm light grey so the row doesn't read
@@ -205,6 +211,8 @@ function renderCollisionList() {
 
     // ML serious risks (level >= 2) — used for both badge and HUD
     var mlSerious = (collisionData.ml?.risks || []).filter(function(r) { return r.risk_level >= 2; }).length;
+    // ponytail: 제안 수는 다음 충돌 렌더(≤10s)에 합산된다. 즉시 반영이 필요하면 WatchOfficerUI에서 renderCollisionList 호출.
+    mlSerious += (window.WatchOfficerUI && window.WatchOfficerUI.openCount()) || 0;
 
     // Update icon rail badge — pulse briefly only when the count rises
     var badge = document.getElementById('collisionBadge');

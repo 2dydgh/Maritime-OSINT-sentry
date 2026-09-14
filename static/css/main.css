@@ -9476,3 +9476,26 @@ button, .btn, [class*="-btn"] {
     border-radius: 6px;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.025);
 }
+
+/* ── 당직사관 제안 트레이 ── */
+.tab-badge { margin-left: 4px; padding: 0 5px; border-radius: 8px; font-size: 10px; background: var(--primary, #2f6fed); color: #fff; }
+#proposalSection { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow-y: auto; }
+.proposal-card { cursor: default; }
+.proposal-card.done { opacity: 0.6; }
+.pc-brief { font-size: 12px; line-height: 1.45; color: var(--text-main, #f4f4f5); }
+.pc-src { font-size: 9px; padding: 0 4px; border: 1px solid currentColor; border-radius: 3px; opacity: 0.7; }
+.pc-evidence { align-self: flex-start; background: none; border: none; padding: 0; font: inherit; font-size: 11px; color: var(--text-sub, #a1a1aa); cursor: pointer; }
+.pc-evidence:hover { color: var(--primary, #2f6fed); }
+.pc-actions { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.pc-btn { padding: 3px 10px; border-radius: 3px; border: 1px solid var(--primary, #2f6fed); background: none; color: var(--primary, #2f6fed); font: inherit; font-size: 11px; cursor: pointer; }
+.pc-approve { background: var(--primary, #2f6fed); color: #fff; }
+.pc-dismiss { border-color: var(--text-sub, #a1a1aa); color: var(--text-sub, #a1a1aa); }
+.pc-reason { font: inherit; font-size: 11px; background: transparent; color: var(--text-sub, #a1a1aa); border: 1px solid rgba(255,255,255,0.15); border-radius: 3px; padding: 2px 4px; }
+.pc-status { font-size: 11px; color: var(--text-sub, #a1a1aa); }
+.proposal-history { border-top: 1px solid rgba(255,255,255,0.08); }
+.proposal-history > summary { padding: 6px 12px; font-size: 11px; color: var(--text-sub, #a1a1aa); cursor: pointer; }
+.proposal-drawer { border-top: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.25); }
+.proposal-drawer-head { display: flex; align-items: center; gap: 10px; padding: 6px 12px; font-size: 11px; }
+.proposal-drawer-head a { margin-left: auto; color: var(--primary, #2f6fed); }
+.proposal-drawer-head button { background: none; border: none; color: inherit; cursor: pointer; }
+.proposal-drawer pre { margin: 0; padding: 8px 12px; max-height: 40vh; overflow: auto; font-size: 10.5px; line-height: 1.4; white-space: pre; }

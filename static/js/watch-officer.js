@@ -70,6 +70,100 @@
         };
     }
 
-    var api = { createStore: createStore };
+    // ── DOM (브라우저 전용) ──
+    function initUI() {
+        if (typeof document === 'undefined') return null;
+        var list = document.getElementById('proposalList');
+        var hist = document.getElementById('proposalHistory');
+        var badge = document.getElementById('proposalTabBadge');
+        var drawer = document.getElementById('proposalDrawer');
+        if (!list) return null;
+
+        var store = createStore({
+            fetchFn: function (u, o) { return fetch(u, o); },
+            dispatchFn: function (a) { if (window.dispatchAgentAction) window.dispatchAgentAction(a); }
+        });
+
+        function sevHex(p) {
+            var lvl = p.trigger.risk_level;
+            if (typeof _mlHex === 'function') return _mlHex(lvl == null ? 3 : lvl);
+            return '#e5484d';
+        }
+        function enc(p) { return { 'head-on': '정면', crossing: '횡단', overtaking: '추월' }[p.trigger.encounter] || '근접'; }
+        function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+        function hhmm(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toISOString().substring(11, 16) + 'Z'; }
+
+        function card(p) {
+            var a = p.subjects[0], b = p.subjects[1], t = p.trigger;
+            var done = p.status !== 'open';
+            var statusKo = { approved: '승인됨', dismissed: '기각됨', expired: '만료' }[p.status];
+            return '<div class="collision-row proposal-card' + (done ? ' done' : '') + '" data-id="' + esc(p.id) + '" style="--row-sev:' + sevHex(p) + '">' +
+                '<div class="cr-row1"><span class="cr-ship-a">' + esc(a.name) + '</span><small>↔</small><span class="cr-ship-b">' + esc(b.name) + '</span>' +
+                '<span class="cr-sev" style="color:' + sevHex(p) + '">' + esc(t.risk_label) + '</span></div>' +
+                '<div class="pc-brief">' + esc(p.brief) + (p.brief_source === 'ollama' ? ' <span class="pc-src">AI</span>' : '') + '</div>' +
+                '<button type="button" class="pc-evidence" data-act="graph">DCPA ' + Number(t.dcpa_nm).toFixed(2) + ' nm · TCPA ' + Number(t.tcpa_min).toFixed(1) + '분 · ' + enc(p) + ' · 근거 ▸</button>' +
+                (done
+                    ? '<div class="pc-status">' + statusKo + ' ' + hhmm(p.updated_at) + (p.decision && p.decision.reason ? ' · ' + esc(p.decision.reason) : '') + '</div>'
+                    : '<div class="pc-actions"><button type="button" class="pc-btn pc-approve" data-act="approve">승인</button>' +
+                      '<select class="pc-reason" data-role="reason"><option value="false_positive">오탐</option><option value="already_handled">이미 조치</option><option value="monitor">관망</option></select>' +
+                      '<button type="button" class="pc-btn pc-dismiss" data-act="dismiss">기각</button></div>') +
+                '</div>';
+        }
+
+        function render() {
+            var open = store.open();
+            list.innerHTML = open.length ? open.map(card).join('') : '<div class="collision-empty">열린 제안 없음</div>';
+            if (hist) hist.innerHTML = store.history(20).map(card).join('');
+            if (badge) { badge.textContent = open.length; badge.hidden = open.length === 0; }
+        }
+
+        function showGraph(id) {
+            var url = API + '/' + encodeURIComponent(id) + '/graph';
+            document.getElementById('proposalTtlLink').href = url + '?format=turtle';
+            fetch(url + '?format=json-ld').then(function (r) { return r.json(); }).then(function (nodes) {
+                var order = ['Observation', 'RiskAssessment', 'Encounter', 'Proposal', 'Decision'];
+                function short(iri) { return String(iri).split(/[#\/]/).slice(-2).join('/'); }
+                function rank(n) { var t = (n['@type'] || []).map(short).join(' '); var i = order.findIndex(function (o) { return t.indexOf(o) >= 0; }); return i < 0 ? 99 : i; }
+                var lines = nodes.filter(function (n) { return n['@type']; }).sort(function (x, y) { return rank(x) - rank(y); }).map(function (n) {
+                    var head = '[' + (n['@type'] || []).map(short).join(',') + '] ' + short(n['@id']);
+                    var edges = Object.keys(n).filter(function (k) { return k[0] !== '@'; }).map(function (k) {
+                        var v = n[k].map(function (o) { return o['@id'] ? short(o['@id']) : String(o['@value']).slice(0, 60); }).join(', ');
+                        return '    ' + short(k) + ' → ' + v;
+                    });
+                    return [head].concat(edges).join('\n');
+                });
+                document.getElementById('proposalDrawerBody').textContent = lines.join('\n\n');
+                drawer.hidden = false;
+            }).catch(function (e) { console.error('[WatchOfficer] graph fetch failed', e); });
+        }
+
+        list.parentElement.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-act]');
+            if (!btn) return;
+            var cardEl = btn.closest('.proposal-card');
+            var id = cardEl && cardEl.dataset.id;
+            if (!id) return;
+            if (btn.dataset.act === 'approve') store.approve(id).catch(function (err) { console.error('[WatchOfficer]', err); });
+            else if (btn.dataset.act === 'dismiss') {
+                var sel = cardEl.querySelector('[data-role=reason]');
+                store.dismiss(id, sel ? sel.value : null).catch(function (err) { console.error('[WatchOfficer]', err); });
+            }
+            else if (btn.dataset.act === 'graph') showGraph(id);
+        });
+        var closeBtn = document.getElementById('proposalDrawerClose');
+        if (closeBtn) closeBtn.addEventListener('click', function () { drawer.hidden = true; });
+
+        store.onChange(render);
+        if (root.EventBus) root.EventBus.on('proposal:message', function (m) { store.receive(m.type, m.proposal); });
+        store.load().catch(function (e) { console.warn('[WatchOfficer] initial load failed', e); });
+        render();
+        return { openCount: store.openCount, store: store };
+    }
+
+    if (typeof document !== 'undefined') {
+        document.addEventListener('DOMContentLoaded', function () { root.WatchOfficerUI = initUI(); });
+    }
+
+    var api = { createStore: createStore, initUI: initUI };
     if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.WatchOfficer = api;
 })(typeof window !== 'undefined' ? window : globalThis);
