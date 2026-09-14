@@ -42,7 +42,7 @@ backend/
   main.py            ← FastAPI 진입점 (lifespan에서 AIS 스트림·history writer·hazard cache 기동)
   config.py          환경변수 (DB_*, AIS_API_KEY, OPENSKY_*, PORT, REDIS_URL)
   routers/           ships · collision · hazard · route · satellites · aircraft · weather · chat · events · alerts · history · metrics · health · data · sentinel
-  services/          ais_stream · collision_analyzer · land_filter · korea_hex_grid · hazard(static_hazards) · llm_agent/llm_tools · satellite_tracker · aircraft_tracker · history_writer · port_search · stream_producer/consumer
+  services/          ais_stream · collision_analyzer · land_filter · korea_hex_grid · hazard(static_hazards) · llm_agent/llm_tools · satellite_tracker · aircraft_tracker · history_writer · port_search · stream_producer/consumer · watch_officer/watch_graph
   cache/, data/      디스크 캐시 · 정적 데이터
 collision_model_new/da10-service/   별도 XGBoost 충돌 예측 서비스 (REST). git submodule 형태.
 static/
@@ -59,6 +59,7 @@ electron/            데스크톱 패키징
   `asyncio.to_thread()`로 이벤트 루프 밖에서 처리할 것 (`backend/main.py`의 `_build_ships_payload` 참고).
   이걸 루프에서 돌리면 hazard API·WS 핸드셰이크가 전부 굶는다.
 - **hazard 셀**은 디스크 캐시(`backend/services/hazard_cells_cache.json`)로 warm.
+- **당직사관(제안 에이전트):** `collision_scanner` → `watch_officer.on_collision_update()` → WS `proposal` → 프론트 `watch-officer.js`(충돌 패널 "제안" 탭). 규칙이 결정, LLM은 브리핑 문장만. 기록은 `backend/cache/proposals.jsonl`, 근거는 rdflib PROV 그래프(`GET /proposals/{id}/graph`). 새 트리거는 `watch_officer.RULES`에 함수 추가.
 
 ## 컨벤션
 
