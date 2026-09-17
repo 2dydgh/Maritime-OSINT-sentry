@@ -76,3 +76,14 @@ backend/data/land/*.txt
 claude.md
 docs/superpowers/
 screenshots/
+
+# Local source and runtime archives
+/_archive/
+
+# Local data platform journal and exports
+/var/
+
+# 옛 JSONL 제안 로그(현재 코드 미사용, 58MB) — 저장소에 넣지 않음
+backend/cache/proposals.jsonl
+# 외부·회사 문서(제안요청서·제안서) — 공개 저장소 제외
+docs/reference/
