@@ -1,358 +1,364 @@
-"""당직사관 에이전트 테스트 — 규칙·중복억제·저장·그래프·브리핑."""
 import json
-from pathlib import Path
-
-import rdflib
-from rdflib.namespace import OWL, RDF
-
-from backend import config
-
-MOS = rdflib.Namespace("https://maritime-osint-sentry/ontology#")
-TTL_PATH = Path(__file__).parent.parent / "backend" / "data" / "mos.ttl"
-
-
-def test_config_defaults():
-    assert config.WATCH_DCPA_NM == 0.3
-    assert config.WATCH_TCPA_MIN == 10.0
-    assert config.WATCH_COOLDOWN_MIN == 30.0
-    assert config.WATCH_BRIEF_LLM is True
-
-
-def test_ontology_declares_six_classes_and_five_properties():
-    g = rdflib.Graph().parse(TTL_PATH, format="turtle")
-    classes = {s for s in g.subjects(RDF.type, OWL.Class) if str(s).startswith(str(MOS))}
-    assert len(classes) == 6
-    props = set(g.subjects(RDF.type, OWL.ObjectProperty)) | set(g.subjects(RDF.type, OWL.DatatypeProperty))
-    assert len(props) == 5
-    assert (MOS.Proposal, None, None) in g
-
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 import pytest
-
-from backend.services import watch_officer as wo
-from rdflib.namespace import PROV, SOSA
-
-from backend.services import watch_graph as wg
-
-
-def _info(mmsi, name="SHIP", typ="cargo", lat=35.0, lng=129.0):
-    return {"mmsi": mmsi, "name": name, "type": typ, "lat": lat, "lng": lng, "sog": 10.0, "cog": 90.0, "country": "KR"}
-
-
-def _ml(level, a=111, b=222, dcpa=0.5, tcpa=8.0):
-    return {"ship_a": _info(a, "ALPHA"), "ship_b": _info(b, "BRAVO", lat=35.01), "risk_level": level,
-            "risk_label": {1: "주의", 2: "경고", 3: "위험"}[level], "current_dist_nm": 1.0,
-            "tcpa_min": tcpa, "dcpa_nm": dcpa, "ts": "2026-09-10T03:12:00+00:00"}
-
-
-def _dist(dcpa, tcpa, a=111, b=222, severity="danger"):
-    return {"ship_a": _info(a, "ALPHA"), "ship_b": _info(b, "BRAVO", lat=35.01), "tcpa_min": tcpa, "dcpa_nm": dcpa,
-            "current_dist_nm": 1.0, "severity": severity, "encounter": "crossing", "pair_class": "AA",
-            "ts": "2026-09-10T03:12:00+00:00"}
-
-
-@pytest.fixture(autouse=True)
-def _reset_state():
-    wo.reset()
-    yield
-    wo.reset()
-
-
-def test_pair_key_is_sorted():
-    assert wo.pair_key(222, 111) == (111, 222)
-
-
-def test_rule_ml_level3_is_candidate_level2_is_not():
-    assert len(wo.collision_high_risk([_ml(3)], [])) == 1
-    assert wo.collision_high_risk([_ml(2)], []) == []
-
-
-def test_rule_distance_thresholds_are_exclusive_boundaries():
-    assert len(wo.collision_high_risk([], [_dist(0.29, 9.9)])) == 1
-    assert wo.collision_high_risk([], [_dist(0.3, 9.9)]) == []      # dcpa == 임계 → 아님
-    assert wo.collision_high_risk([], [_dist(0.29, 10.0)]) == []    # tcpa == 임계 → 아님
-    assert wo.collision_high_risk([], [_dist(0.29, 0.0)]) == []     # tcpa 0 → 아님
-
-
-def test_ml_and_distance_same_pair_yield_one_candidate_preferring_ml():
-    cands = wo.collision_high_risk([_ml(3)], [_dist(0.1, 5.0)])
-    assert len(cands) == 1
-    assert cands[0]["trigger"]["source"] == "ml"
-
-
-def test_evaluate_creates_record_with_spec_shape():
-    new, updated, expired = wo.evaluate([_ml(3)], [], now=1_000_000.0)
-    assert (len(new), len(updated), len(expired)) == (1, 0, 0)
-    p = new[0]
-    assert p["id"].startswith("p_") and p["id"].endswith("_111_222")
-    assert p["status"] == "open" and p["decision"] is None
-    assert p["trigger"]["kind"] == "collision_risk" and p["trigger"]["risk_level"] == 3
-    assert [s["mmsi"] for s in p["subjects"]] == [111, 222]
-    assert p["actions"][0]["action"] == "fly_to" and p["actions"][0]["zoom"] == 12
-    assert p["actions"][1] == {"action": "highlight_pair", "mmsi": [111, 222], "risk_level": 3}
-    assert p["brief_source"] == "template"
-    assert "ALPHA" in p["brief"] and "BRAVO" in p["brief"] and "0.50" in p["brief"] and "8.0" in p["brief"]
-
-
-def test_evaluate_same_pair_twice_updates_not_duplicates():
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    new2, updated, _ = wo.evaluate([_ml(3, dcpa=0.2)], [], now=1010.0)
-    assert new2 == [] and len(updated) == 1
-    assert updated[0]["id"] == new[0]["id"]
-    assert updated[0]["trigger"]["dcpa_nm"] == 0.2
-    assert len(wo.list_proposals()) == 1
-
-
-def test_pair_disappearing_expires_and_cooldown_blocks_reproposal():
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    _, _, expired = wo.evaluate([], [], now=1010.0)
-    assert expired[0]["id"] == new[0]["id"] and expired[0]["status"] == "expired"
-    new3, _, _ = wo.evaluate([_ml(3)], [], now=1010.0 + 29 * 60)
-    assert new3 == []
-    new4, _, _ = wo.evaluate([_ml(3)], [], now=1010.0 + 31 * 60)
-    assert len(new4) == 1 and new4[0]["id"] != new[0]["id"]
-
-
-def test_decide_marks_and_rejects_non_open():
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    pid = new[0]["id"]
-    rec = wo.decide(pid, "dismissed", "false_positive", now=1005.0)
-    assert rec["status"] == "dismissed" and rec["decision"]["reason"] == "false_positive"
-    with pytest.raises(ValueError):
-        wo.decide(pid, "approved")
-    with pytest.raises(KeyError):
-        wo.decide("nope", "approved")
-    # 결정 후 쿨다운
-    new2, _, _ = wo.evaluate([_ml(3)], [], now=1005.0 + 10 * 60)
-    assert new2 == []
-
-
-def test_list_proposals_filters_and_orders_newest_first():
-    wo.evaluate([_ml(3, a=1, b=2)], [], now=1000.0)
-    wo.evaluate([_ml(3, a=1, b=2), _ml(3, a=3, b=4)], [], now=1100.0)
-    assert [p["subjects"][0]["mmsi"] for p in wo.list_proposals()] == [3, 1]
-    wo.decide(wo.list_proposals()[0]["id"], "approved")
-    assert len(wo.list_proposals(status="open")) == 1
-    assert len(wo.list_proposals(limit=1)) == 1
-
-
-def test_memory_cap_drops_oldest_decided_first(monkeypatch):
-    monkeypatch.setattr(wo, "MAX_PROPOSALS", 3)
-    for i in range(3):
-        wo.evaluate([_ml(3, a=10 + i, b=20 + i)], [], now=1000.0 + i)
-        wo.decide(wo.list_proposals()[0]["id"], "approved")
-    wo.evaluate([_ml(3, a=99, b=98)], [], now=2000.0)
-    ids = [p["subjects"][0]["mmsi"] for p in wo.list_proposals(limit=100)]
-    assert ids == [99, 12, 11]
-
-
-def test_brief_template_distance_source_uses_cpa_label():
-    new, _, _ = wo.evaluate([], [_dist(0.1, 5.0)], now=1000.0)
-    assert "CPA 임계" in new[0]["brief"] and "횡단" in new[0]["brief"]
-
-
-def test_append_and_restore_last_line_wins(tmp_path):
-    path = tmp_path / "p.jsonl"
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    wo.append_jsonl(new[0], path)
-    wo.decide(new[0]["id"], "approved", now=1005.0)
-    wo.append_jsonl(new[0], path)
-    new2, _, _ = wo.evaluate([_ml(3, a=5, b=6)], [], now=1000.0)
-    wo.append_jsonl(new2[0], path)
-    assert len(path.read_text().strip().splitlines()) == 3
-
-    wo.reset()
-    assert wo.restore(path) == 2
-    a = wo.get_proposal(new[0]["id"])
-    b = wo.get_proposal(new2[0]["id"])
-    assert a["status"] == "approved" and a["decision"]["at"].endswith("Z")
-    assert b["status"] == "expired"                 # open이던 건 expired로
-    assert wo.list_proposals(status="open") == []
-
-
-def test_restore_missing_file_is_zero(tmp_path):
-    assert wo.restore(tmp_path / "none.jsonl") == 0
-
-
-def test_restore_skips_corrupt_lines(tmp_path):
-    path = tmp_path / "p.jsonl"
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    path.write_text(json.dumps(new[0], ensure_ascii=False) + "\n{broken\n")
-    wo.reset()
-    assert wo.restore(path) == 1
-
-
-def test_append_failure_is_swallowed(tmp_path):
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    wo.append_jsonl(new[0], tmp_path / "no_dir" / "x" / "p.jsonl")   # 디렉터리 없음 → 예외 삼킴
-
-
-def test_append_failure_on_unserializable_is_swallowed(tmp_path):
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    bad_record = {**new[0], "bad": {1, 2}}  # set는 JSON 직렬화 불가
-    path = tmp_path / "p.jsonl"
-    wo.append_jsonl(bad_record, path)  # TypeError 삼킴
-    # 파일이 없거나 비어있어야 함 (부분 쓰기 없음)
-    assert not path.exists() or not path.read_text().strip()
-
-
-def test_restore_skips_non_dict_and_idless_lines(tmp_path):
-    path = tmp_path / "p.jsonl"
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    # 유효한 레코드, 리스트, id 없는 dict를 순서대로 작성
-    path.write_text(
-        json.dumps(new[0], ensure_ascii=False) + "\n"
-        + json.dumps([1, 2], ensure_ascii=False) + "\n"
-        + json.dumps({"status": "open"}, ensure_ascii=False) + "\n"
-    )
-    wo.reset()
-    assert wo.restore(path) == 1  # 유효한 레코드 1개만
-
-
-def test_graph_has_prov_lineage_for_proposal():
-    wg.reset()
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    rec = new[0]
-    wg.add_proposal(rec)
-    g = wg.subgraph(rec["id"])
-    prop = wg.MOS[f"proposal/{rec['id']}"]
-    enc = next(g.objects(prop, PROV.wasDerivedFrom))
-    assert (enc, RDF.type, wg.MOS.Encounter) in g
-    assert int(next(g.objects(enc, wg.MOS.riskLevel))) == 3
-    assess = next(g.objects(enc, PROV.wasGeneratedBy))
-    obs = list(g.objects(assess, PROV.used))
-    assert len(obs) == 2
-    vessels = {next(g.objects(o, SOSA.hasFeatureOfInterest)) for o in obs}
-    assert vessels == {wg.MOS["vessel/111"], wg.MOS["vessel/222"]}
-    assert (prop, PROV.wasAttributedTo, wg.MOS["agent/watch-officer"]) in g
-    assert (prop, PROV.used, None) not in g          # 결심 전에는 Decision 없음
-
-
-def test_graph_decision_links_and_subgraph_excludes_other_proposals():
-    wg.reset()
-    new, _, _ = wo.evaluate([_ml(3, a=1, b=2), _ml(3, a=1, b=3)], [], now=1000.0)   # 선박 1 공유
-    for r in new:
-        wg.add_proposal(r)
-    wo.decide(new[0]["id"], "dismissed", "monitor", now=1005.0)
-    wg.add_decision(new[0])
-    g0 = wg.subgraph(new[0]["id"])
-    dec = wg.MOS[f"decision/{new[0]['id']}"]
-    assert (dec, PROV.used, wg.MOS[f"proposal/{new[0]['id']}"]) in g0
-    assert str(next(g0.objects(dec, wg.MOS.outcome))) == "dismissed"
-    assert (wg.MOS[f"proposal/{new[1]['id']}"], None, None) not in g0
-    g1 = wg.subgraph(new[1]["id"])
-    assert (dec, None, None) not in g1
-
-
-def test_graph_serialize_formats():
-    wg.reset()
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    wg.add_proposal(new[0])
-    ttl = wg.serialize(new[0]["id"], "turtle")
-    assert "prov:wasDerivedFrom" in ttl or "wasDerivedFrom" in ttl
-    jl = json.loads(wg.serialize(new[0]["id"], "json-ld"))
-    assert isinstance(jl, list) and any("Proposal" in str(n.get("@type", "")) for n in jl)
-    with pytest.raises(ValueError):
-        wg.serialize(new[0]["id"], "xml")
-
-
-import asyncio
-
-
-def test_brief_is_faithful_requires_all_numbers_and_names():
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    rec = new[0]
-    ok = "ALPHA와 BRAVO가 위험 등급으로 접근 중입니다. DCPA 0.50 nm, TCPA 8.0분이므로 추적을 권합니다."
-    assert wo.brief_is_faithful(rec, ok)
-    assert not wo.brief_is_faithful(rec, ok.replace("0.50", "0.5"))
-    assert not wo.brief_is_faithful(rec, ok.replace("BRAVO", "B"))
-    assert not wo.brief_is_faithful(rec, ok.replace("위험", "높음"))
-    assert not wo.brief_is_faithful(rec, "")
-
-
-def test_polish_brief_replaces_only_when_faithful(monkeypatch):
-    new, _, _ = wo.evaluate([_ml(3)], [], now=1000.0)
-    rec = new[0]
-
-    async def fake_ask(_prompt):
-        return "ALPHA와 BRAVO 위험. DCPA 0.50 nm, TCPA 8.0분."
-    monkeypatch.setattr(wo, "_ask_ollama", fake_ask)
-    assert asyncio.run(wo.polish_brief(rec)).startswith("ALPHA와 BRAVO")
-
-    async def bad_ask(_prompt):
-        return "두 선박이 가까워지고 있습니다."
-    monkeypatch.setattr(wo, "_ask_ollama", bad_ask)
-    assert asyncio.run(wo.polish_brief(rec)) is None
-
-    async def boom(_prompt):
-        raise TimeoutError()
-    monkeypatch.setattr(wo, "_ask_ollama", boom)
-    assert asyncio.run(wo.polish_brief(rec)) is None
-
-
-def test_on_collision_update_persists_graphs_and_broadcasts(monkeypatch, tmp_path):
-    sent = []
-    async def fake_broadcast(payload):
-        sent.append(payload)
-    monkeypatch.setattr(wo, "_broadcast", fake_broadcast)
-    monkeypatch.setattr(wo, "JSONL_PATH", tmp_path / "p.jsonl")
-    monkeypatch.setattr(wo, "WATCH_BRIEF_LLM", False)
-    wg.reset()
-
-    asyncio.run(wo.on_collision_update([_ml(3)], []))
-    assert [m["type"] for m in sent] == ["proposal"]
-    pid = sent[0]["proposal"]["id"]
-    assert (wg.MOS[f"proposal/{pid}"], RDF.type, wg.MOS.Proposal) in wg.subgraph(pid)
-    assert len((tmp_path / "p.jsonl").read_text().splitlines()) == 1
-
-    asyncio.run(wo.on_collision_update([_ml(3, dcpa=0.2)], []))
-    assert sent[-1]["type"] == "proposal_update" and sent[-1]["proposal"]["trigger"]["dcpa_nm"] == 0.2
-
-    asyncio.run(wo.on_collision_update([], []))
-    assert sent[-1]["type"] == "proposal_update" and sent[-1]["proposal"]["status"] == "expired"
-    assert len((tmp_path / "p.jsonl").read_text().splitlines()) == 3
-
-
-def test_on_collision_update_schedules_polish_when_llm_enabled(monkeypatch, tmp_path):
-    sent = []
-    async def fake_broadcast(payload):
-        sent.append(payload)
-    async def fake_ask(_prompt):
-        return "ALPHA와 BRAVO 위험. DCPA 0.50 nm, TCPA 8.0분."
-    monkeypatch.setattr(wo, "_broadcast", fake_broadcast)
-    monkeypatch.setattr(wo, "_ask_ollama", fake_ask)
-    monkeypatch.setattr(wo, "JSONL_PATH", tmp_path / "p.jsonl")
-    monkeypatch.setattr(wo, "WATCH_BRIEF_LLM", True)
-
-    async def run():
-        await wo.on_collision_update([_ml(3)], [])
-        await asyncio.sleep(0.05)          # create_task 완료 대기
-    asyncio.run(run())
-    assert [m["type"] for m in sent] == ["proposal", "proposal_update"]
-    assert sent[-1]["proposal"]["brief_source"] == "ollama"
-
-
-def test_polish_does_not_publish_after_proposal_closed(monkeypatch, tmp_path):
-    sent = []
-    async def fake_broadcast(payload):
-        sent.append(payload)
-    release = asyncio.Event()
-
-    async def fake_ask(_prompt):
-        await release.wait()
-        return "ALPHA와 BRAVO 위험. DCPA 0.50 nm, TCPA 8.0분."
-    monkeypatch.setattr(wo, "_broadcast", fake_broadcast)
-    monkeypatch.setattr(wo, "_ask_ollama", fake_ask)
-    monkeypatch.setattr(wo, "JSONL_PATH", tmp_path / "p.jsonl")
-    monkeypatch.setattr(wo, "WATCH_BRIEF_LLM", True)
-
-    async def run():
-        await wo.on_collision_update([_ml(3)], [])
-        pid = sent[0]["proposal"]["id"]
-        wo.decide(pid, "dismissed", "monitor")
-        release.set()
-        await asyncio.sleep(0.05)
-        return pid
-    pid = asyncio.run(run())
-    assert [m["type"] for m in sent] == ["proposal"]
-    assert wo.get_proposal(pid)["brief_source"] == "template"
+from backend.services import watch_officer as w
+
+NOW = 1800000000.0
+PAIR = (440000001, 440000002)
+
+
+def data():
+    vessels = [dict(mmsi=PAIR[0], name='A', lat=35.0, lng=129.0, sog=12, cog=90, _updated=NOW),
+               dict(mmsi=PAIR[1], name='B', lat=35.0, lng=129.04, sog=12, cog=270, _updated=NOW)]
+    r = dict(ship_a=vessels[0], ship_b=vessels[1], dcpa_nm=.1, tcpa_min=5, ts=w.iso(NOW))
+    return dict(distance=[r], ml=[], updated_at=NOW), lambda pair: vessels
+
+
+@pytest.fixture
+def setup(tmp_path):
+    store = w.Store(tmp_path / 'watch.sqlite3')
+    risks, lookup = data()
+    store.refresh(risks, lookup, NOW)
+    return store, risks, lookup, store.list()[0]['id']
+
+
+def approve(setup, client='tab1'):
+    store, risks, lookup, pid = setup
+    return store.decide(pid, 'approved', '집중 추적 필요', client, risks, lookup, NOW+1)
+
+
+def test_rule_dedup_and_persistent_decision(setup):
+    store, risks, lookup, pid = setup
+    store.refresh(risks, lookup, NOW+1)
+    assert len(store.list()) == 1
+    first = approve(setup)
+    assert first['execute'] is True
+    restored = w.Store(store.path)
+    again = restored.decide(pid, 'approved', 'retry', 'tab1', risks, lookup, NOW+2)
+    assert again['execute'] is False
+    assert restored.list()[0]['decision']['reason'] == '집중 추적 필요'
+    assert first['proposal']['approval_evidence']['dcpa_nm'] < .01
+
+
+@pytest.mark.parametrize('condition', ['analysis_stale','vessel_stale','vessel_missing','risk_changed'])
+def test_revalidate_blocks_stale_or_changed(setup, condition):
+    store, risks, lookup, pid = setup
+    if condition == 'analysis_stale': risks['updated_at'] = NOW-31
+    elif condition == 'vessel_stale': lookup(PAIR)[0]['_updated'] = NOW-61
+    elif condition == 'vessel_missing': lookup = lambda pair: []
+    else: lookup(PAIR)[1]['cog'] = 90
+    result = store.decide(pid,'approved','reason','tab1',risks,lookup,NOW+1)
+    # 어떤 사유든 실행은 절대 나가지 않는다 — 이게 안전 속성이다.
+    assert not result['execute']
+    if condition == 'risk_changed':
+        # 조건이 실제로 해소된 경우에만 제안을 닫는다.
+        assert result['proposal']['status'] == 'expired'
+        assert result['proposal']['events'][-1]['reason'] == condition
+    else:
+        # 관측 공백은 해소가 아니다. 승인만 막고 제안은 살려둬야 AIS 가 돌아왔을 때
+        # 운용자가 같은 사건을 이어서 볼 수 있다(닫아버리면 쿨다운에 가려진다).
+        assert result['proposal']['status'] == 'open'
+        assert result['proposal']['stale'] == condition
+
+
+def record(store, pid):
+    return next(p for p in store.list() if p['id'] == pid)
+
+
+def feed(t):
+    """시각 t 기준의 위험 피드. 분석 시각·수신 시각이 모두 t 라서, 공백을
+    만들고 싶은 항목만 골라 늦추면 된다(그러지 않으면 분석 신선도까지 같이 낡는다)."""
+    vessels = [dict(mmsi=PAIR[0], name='A', lat=35.0, lng=129.0, sog=12, cog=90, _updated=t),
+               dict(mmsi=PAIR[1], name='B', lat=35.0, lng=129.04, sog=12, cog=270, _updated=t)]
+    r = dict(ship_a=vessels[0], ship_b=vessels[1], dcpa_nm=.1, tcpa_min=5, ts=w.iso(t))
+    return dict(distance=[r], ml=[], updated_at=t), (lambda pair: vessels), vessels
+
+
+def gap_at(store, t):
+    """분석은 신선하지만 한 척의 AIS 만 61초 낡은 상태로 한 번 스캔한다."""
+    risks, lookup, vessels = feed(t)
+    vessels[0]['_updated'] = t - 61
+    store.refresh(risks, lookup, t)
+
+
+def fresh_at(store, t):
+    risks, lookup, _ = feed(t)
+    store.refresh(risks, lookup, t)
+
+
+def test_observation_gap_keeps_proposal_open_then_expires_after_grace(setup):
+    """운영 기록상 만료 사유 1위가 vessel_stale(64%), 만료까지 중앙값 35초였다.
+    AIS 공백만으로 검토 대기 제안을 닫으면 운용자가 카드를 읽을 시간이 사라진다."""
+    store, _risks, _lookup, pid = setup
+
+    gap_at(store, NOW + 10)
+    p = record(store, pid)
+    assert p['status'] == 'open', '공백만으로 닫으면 안 된다'
+    assert p['stale'] == 'vessel_stale'
+
+    # AIS 복귀 — 지연 표시가 걷히고 다시 정상 검토 대상이 된다.
+    fresh_at(store, NOW + 20)
+    p = record(store, pid)
+    assert p['status'] == 'open'
+    assert 'stale' not in p, '복구되면 지연 표시가 사라져야 한다'
+
+    # 공백이 유예를 넘기면 그때는 닫는다 — 무한정 열어두지 않는다.
+    gap_at(store, NOW + 30)
+    gap_at(store, NOW + 30 + w.config.WATCH_STALE_GRACE_SEC + 10)
+    assert record(store, pid)['status'] == 'expired'
+
+
+def test_system_expiry_does_not_hide_the_pair_for_the_operator_cooldown(setup):
+    """운용자 기각은 30분 쉬어가야 하지만, 관측 공백으로 끝난 제안까지 30분 가리면
+    위험이 계속되는 쌍이 그동안 화면에서 사라진다. 운영 기록에서 같은 쌍의
+    재제안이 1800초 안에 한 건도 없던 것이 그 증거다."""
+    store, _risks, _lookup, pid = setup
+
+    gap_at(store, NOW + 10)
+    expired_at = NOW + 10 + w.config.WATCH_STALE_GRACE_SEC + 10
+    gap_at(store, expired_at)
+    assert record(store, pid)['status'] == 'expired'
+
+    # AIS 가 돌아오면 짧은 재시도 간격 뒤 같은 쌍이 다시 올라와야 한다.
+    fresh_at(store, expired_at + w.config.WATCH_RETRY_COOLDOWN_SEC + 5)
+    assert any(p['status'] == 'open' for p in store.list()), '시스템 사정 만료는 30분 가리면 안 된다'
+
+
+def test_operator_dismissal_still_respects_the_long_cooldown(setup):
+    store, risks, lookup, pid = setup
+    store.decide(pid, 'dismissed', '관망', 'tab1', risks, lookup, NOW + 1)
+    # 기각 직후 재제안이 올라오면 운용자 판단을 무시하는 셈이다.
+    fresh_at(store, NOW + w.config.WATCH_RETRY_COOLDOWN_SEC + 5)
+    assert not any(p['status'] == 'open' for p in store.list())
+
+
+def test_concurrent_approvals_only_one_executes(setup):
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda c: approve(setup,c), ['tab1','tab2']))
+    assert sum(r['execute'] for r in results) == 1
+
+
+def test_dismissal_never_executes_and_cooldown(setup):
+    store, risks, lookup, pid = setup
+    result = store.decide(pid,'dismissed','관망','tab1',risks,lookup,NOW+1)
+    assert not result['execute']
+    store.refresh(risks,lookup,NOW+2)
+    assert len(store.list()) == 1
+    assert not approve(setup)['execute']
+
+
+def test_receipt_lifecycle_and_stale_receipt_cannot_resurrect(setup):
+    store, risks, lookup, pid = setup
+    p = approve(setup)['proposal']; eid = p['execution']['id']
+    with pytest.raises(ValueError,match='owner'):
+        store.receipt(pid,eid,'other','tracking','',NOW+2)
+    assert store.receipt(pid,eid,'tab1','tracking','started',NOW+2)['status'] == 'tracking'
+    assert store.receipt(pid,eid,'tab1','tracking','heartbeat',NOW+3)['status'] == 'tracking'
+    assert len(store.list()[0]['events']) == 3
+    assert store.receipt(pid,eid,'tab1','completed','operator_stop',NOW+4)['status'] == 'completed'
+    assert store.receipt(pid,eid,'tab1','tracking','late',NOW+5)['status'] == 'completed'
+
+
+def test_execution_failure_and_missing_ack_are_distinct(setup):
+    store, risks, lookup, pid = setup
+    p=approve(setup)['proposal']
+    result=store.receipt(pid,p['execution']['id'],'tab1','failed','map unavailable',NOW+2)
+    assert result['status']=='failed'
+    # A separate database demonstrates restart without a browser receipt.
+    other=w.Store(store.path.parent/'other.sqlite3'); other.refresh(risks,lookup,NOW)
+    q=other.list()[0]
+    other.decide(q['id'],'approved','reason','tab',risks,lookup,NOW+1)
+    risks['updated_at']=NOW+32
+    for v in lookup(PAIR): v['_updated']=NOW+32
+    other.refresh(risks,lookup,NOW+32)
+    assert other.list()[0]['status']=='unknown'
+    assert other.list()[0]['events'][-1]['reason']=='execution_receipt_timeout'
+
+
+def test_risk_resolution_only_with_fresh_observations(setup):
+    store, risks, lookup, pid=setup
+    p=approve(setup)['proposal']; eid=p['execution']['id']
+    store.receipt(pid,eid,'tab1','tracking','started',NOW+2)
+    risks['distance']=[]; risks['updated_at']=NOW+3
+    store.refresh(risks,lookup,NOW+3)
+    assert store.list()[0]['status']=='completed'
+    assert store.list()[0]['events'][-1]['reason']=='risk_no_longer_listed'
+
+
+def test_write_failure_does_not_return_execution_grant(setup,monkeypatch):
+    store,risks,lookup,pid=setup
+    monkeypatch.setattr(store,'save',lambda *args: (_ for _ in ()).throw(OSError('disk full')))
+    with pytest.raises(OSError): approve(setup)
+    assert store.list()[0]['status']=='open'
+
+
+def many_risks(t, n):
+    """DCPA 가 서로 다른 n 개 쌍. 가장 위험한 것부터 정원만큼만 열려야 한다."""
+    vessels, entries = [], []
+    for i in range(n):
+        a = dict(mmsi=500000000+i*2, name=f'A{i}', lat=35.0, lng=129.0, sog=12, cog=90, _updated=t)
+        b = dict(mmsi=500000001+i*2, name=f'B{i}', lat=35.0, lng=129.04, sog=12, cog=270, _updated=t)
+        vessels += [a, b]
+        # i 가 클수록 덜 위험하게(DCPA 큼)
+        entries.append(dict(ship_a=a, ship_b=b, dcpa_nm=.01*(i+1), tcpa_min=5, ts=w.iso(t)))
+    by = {v['mmsi']: v for v in vessels}
+    return dict(distance=entries, ml=[], updated_at=t), (lambda pair: [by[m] for m in pair if m in by])
+
+
+def test_open_proposals_are_capped_and_worst_first(tmp_path):
+    """전역 피드에서는 임계값을 조여도 근접 쌍이 수백 건씩 나온다(운영 기록 시간당
+    551건). 당직자가 볼 수 있는 건 최악 몇 건이므로 정원을 두고 그 순서로 채운다."""
+    store = w.Store(tmp_path / 'watch.sqlite3')
+    risks, lookup = many_risks(NOW, w.config.WATCH_MAX_OPEN + 8)
+    store.refresh(risks, lookup, NOW)
+
+    opened = [p for p in store.list(limit=500) if p['status'] == 'open']
+    assert len(opened) == w.config.WATCH_MAX_OPEN, '정원을 넘겨 쌓이면 최악 몇 건이 묻힌다'
+    worst = sorted(p['trigger']['dcpa_nm'] for p in opened)
+    assert worst == [round(.01*(i+1), 10) for i in range(w.config.WATCH_MAX_OPEN)], '가장 위험한 것부터 열려야 한다'
+
+
+def test_capacity_frees_up_when_a_proposal_closes(tmp_path):
+    store = w.Store(tmp_path / 'watch.sqlite3')
+    risks, lookup = many_risks(NOW, w.config.WATCH_MAX_OPEN + 3)
+    store.refresh(risks, lookup, NOW)
+    opened = [p for p in store.list(limit=500) if p['status'] == 'open']
+    store.decide(opened[0]['id'], 'dismissed', '관망', 'tab1', risks, lookup, NOW + 1)
+
+    later = NOW + 5
+    risks2, lookup2 = many_risks(later, w.config.WATCH_MAX_OPEN + 3)
+    store.refresh(risks2, lookup2, later)
+    still = [p for p in store.list(limit=500) if p['status'] == 'open']
+    assert len(still) == w.config.WATCH_MAX_OPEN, '한 건을 처리하면 다음 위험이 올라와야 한다'
+
+
+def test_handoff_captures_what_was_handed_over_and_scopes_decisions(tmp_path):
+    """교대자는 '지난 인계 이후 무엇이 있었고 지금 무엇을 넘겨받는가' 를 봐야 한다.
+    인계 기록에는 그 시점에 열려 있던 사건이 남아야 사후에 '무엇을 넘겨받았나' 가 확인된다."""
+    store = w.Store(tmp_path / 'watch.sqlite3')
+    risks, lookup = many_risks(NOW, 3)
+    store.refresh(risks, lookup, NOW)
+    opened = [p for p in store.list(limit=50) if p['status'] == 'open']
+    assert len(opened) == 3
+
+    # 인계 전 판단 1건 — 첫 인계 요약(기본 창)에는 보여야 한다.
+    store.decide(opened[0]['id'], 'dismissed', '관망', 'tab1', risks, lookup, NOW + 1)
+    first = store.handoff_summary(NOW + 2)
+    assert first['last_handoff'] is None
+    assert [d['id'] for d in first['decisions']] == [opened[0]['id']]
+
+    h = store.record_handoff('홍길동', '2번 쌍 주시', 'tab1', NOW + 3)
+    assert h['operator'] == '홍길동'
+    assert sorted(h['open_ids']) == sorted(p['id'] for p in opened[1:]), '인수 시점에 열린 사건이 기록돼야 한다'
+
+    # 인계 이후 판단 1건 — 다음 요약에는 이것만 보여야 한다.
+    store.decide(opened[1]['id'], 'dismissed', '관망', 'tab2', risks, lookup, NOW + 4)
+    after = store.handoff_summary(NOW + 5)
+    assert after['last_handoff']['id'] == h['id']
+    assert [d['id'] for d in after['decisions']] == [opened[1]['id']], '지난 인계 이전 판단은 빠져야 한다'
+    assert [p['id'] for p in after['open']] == [opened[2]['id']]
+
+
+def test_handoff_open_cases_are_ranked_worst_first(tmp_path):
+    store = w.Store(tmp_path / 'watch.sqlite3')
+    risks, lookup = many_risks(NOW, 4)
+    store.refresh(risks, lookup, NOW)
+    dcpas = [p['trigger']['dcpa_nm'] for p in store.handoff_summary(NOW + 1)['open']]
+    assert dcpas == sorted(dcpas), '인계 화면도 제안 생성과 같은 위험 순서여야 한다'
+
+
+def test_stale_cases_do_not_block_fresh_risks_from_the_board(tmp_path):
+    """정원이 관측 지연 사건으로 차면 승인도 못 하는 사건이 자리를 막아, 신선하고
+    더 위험한 사건이 유예 시간 동안 올라오지 못했다. 정원은 승인 가능한 사건만 센다."""
+    store = w.Store(tmp_path / 'watch.sqlite3')
+    n = w.config.WATCH_MAX_OPEN
+    risks, lookup = many_risks(NOW, n)
+    store.refresh(risks, lookup, NOW)
+    assert sum(p['status'] == 'open' for p in store.list(limit=500)) == n
+
+    t = NOW + 10
+    risks2, lookup2 = many_risks(t, n + 1)
+    for i in range(n):                       # 기존 사건들만 AIS 공백
+        lookup2((500000000 + i * 2,))[0]['_updated'] = t - 61
+    store.refresh(risks2, lookup2, t)
+
+    opened = [p for p in store.list(limit=500) if p['status'] == 'open']
+    assert sum(1 for p in opened if p.get('stale')) == n, '지연 사건은 닫히지 않고 남는다'
+    assert sum(1 for p in opened if not p.get('stale')) == 1, '지연 사건이 정원을 막아 새 위험이 올라오지 못하면 안 된다'
+
+
+def risk_at(t, a_pos, b_pos, base=600000000):
+    """두 선박 위치를 지정한 위험 쌍 하나."""
+    a = dict(mmsi=base, name='A', lat=a_pos[0], lng=a_pos[1], sog=12, cog=90, _updated=t)
+    b = dict(mmsi=base + 1, name='B', lat=b_pos[0], lng=b_pos[1] + .04, sog=12, cog=270, _updated=t)
+    r = dict(ship_a=a, ship_b=b, dcpa_nm=.05, tcpa_min=5, ts=w.iso(t))
+    return r, {a['mmsi']: a, b['mmsi']: b}
+
+
+def test_aor_filters_new_proposals_but_keeps_existing_cases_honest(tmp_path, monkeypatch):
+    """담당 해역 밖 사건이 한국 해역 당직자의 정원을 차지하지 않게 한다. 다만 필터는 새 제안에만
+    건다 — 이미 열린 해역 밖 사건까지 거르면 '조건 해소' 로 잘못 만료된다."""
+    busan, hongkong = (35.1, 129.0), (22.3, 114.1)
+    store = w.Store(tmp_path / 'watch.sqlite3')
+
+    # 필터가 없던 때 홍콩 사건이 열려 있었다.
+    monkeypatch.setattr(w.config, 'WATCH_AOR_BOX', None)
+    hk, hk_v = risk_at(NOW, hongkong, hongkong, base=600000000)
+    store.refresh(dict(distance=[hk], ml=[], updated_at=NOW), lambda pair: [hk_v[m] for m in pair], NOW)
+    hk_id = next(p['id'] for p in store.list() if p['status'] == 'open')
+
+    # 한국 근해 필터를 켠다. 새 홍콩 사건은 안 올라오고 부산 사건은 올라와야 한다.
+    monkeypatch.setattr(w.config, 'WATCH_AOR_BOX', (32, 124, 39.5, 132))
+    t = NOW + 10
+    hk, hk_v = risk_at(t, hongkong, hongkong, base=600000000)
+    hk2, hk2_v = risk_at(t, hongkong, hongkong, base=610000000)
+    bs, bs_v = risk_at(t, busan, busan, base=620000000)
+    vessels = {**hk_v, **hk2_v, **bs_v}
+    store.refresh(dict(distance=[hk, hk2, bs], ml=[], updated_at=t), lambda pair: [vessels[m] for m in pair], t)
+
+    opened = {p['id']: p for p in store.list(limit=50) if p['status'] == 'open'}
+    lats = sorted(p['trigger']['subjects'][0]['lat'] for p in opened.values())
+    assert 35.1 in lats, '담당 해역 안 사건은 제안돼야 한다'
+    assert not any(p['pair'][0] == 610000000 for p in opened.values()), '해역 밖 새 사건은 제안하지 않는다'
+    assert hk_id in opened, '이미 열린 해역 밖 사건을 필터가 조건 해소로 닫으면 안 된다'
+
+
+def test_aor_includes_pairs_that_straddle_the_boundary(monkeypatch):
+    monkeypatch.setattr(w.config, 'WATCH_AOR_BOX', (32, 124, 39.5, 132))
+    inside, outside = {'lat': 35.0, 'lng': 131.9}, {'lat': 35.0, 'lng': 132.2}
+    assert w.in_aor({'subjects': [inside, outside]}), '한 척이라도 안이면 우리 사건'
+    assert not w.in_aor({'subjects': [outside, {'lat': 22.3, 'lng': 114.1}]})
+    assert w.in_aor({'subjects': [{'lat': None, 'lng': None}]}), '위치를 모르면 놓치지 않는 쪽(포함)'
+    monkeypatch.setattr(w.config, 'WATCH_AOR_BOX', None)
+    assert w.in_aor({'subjects': [outside]}), '필터를 끄면 전부 포함'
+
+
+def test_bad_aor_config_fails_wide_not_narrow():
+    from backend import config as c
+    assert c._parse_box('32,124,39.5,132', 'X') == (32, 124, 39.5, 132)
+    assert c._parse_box('off', 'X') is None
+    # 오타·뒤바뀐 범위는 필터를 끈다 — 조용히 좁아져 위험을 놓치는 것보다 낫다.
+    assert c._parse_box('32,124,oops,132', 'X') is None
+    assert c._parse_box('39.5,124,32,132', 'X') is None
+
+
+def test_only_one_backend_scans_a_database(tmp_path):
+    """운영 기록: 기준이 다른 두 서버(5nm·0.3nm)가 같은 DB 를 동시에 갱신해 한 시간에 제안
+    161건을 생성 직후 서로 닫았다. 임대를 쥔 한 곳만 스캔한다."""
+    store = w.Store(tmp_path / 'watch.sqlite3')
+    lease = w.config.WATCH_SCANNER_LEASE_SEC
+    assert store.acquire_scanner('server-a', NOW) == (True, 'server-a')
+    assert store.acquire_scanner('server-b', NOW + 1) == (False, 'server-a'), '임대 중에는 다른 서버가 스캔하지 않는다'
+    assert store.acquire_scanner('server-a', NOW + lease - 1) == (True, 'server-a'), '쥔 서버는 계속 갱신한다'
+    # 쥔 서버가 멈추면 임대가 끝난 뒤 다른 서버가 이어받는다.
+    assert store.acquire_scanner('server-b', NOW + lease - 1 + lease + 1) == (True, 'server-b')
+
+
+def test_passive_backend_does_not_touch_proposals(tmp_path, monkeypatch):
+    store = w.Store(tmp_path / 'watch.sqlite3')
+    store.acquire_scanner('someone-else')
+    monkeypatch.setattr(w, 'get_store', lambda: store)
+    monkeypatch.setattr(w, 'snapshot', lambda: pytest.fail('임대가 없는 서버는 스냅샷조차 뜨지 않아야 한다'))
+    w.on_collision_update()   # 예외 없이 조용히 넘어가야 한다

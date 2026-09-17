@@ -1,117 +1,4 @@
-:root {
-    /* ══ Admiralty Navy ══ deeper, more deliberate than the stock tech-blue.
-       Background carries a faint navy-ink tint (not neutral black); the single
-       brand colour is a saturated admiralty blue. All cautions/warnings use
-       chart-amber — blue↔amber is the complementary pair real marine
-       instruments use so warnings separate cleanly from the UI. */
-    /* ══ Typography tokens ══ each role is a Latin→Korean fallback chain:
-       the browser picks per-glyph, so English renders in the Latin face and
-       Korean falls through to the Hangul face on the same line.
-         brand   → wordmark & hero numbers (Orbitron)
-         display → titles & buttons (Rajdhani)
-         body    → running text (Inter)
-         data    → numbers & gauges (IBM Plex Mono) */
-    --font-brand:   'Orbitron', sans-serif;
-    --font-display: 'Rajdhani', 'Pretendard Variable', sans-serif;
-    --font-body:    'Inter', 'Pretendard Variable', sans-serif;
-    --font-data:    'IBM Plex Mono', 'Pretendard Variable', monospace;
-    --bg-color: #0a0e16;          /* navy-ink, not neutral black */
-    --panel-bg: #131a29;
-    --panel-bg-solid: rgba(19, 26, 41, 0.95);
-    --panel-border: rgba(120, 150, 200, 0.10);
-    --primary: #2f6fed;           /* admiralty navy — deeper than stock #3b82f6 */
-    --primary-muted: rgba(47, 111, 237, 0.12);
-    --primary-glow: rgba(47, 111, 237, 0.3);
-    --secondary: #94a3b8;
-
-    /* ── Chart-amber CAUTION — the signature. Complementary to the navy so
-       every warning reads instantly. Spend the boldness here only. ── */
-    --caution: #f5a623;
-    --caution-muted: rgba(245, 166, 35, 0.14);
-    --caution-glow: rgba(245, 166, 35, 0.40);
-    --depth-contour: #1a3050;     /* hairline sounding/contour lines */
-
-    /* ── Map control "glass" — ONE material for every passive control floating
-       over the map (search, 2D/3D toggle, layer chips, zoom). Near-solid (0.88)
-       so it reads like the solid side panels, with a faint blur to still float. */
-    --map-glass-bg: rgba(10, 14, 22, 0.88);
-    --map-glass-border: rgba(130, 165, 215, 0.18);
-    --map-glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-
-    /* ── Canonical 3-tier severity ramp — built for HIERARCHY, not a rainbow.
-       The amateur tell is three equally-bright warm colours (yellow/orange/red).
-       Instead: caution is a calm muted gold that recedes, danger is the only
-       vivid one, so the eye jumps straight to real danger. One ramp everywhere
-       (was a scatter of #eab308/#fbbf24/#fb923c/#f97316/#f43f5e across JS+CSS). */
-    --sev-caution: #d9a441;          /* muted gold — recedes, "note" not "alarm" */
-    --sev-warning: #ec7a2c;          /* clear orange */
-    --sev-danger:  #ef4444;          /* vivid red — the only loud step. Single source:
-                                        change here to retint ALL danger reds. */
-    --sev-danger-rgb: 239, 68, 68;   /* same color as RGB triplet for rgba() tints */
-    --sev-caution-glow: rgba(217, 164, 65, 0.32);
-    --sev-warning-glow: rgba(236, 122, 44, 0.40);
-    --sev-danger-glow:  rgba(var(--sev-danger-rgb), 0.48);
-
-    /* ── Tactical Marine Color Tokens ── */
-    --ocean-depth: #03070d;
-    --sonar-phosphor: #00e5c9;
-    --survival-orange: #ff5d22;
-    --nautical-brass: #cf9d53;
-    --sea-foam: #94aab5;
-    --hull-steel: #111926;
-    /* Single brand blue: --accent now equals --primary so the two blues that
-       used to coexist (#1e44c0 vs #2f6fed) are unified. --accent-glow is the
-       sky-blue previously hardcoded as rgba(77, 155, 255) for hover/glow halos. */
-    --accent: #2f6fed;
-    --accent-glow: #4d9bff;
-    --accent-red: var(--sev-danger);   /* alias → single danger source */
-    --accent-green: #22c55e;
-    --accent-amber: var(--caution); /* alias: transient warning-state shares caution hue */
-    --accent-yellow: #eab308;
-    --text-main: #f4f4f5;
-    --text-sub: #a1a1aa;
-    --text-dim: #52525b;
-    --text-muted: #3f3f46;
-    --gradient-accent: linear-gradient(90deg, #5b8ef5, var(--primary));
-    --accent-line: linear-gradient(90deg, #2f6fed 0%, #5b8ef5 50%, transparent 100%);
-    --shadow-panel: 0 4px 20px rgba(0, 0, 0, 0.3);
-    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.2);
-    --panel-gradient: #0a0e16;
-    --highlight-line: linear-gradient(90deg, transparent, rgba(47, 111, 237, 0.15), transparent);
-    --glow-blue: rgba(47, 111, 237, 0.04);
-    --glow-blue-strong: rgba(47, 111, 237, 0.08);
-    /* Radius scale — unify control shapes */
-    --radius-tag: 4px;      /* tiny static tags */
-    --radius-pill: 7px;     /* interactive pill buttons & chips */
-    --radius-group: 10px;   /* segmented-control containers */
-
-    /* ── Button system — shared interactive surface + motion tokens ──
-       Same-role controls (toggles, primary actions, overlay buttons) draw their
-       default/hover/active states from these so they stay in lockstep. */
-    --btn-surface:        rgba(255, 255, 255, 0.06);  /* ghost / toggle resting */
-    --btn-surface-hover:  rgba(255, 255, 255, 0.12);
-    --btn-surface-active: rgba(255, 255, 255, 0.16);  /* pressed */
-    --btn-border:         rgba(255, 255, 255, 0.10);
-    --btn-border-hover:   rgba(255, 255, 255, 0.22);
-    --btn-transition:     all 0.15s ease;
-    /* Overlay buttons floating over map/3D imagery need dark contrast + blue glow */
-    --btn-overlay-bg:        rgba(8, 18, 38, 0.82);
-    --btn-overlay-bg-hover:  rgba(15, 30, 60, 0.92);
-    /* Resting state is neutral (no blue at rest); blue appears only on hover/active
-       so the accent reads as "interaction", not a random standing colour. */
-    --btn-overlay-border:       rgba(255, 255, 255, 0.14);
-    --btn-overlay-border-hover: rgba(47, 111, 237, 0.85);
-    --btn-overlay-glow:       0 2px 10px rgba(0, 0, 0, 0.5);
-    --btn-overlay-glow-hover: 0 0 16px rgba(47, 111, 237, 0.35), 0 2px 12px rgba(0, 0, 0, 0.5);
-
-    /* 계기판 깊이 문법 — 광원 하나(위). well=파인 면(읽는 것), raise=솟은 컨트롤(만지는 것) */
-    --well-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.03);
-    --raise-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.35);
-    --press-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
-    --seg-active-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.4);
-    --knob-bg: radial-gradient(circle at 35% 30%, #26354f, #0a0e16 72%);
-    --knob-shadow: 0 0 6px rgba(47, 111, 237, 0.45), 0 1px 2px rgba(0, 0, 0, 0.55);
-}
+@import url('theme.css?v=5');
 
 /* 키보드 포커스 링 — 전역 */
 :focus-visible {
@@ -119,6 +6,21 @@
     outline-offset: 2px;
     border-radius: 4px;
 }
+
+/* 스크롤바 — 전역 기본.
+   지금까지는 선택자마다 개별로 20여 곳에 걸어서 새로 만든 스크롤 영역
+   (#proposalSection, 근거·조사·시나리오 다이얼로그 등)은 매번 빠졌고 브라우저
+   기본 밝은 막대가 어두운 패널 위에 떴다. 값은 기존 블록들이 쓰던 것 그대로라
+   (4px · 흰 10% · 검정 10%) 보이는 변화 없이 누락만 메운다.
+   scrollbar-color 는 상속되므로 :root 선언 하나가 전체를 덮는다. */
+:root {
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    scrollbar-width: thin;
+}
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 #app-layout {
     display: flex;
@@ -386,10 +288,10 @@
     gap: 8px;
     padding: 11px 14px;
     font-family: var(--font-display);
-    font-size: 0.82rem;
+    font-size: 0.9rem;       /* unified header size across all panels */
     font-weight: 700;
     color: var(--text-sub);
-    letter-spacing: 1.4px;
+    letter-spacing: 0.5px;   /* unified header tracking across all panels */
     border-bottom: 1px solid var(--panel-border);
     background: var(--bg-color);
     flex-shrink: 0;
@@ -465,6 +367,33 @@
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-main);
 }
+
+/* 패널 범위 보조 액션 (예: 저장한 비교) — 특정 탭 소속이 아니라 패널 전체에
+   걸리는 동작이라 헤더에 둔다. 닫기 버튼과 같은 조용한 고스트 문법을 쓰되
+   글자가 있으므로 살짝 더 크다. margin-left:auto 는 여기서 한 번만 —
+   뒤따르는 .right-panel-close 는 바로 옆에 붙는다. */
+.right-panel-action {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    padding: 3px 7px;
+    border-radius: var(--radius-tag);
+    white-space: nowrap;
+}
+
+.right-panel-action:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+}
+
+/* auto 마진이 둘이면 flex 가 남은 공간을 둘로 나눠 준다 — 액션이 가운데로
+   밀리므로 닫기 버튼의 auto 를 끈다. 밀어내기는 .right-panel-action 한 곳에서만. */
+.right-panel-action + .right-panel-close { margin-left: 0; }
 
 .right-panel-back {
     background: none;
@@ -3794,6 +3723,31 @@ body {
     letter-spacing: 0.03em;
 }
 
+/* 시나리오 비교 — 드릴다운 동작이므로 훑어보는 동안에는 숨긴다.
+   모든 행에 띄우면 조밀한 분류 목록(padding 9px)이 행마다 부풀고, 행 자체가
+   이미 클릭 대상이라 그 히트 영역 안에 두 번째 액션이 겹친다.
+   행을 눌러 .selected 가 된 뒤에만 나타난다 — 선택은 _selectedPair 가
+   실시간 재렌더를 넘어 유지시킨다. */
+.collision-row .cr-compare { display: none; }
+.collision-row.selected .cr-compare {
+    display: inline-block;
+    flex-shrink: 0;
+    padding: 2px 7px;
+    background: var(--btn-surface);
+    color: var(--text-sub);
+    border: 1px solid var(--btn-border);
+    border-radius: var(--radius-tag);
+    font-family: inherit;
+    font-size: 0.66rem;
+    line-height: 1.5;
+    cursor: pointer;
+}
+.collision-row.selected .cr-compare:hover {
+    background: var(--btn-surface-hover);
+    border-color: var(--btn-border-hover);
+    color: var(--text-main);
+}
+
 /* Table header no longer applies to the card layout */
 .collision-table-header {
     display: none;
@@ -5412,25 +5366,23 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
-/* ── Number count-up animation ── */
+/* ── 값이 바뀐 계기 눈금 ──
+   선박 수·위험 건수가 갱신될 때의 신호. 예전에는 1.25배로 튀어오르는 바운스
+   (cubic-bezier(.34,1.56,..))였는데, 전역 피드에서는 이 숫자가 초 단위로 계속
+   바뀌므로 화면 전체가 들썩였다. 크기는 건드리지 않고 색만 잠깐 올렸다 내린다 —
+   "바뀌었다"는 정보는 그대로 전하면서 레이아웃을 흔들지 않는다. */
 .count-up {
     display: inline-block;
-    animation: countBounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: countTick 0.45s cubic-bezier(0.22, 1, 0.36, 1);  /* ease-out-quint */
 }
 
-@keyframes countBounce {
-    0% {
-        transform: scale(1);
-    }
+@keyframes countTick {
+    0%   { color: var(--primary); }
+    100% { color: inherit; }
+}
 
-    40% {
-        transform: scale(1.25);
-        color: var(--primary);
-    }
-
-    100% {
-        transform: scale(1);
-    }
+@media (prefers-reduced-motion: reduce) {
+    .count-up { animation: none; }
 }
 
 /* ── Collision row selection state ── */
@@ -5855,21 +5807,29 @@ body {
     opacity: 0.55;
     z-index: 0;
 }
-/* Hollow ring (not a solid disc) — keeps the green/red origin/destination meaning
-   but reads far quieter against the navy panel. Dark center + halo mask the leg. */
+/* Hollow pin (not a solid disc) — keeps the green/red origin/destination meaning
+   but reads far quieter against the navy panel. Dark center + halo mask the leg.
+   Shape mirrors the map's own start/end pins (see _routePinImage in route-viewer.js
+   / .search-marker-dot in main.css) so the panel and map read as the same journey. */
 .route-node {
     flex: 0 0 auto;
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
-    border: 2px solid transparent;
-    background: var(--panel-bg-solid);
+    width: 12px;
+    height: 12px;
     position: relative;
     z-index: 1;
-    box-shadow: 0 0 0 2px var(--panel-bg-solid);  /* mask the leg behind the dot */
 }
-.route-node-from { border-color: #10b981; }
-.route-node-to   { border-color: #ef4444; }
+.route-node::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    border: 2px solid transparent;
+    background: var(--panel-bg-solid);
+    box-shadow: 0 0 0 2px var(--panel-bg-solid);  /* mask the leg behind the pin */
+}
+.route-node-from::before { border-color: #10b981; }
+.route-node-to::before   { border-color: #ef4444; }
 
 /* Swap 출발 ↔ 도착 — sits on the rail between the two fields. */
 .route-swap-btn {
@@ -7596,8 +7556,17 @@ body:has(.chat-panel.chat-panel-open) .hazard-legend-panel {
     letter-spacing: 0.5px;
 }
 
-/* Navy icon = this panel's leading marker (mirrors the ● on other headers) */
-.har-title i { color: var(--primary); }
+/* Leading navy square marker — unified with route/globe panel headers.
+   .har-title is flex+gap:8px, so the marker rides as the first flex child. */
+.har-title::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 1px;
+    background: var(--primary);
+    box-shadow: 0 0 6px var(--primary-glow);
+    flex-shrink: 0;
+}
 
 .har-close {
     background: none;
@@ -8689,14 +8658,30 @@ button, .btn, [class*="-btn"] {
 .rv-stage-labels { position: absolute; top: 14px; left: 0; right: 0; height: 0; z-index: 7; pointer-events: none; }
 .rv-vlabel {
     position: absolute; top: 0; transform: translateX(-50%);
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 5px 12px;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 6px 14px;
     background: var(--map-glass-bg); border: 1px solid var(--map-glass-border);
-    border-radius: var(--radius-pill, 7px);
+    border-radius: 10px;
     font-family: var(--font-body);
-    font-size: 0.78rem; font-weight: 700; letter-spacing: 1px;
     color: var(--text-main); box-shadow: var(--map-glass-shadow); white-space: nowrap;
 }
+/* 라벨(태그) 밑에 값 — 라벨은 태그 톤, 값은 계기 숫자 */
+.rv-vlabel-head { display: inline-flex; align-items: center; gap: 7px; font-size: 0.72rem; font-weight: 700; letter-spacing: 1px; color: var(--text-sub); }
+.rv-vlabel-val { font-family: var(--font-data); font-weight: 700; font-size: 1.15rem; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; color: var(--text-main); }
+/* 가운데 지표 — 오차 Δ(주값·심각도색) + RMSE(작게). HUD 패널을 대체한다. */
+.rv-stage-center {
+    position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 7px 16px; text-align: center; white-space: nowrap;
+    background: var(--map-glass-bg); border: 1px solid var(--map-glass-border);
+    border-radius: 10px; box-shadow: var(--map-glass-shadow);
+}
+.rv-stage-err-lab { font-size: 0.58rem; letter-spacing: 1px; text-transform: uppercase; color: var(--text-sub); }
+.rv-stage-errbox { display: inline-flex; align-items: baseline; gap: 4px; }
+.rv-stage-err-mark { font-family: var(--font-data); font-weight: 700; font-size: 1rem; color: var(--text-sub); }
+.rv-stage-errnum { font-family: var(--font-data); font-weight: 800; font-size: 1.7rem; line-height: 1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.rv-stage-rmse { font-family: var(--font-data); font-size: 0.64rem; color: var(--text-sub); margin-top: 2px; }
+.rv-stage-rmse .rv-pred-hud-val, .rv-stage-rmse b { font-size: 1.0rem; font-weight: 700; }
 .rv-vlabel-dot { width: 9px; height: 9px; border-radius: 50%; }
 .rv-vlabel-real .rv-vlabel-dot { background: var(--primary); box-shadow: 0 0 6px var(--primary-glow); }
 .rv-vlabel-pred { color: var(--accent-glow); }
@@ -8729,22 +8714,6 @@ button, .btn, [class*="-btn"] {
 .rv-mod-heel .rv-clino-readout { margin-top: 2px; }
 .rv-mod-error .rv-console-metrics { margin-top: 2px; }
 
-/* ── Degree readout chips at the ladder tips (overlay only) ── */
-.rv-deg-labels { position: absolute; inset: 0; pointer-events: none; z-index: 7; overflow: hidden; }
-.rv-deg {
-    position: absolute; transform: translate(-50%,-50%);
-    font-family: var(--font-data); font-weight: 700; font-size: 0.95rem;
-    padding: 3px 10px; border-radius: var(--radius-pill, 7px);
-    background: rgba(10,14,22,0.85); border: 1px solid var(--map-glass-border);
-    font-variant-numeric: tabular-nums; white-space: nowrap;
-    box-shadow: var(--map-glass-shadow);
-}
-/* prediction-error callout — colour tracks severity (recede → loud) */
-.rv-deg-err { color: var(--text-main); }
-.rv-deg-err.rv-roll-safe    { border-color: rgba(148,170,181,0.5); }
-.rv-deg-err.rv-roll-caution { border-color: var(--sev-caution); color: var(--sev-caution); }
-.rv-deg-err.rv-roll-warning { border-color: var(--sev-warning); color: var(--sev-warning); }
-.rv-deg-err.rv-roll-danger  { border-color: var(--sev-danger); color: var(--sev-danger); box-shadow: 0 0 12px var(--sev-danger-glow); }
 
 /* AI 챗 FAB — 롤뷰어에서는 좌하단에 낮게, 단 좌측 레일(48px)은 침범하지 않게 */
 /* 트레이스 리본(≈130px) 위로 올림 — 리본을 접으면(헤더 30px만) 따라 내려온다 */
@@ -8875,23 +8844,30 @@ button, .btn, [class*="-btn"] {
    Split mode keeps one label centred over each half (unchanged).
    ════════════════════════════════════════════════════════════════════════ */
 .rv-layout-b .rv-stage--overlay .rv-stage-labels {
-    left: 14px; right: auto; top: 14px; height: auto; width: max-content;
+    left: 26px; right: auto; top: 14px; height: auto; width: max-content;
     display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
     padding: 9px 12px; border-radius: 8px;
     background: var(--map-glass-bg); border: 1px solid var(--map-glass-border);
     box-shadow: var(--map-glass-shadow);
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
+/* 실측/예측 행 — 라벨 왼쪽 · 값 오른쪽(한 줄) */
 .rv-layout-b .rv-stage--overlay .rv-vlabel {
-    position: static; transform: none; left: auto;
+    position: static; transform: none; left: auto; top: auto;
+    flex-direction: row; align-items: center; justify-content: space-between; gap: 18px;
+    min-width: 130px;
     background: none; border: none; box-shadow: none; padding: 0;
-    font-size: 0.74rem; font-weight: 700; letter-spacing: 0.3px;
 }
-.rv-layout-b .rv-stage--overlay .rv-vlabel::after {
-    margin-left: 6px; color: var(--text-dim); font-weight: 500; letter-spacing: 0;
+.rv-layout-b .rv-stage--overlay .rv-vlabel-val { font-size: 0.98rem; }
+/* 오차/RMSE — 가운데 카드를 패널 안으로 흘려보내고, 위 구분선으로 분리(주값) */
+.rv-layout-b .rv-stage--overlay .rv-stage-center {
+    position: static; transform: none; left: auto; top: auto;
+    align-items: flex-start; text-align: left; gap: 0;
+    background: none; border: none; box-shadow: none;
+    margin-top: 3px; padding: 6px 0 0; border-top: 1px solid var(--map-glass-border);
 }
-.rv-layout-b .rv-stage--overlay .rv-vlabel-real::after { content: '실선'; }
-.rv-layout-b .rv-stage--overlay .rv-vlabel-pred::after { content: '고스트'; }
+.rv-layout-b .rv-stage--overlay .rv-stage-errbox { justify-content: flex-start; }
+.rv-layout-b .rv-stage--overlay .rv-stage-errnum { font-size: 1.0rem; }
 /* end legend key */
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -9013,7 +8989,7 @@ button, .btn, [class*="-btn"] {
 /* 선박 zone — 좌(속도+롤강도) | 우(컴퍼스+캡) 가로 배치로 T자 불균형 제거, 넓은 컬럼을 가로로 채움 */
 .rv-layout-b .rv-sim-vessel { display: flex; flex-direction: row; align-items: flex-start; gap: 18px; }
 .rv-layout-b .rv-sim-vessel-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.rv-layout-b .rv-compass-wrap { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rv-layout-b .rv-compass-wrap { flex: 0 0 auto; display: flex; flex-direction: row; align-items: center; gap: 10px; }
 /* 횡요 강도 게이지 — 속도 행과 같은 그리드(라벨 58px · 트랙 ≤210px · 값 56px).
    입력(속도)/출력(강도) 구분은 길이가 아니라 썸 유무가 전달한다. */
 .rv-layout-b .rv-sim-vessel .rv-roll-gauge { max-width: none; margin-top: 2px; gap: 12px; }
@@ -9081,33 +9057,42 @@ button, .btn, [class*="-btn"] {
 /* 니들이 목표 각도로 부드럽게 미끄러지게 — 드래그/키보드 모두 끊김 없이 */
 .rv-compass-needle { transition: transform 0.13s cubic-bezier(.25,.8,.35,1); }
 
-/* ── 타륜(ship's helm) — 림 + 스포크 + 손잡이(brass pegs). 선수와 함께 회전 ──
-   회전 중심은 니들과 동일하게 SVG 속성 rotate(θ 50 50)이 전담한다.
-   여기에 CSS transform-origin을 주면 중심이 어긋나 제자리 회전이 아니라 미끄러지므로 절대 넣지 말 것. */
-.rv-helm-wheel { transition: transform 0.13s cubic-bezier(.25,.8,.35,1); }
-.rv-helm-rim { fill: none; stroke: rgba(188, 201, 219, 0.6); stroke-width: 2.4; }
-.rv-helm-spoke { stroke: rgba(176, 190, 210, 0.42); stroke-width: 1.6; stroke-linecap: round; }
-.rv-helm-grip { stroke: #c3ccd9; stroke-width: 3.4; stroke-linecap: round; }
-/* 잡고 돌리는 중 — 손잡이가 밝은 크롬으로 빛나며 만져지는 느낌 */
+/* 회전 중심은 SVG 속성 rotate(θ 50 50)이 전담. CSS transform-origin 주면 중심 어긋나니 금지. */
+.rv-compass-well { pointer-events: none; }
+/* 진행적 어포던스 — 기본 차분, 호버/포커스/드래그에 선박이 살짝 발광(돌릴 수 있음 신호) */
+.rv-compass:hover .rv-compass-ship,
+.rv-compass:focus-visible .rv-compass-ship,
+.rv-compass-turning .rv-compass-ship { filter: drop-shadow(0 0 3px var(--primary-glow)); }
+/* 점선 회전 트랙 — 기본에도 은은히 보여 "돌릴 수 있음"을 알리고, 호버에 밝아진다 */
+.rv-compass-grad line { stroke: rgba(124, 185, 244, 0.32); stroke-width: 0.8; stroke-linecap: round; }
+.rv-compass-rotate-ring { fill: none; stroke: var(--accent-glow); stroke-width: 1; stroke-dasharray: 1.5 3.5; opacity: 0.3; transition: opacity 0.15s; }
+.rv-compass:hover .rv-compass-rotate-ring,
+.rv-compass:focus-visible .rv-compass-rotate-ring,
+.rv-compass-turning .rv-compass-rotate-ring { opacity: 0.6; }
 .rv-compass-turning { cursor: grabbing; }
-.rv-compass-turning .rv-helm-grip { stroke: #eef3fa; }
-.rv-compass-turning .rv-helm-rim { stroke: rgba(226, 236, 248, 0.85); }
 .rv-compass:focus-visible { box-shadow: 0 0 0 2px var(--primary-glow); }
 .rv-compass-svg { width: 100%; height: 100%; display: block; overflow: visible; }
 .rv-compass-ring { fill: rgba(10, 14, 22, 0.5); stroke: var(--panel-border); stroke-width: 1.2; }
 .rv-compass-ticks line { stroke: var(--text-dim); stroke-width: 1.4; stroke-linecap: round; }
 .rv-compass-tick-beam { stroke: var(--sev-caution); stroke-width: 2; opacity: 0.85; }
 .rv-compass-wave > * { stroke: var(--accent-glow); stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: 0.9; }
-.rv-compass-bow { fill: var(--primary); }
-.rv-compass-stern { fill: rgba(140, 170, 220, 0.5); }
-.rv-compass-hub { fill: var(--text-sub); stroke: var(--bg-color); stroke-width: 1; }
-/* 계기 베젤 — 고정 위치명 라벨 + 옆파(직각) 레드라인 */
-.rv-compass-bezel .rv-bezel-redline { fill: none; stroke: var(--sev-danger); stroke-width: 3.2; stroke-linecap: round; opacity: 0.9; }
-.rv-bezel-lab { fill: var(--text-dim); font-family: var(--font-data); font-size: 6.2px; font-weight: 700; letter-spacing: 0.2px; dominant-baseline: middle; }
-.rv-bezel-lab-beam { fill: var(--sev-danger); }
-.rv-compass-cap { display: flex; align-items: center; gap: 6px; justify-content: center; }
-.rv-compass-tag { font-size: 0.6rem; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
-.rv-compass-cap .rv-sim-val { flex: 0 0 auto; }
+/* 선박 실루엣(회전) — 선체=primary 네이비, 갑판 하이라이트 + 선교 블록으로 top-down 가독 */
+.rv-compass-ship { fill: #5f97f3; stroke: rgba(8, 12, 20, 0.35); stroke-width: 0.8; transition: filter 0.15s; }
+.rv-compass-ship-deck { fill: rgba(238, 244, 252, 0.26); }
+.rv-compass-ship-house { fill: rgba(240, 246, 253, 0.95); }
+/* 계기 베젤 — 고정 위치명 라벨만(빨간 호 제거). 옆파는 캐우션 톤 = '롤 최강 구간'. */
+.rv-bezel-lab {
+    fill: var(--text-sub); font-family: var(--font-data); font-size: 7.4px; font-weight: 700;
+    letter-spacing: 0.2px; dominant-baseline: middle;
+    /* 다크 헤일로 — 계기 위에서도 또렷하게 */
+    paint-order: stroke; stroke: rgba(8, 12, 20, 0.75); stroke-width: 0.7px; stroke-linejoin: round;
+}
+.rv-bezel-lab-beam { fill: var(--sev-caution); }
+/* 선수 조우각 readout — 다이얼 바로 왼쪽. 다이얼 쪽으로 우측정렬해 붙는다. */
+/* 다이얼 왼쪽 위 — 제목처럼 좌측정렬 + 상단 배치 */
+.rv-heading-readout { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; align-self: flex-start; margin-top: 4px; }
+.rv-heading-lab { font-size: 11.5px; color: var(--text-sub); font-weight: 600; font-family: var(--font-display); }
+.rv-heading-readout .rv-sim-val { font-size: 0.95rem; font-weight: 700; }
 /* 조우각 → 예상 롤 강도 바 (선수 돌리면 즉시 반응) */
 .rv-roll-gauge { display: flex; align-items: center; gap: 7px; width: 100%; max-width: 138px; margin-top: 7px; }
 .rv-roll-gauge-label { flex: 0 0 auto; font-size: 0.56rem; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text-dim); }
@@ -9156,30 +9141,34 @@ button, .btn, [class*="-btn"] {
 
 /* 진행 상황 — 덱 아래 풀폭 얇은 띠(선회 중에만). 덱 폭은 안 바꾼다. */
 .rv-layout-b .rv-sim-progress {
-    flex: 0 0 auto; margin: 0; padding: 9px 22px;
+    flex: 0 0 auto; margin: 0; padding: 10px 22px;
     display: flex; flex-direction: row; align-items: center; gap: 20px;
-    /* 선회 중에만 뜨는 진행 바 — 눈에 확 띄게: 강한 상단 accent + 틴트 배경 + 은은한 펄스 */
-    border-top: 2px solid var(--primary);
-    background: linear-gradient(180deg, rgba(47, 111, 237, 0.18), rgba(47, 111, 237, 0.06));
-    box-shadow: inset 0 1px 0 rgba(120, 160, 240, 0.25);
-    animation: rvProgPulse 1.8s ease-in-out 3;
-}
-@keyframes rvProgPulse {
-    0%, 100% { background: linear-gradient(180deg, rgba(47, 111, 237, 0.18), rgba(47, 111, 237, 0.06)); }
-    50%      { background: linear-gradient(180deg, rgba(47, 111, 237, 0.30), rgba(47, 111, 237, 0.10)); }
+    /* 재생 중 진행 띠 — 조용한 계기 톤: 얇은 상단 accent + 차분한 틴트 (펄스 제거) */
+    border-top: 1px solid var(--primary);
+    background: linear-gradient(180deg, rgba(47, 111, 237, 0.10), rgba(47, 111, 237, 0.03));
 }
 .rv-layout-b .rv-sim-progress[hidden] { display: none; }
 .rv-sim-prog-item { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; }
-.rv-sim-prog-label { font-size: 0.64rem; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-sub); }
-.rv-layout-b .rv-sim-progress .rv-scenario-turn-val { font-size: 0.82rem; font-weight: 700; }
+.rv-sim-prog-label { font-size: 0.62rem; letter-spacing: 1px; text-transform: uppercase; color: var(--text-sub); }
+.rv-layout-b .rv-sim-progress .rv-scenario-turn-val {
+    font-family: var(--font-data); font-size: 0.85rem; font-weight: 700;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.01em; color: var(--text-main);
+}
 .rv-layout-b .rv-sim-progress .rv-turn-progress {
-    flex: 1 1 auto; height: 7px; border-radius: 4px; background: rgba(10, 14, 22, 0.55);
-    box-shadow: inset 0 0 0 1px rgba(120, 160, 240, 0.22); overflow: hidden;
+    position: relative;
+    flex: 1 1 auto; height: 6px; border-radius: 3px; background: rgba(10, 14, 22, 0.6);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45); overflow: visible;
 }
 .rv-layout-b .rv-sim-progress .rv-turn-progress-fill {
-    display: block; height: 100%; width: 0; border-radius: 4px; transition: width 0.2s linear;
+    position: relative;
+    display: block; height: 100%; width: 0; border-radius: 3px; transition: width 0.2s linear;
     background: linear-gradient(90deg, var(--primary), var(--accent-glow));
-    box-shadow: 0 0 8px var(--primary-glow);
+}
+/* 진행 끝단의 라이브 헤드 — 지금 위치를 가리키는 점 (항로 재생바 썸과 같은 언어) */
+.rv-layout-b .rv-sim-progress .rv-turn-progress-fill::after {
+    content: ''; position: absolute; right: 0; top: 50%; transform: translate(50%, -50%);
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #fff; box-shadow: 0 0 8px var(--primary-glow), 0 0 0 2px var(--primary);
 }
 /* end sim panel round 4 */
 
@@ -9202,10 +9191,20 @@ button, .btn, [class*="-btn"] {
     font-family: var(--font-body);
     pointer-events: none;
 }
-/* 히어로(실측 횡요각) 블록 + 보조 쌍(예측/오차) */
-.rv-hud-hero { display: flex; align-items: center; gap: 8px; margin: 1px 0 8px; }
-.rv-hud-pair { display: flex; gap: 14px; align-items: center; }
-.rv-hud-pair-item { display: flex; align-items: center; gap: 6px; }
+/* 실측·예측·오차 3행 계기 — [dot/mark | tag | 값(우측정렬)] 열 맞춤.
+   값은 모두 오른쪽 끝에 정렬돼 스캔하기 쉽다. */
+.rv-hud-lines { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 0; }
+.rv-hud-line { display: grid; grid-template-columns: 14px auto 1fr; align-items: center; gap: 8px; }
+.rv-hud-line > :first-child { justify-self: center; }
+.rv-hud-mono {
+    font-family: var(--font-data); font-weight: 700; text-align: right;
+    font-size: 1.0rem; letter-spacing: -0.01em; font-variant-numeric: tabular-nums;
+    color: var(--text-main);
+}
+/* 오차 = 주값: 위 구분선으로 떼고 값만 크게 + 심각도색(rv-roll-*는 JS가 매 프레임 부여). */
+.rv-hud-line-err { margin-top: 3px; padding-top: 7px; border-top: 1px solid var(--panel-border); }
+.rv-hud-err-mark { font-family: var(--font-data); font-weight: 700; font-size: 0.95rem; color: var(--text-sub); }
+.rv-hud-err-val { font-size: 1.5rem; line-height: 1; }
 /* 정확도(누적 성능)는 보조 정보 — 살짝 작게/얇게 해서 현재값 뒤로 물러나게 */
 .rv-hud-sec-acc .rv-pred-hud-val { font-size: 0.82rem; }
 .rv-hud-sec-acc .rv-pred-hud-bar { height: 4px; }
@@ -9214,9 +9213,10 @@ button, .btn, [class*="-btn"] {
     /* 0.6rem(9.6px)은 한글 가독선 미달 — 데이터 우위는 유지하되 읽히는 크기로 */
     font-size: 0.7rem; font-weight: 700; letter-spacing: 0.5px; color: var(--text-sub);
 }
+/* 슬림 세로 틱 — 원(圓)은 실측/예측 범례 전용으로 비워 둔다(마커 중복 제거). */
 .rv-hud-eyebrow::before {
-    content: ''; width: 4px; height: 4px; margin-right: 6px; border-radius: 50%;
-    background: var(--primary); box-shadow: 0 0 5px var(--primary-glow);
+    content: ''; width: 3px; height: 10px; margin-right: 8px; border-radius: 1px;
+    background: var(--primary);
 }
 .rv-hud-sec-acc { padding-top: 10px; border-top: 1px solid var(--panel-border); }
 .rv-hud-row { display: flex; align-items: center; gap: 8px; padding: 2.5px 0; }
@@ -9224,18 +9224,6 @@ button, .btn, [class*="-btn"] {
 .rv-hud-dot-real { background: var(--primary); box-shadow: 0 0 6px var(--primary-glow); }
 .rv-hud-dot-pred { background: transparent; border: 2px solid var(--accent-glow); }
 .rv-hud-tag { flex: 1 1 auto; font-size: 0.72rem; color: var(--text-sub); }
-/* 보조 쌍(예측/오차)은 작게, 히어로(실측)는 크게 — 위계 분리 */
-.rv-hud .rv-clino-val {
-    font-family: var(--font-data); font-weight: 700;
-    font-size: 1.0rem; letter-spacing: -0.01em; font-variant-numeric: tabular-nums;
-}
-.rv-hud .rv-clino-gap-val {
-    font-family: var(--font-data); font-weight: 800;
-    font-size: 2.6rem; line-height: 1; letter-spacing: -0.01em;
-    font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(0,0,0,0.75);
-}
-/* 쌍 안에서 태그가 늘어나 값을 밀지 않도록 */
-.rv-hud-pair-item .rv-hud-tag { flex: 0 0 auto; }
 .rv-hud .rv-pred-hud-row { display: flex; align-items: center; gap: 8px; padding: 2.5px 0; }
 .rv-hud .rv-pred-hud-label { flex: 0 0 42px; font-size: 0.66rem; color: var(--text-sub); }
 .rv-hud .rv-pred-hud-val {
@@ -9254,8 +9242,6 @@ button, .btn, [class*="-btn"] {
 .rv-hud .rv-pred-hud-bar-fill.rv-warn { background: var(--sev-caution); }
 .rv-hud .rv-pred-hud-bar-fill.rv-bad  { background: var(--sev-danger); }
 
-/* overlay mode: the stage legend chips are redundant (the HUD carries the legend) */
-.rv-layout-b .rv-stage--overlay .rv-stage-labels { display: none; }
 
 /* scenario state — a 3rd HUD section that appears only while a turn is running */
 .rv-hud-sec-scn[hidden] { display: none; }
@@ -9282,14 +9268,14 @@ button, .btn, [class*="-btn"] {
     color: var(--text-sub); font-family: var(--font-display);
 }
 .rv-trace-title::before {
-    content: ''; width: 4px; height: 4px; margin-right: 6px; border-radius: 50%;
-    background: var(--primary); box-shadow: 0 0 5px var(--primary-glow);
+    content: ''; width: 3px; height: 11px; margin-right: 9px; border-radius: 1px;
+    background: var(--primary);
 }
 .rv-trace-legend { display: flex; gap: 14px; margin-left: auto; }
 .rv-trace-key { display: inline-flex; align-items: center; gap: 6px; font-size: 0.66rem; color: var(--text-sub); }
 .rv-trace-swatch { width: 14px; height: 0; border-top: 2px solid var(--primary); }
-.rv-trace-swatch-pred { border-top-style: dashed; border-top-color: var(--accent-glow); }
-.rv-trace-swatch-band { height: 8px; border-top: none; background: rgba(217, 164, 65, 0.28); }
+.rv-trace-swatch-pred { border-top-color: var(--accent-glow); }
+.rv-trace-swatch-band { height: 8px; border-top: none; background: rgba(148, 170, 190, 0.28); }
 .rv-trace-toggle {
     display: inline-flex; align-items: center; justify-content: center;
     width: 24px; height: 22px; padding: 0;
@@ -9300,9 +9286,22 @@ button, .btn, [class*="-btn"] {
 .rv-trace-toggle:hover { color: var(--text-main); border-color: var(--panel-border); }
 .rv-trace-toggle i { transition: transform 0.2s; }
 .rv-trace--collapsed .rv-trace-toggle i { transform: rotate(180deg); }
-.rv-trace-body { height: 92px; padding: 0 14px 8px; }
+.rv-trace-body { height: 92px; padding: 0 14px 8px; position: relative; }
 .rv-trace-body canvas { display: block; width: 100%; height: 100%; }
 .rv-trace--collapsed .rv-trace-body { display: none; }
+/* 호버 값 툴팁 — 커서 지점의 실측/예측/오차 */
+.rv-trace-tip {
+    position: absolute; z-index: 4; pointer-events: none;
+    min-width: 88px; padding: 7px 9px;
+    background: rgba(16, 22, 34, 0.92); border: 1px solid var(--panel-border);
+    border-radius: 7px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+    font-family: var(--font-data);
+}
+.rv-trace-tip-t { font-size: 0.6rem; color: var(--text-sub); letter-spacing: 0.5px; margin-bottom: 5px; }
+.rv-trace-tip-row { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--text-sub); padding: 1px 0; }
+.rv-trace-tip-row i { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.rv-trace-tip-row b { margin-left: auto; font-weight: 700; color: var(--text-main); font-variant-numeric: tabular-nums; }
+.rv-trace-tip-gap i { background: rgba(148, 170, 190, 0.5); }
 /* end telemetry HUD */
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -9448,6 +9447,16 @@ button, .btn, [class*="-btn"] {
     box-shadow: var(--seg-active-shadow);
 }
 
+/* 버튼 깊이 통일 — 독립 액션/필 버튼에 raise-shadow 일괄 부여(계기판 깊이 문법).
+   세그먼트 토글(well 컨테이너 + active-raise)은 위 블록에서 이미 처리되므로 제외. */
+.map-nav-btn, .map-area-select-btn,
+.route-search-btn, .route-reset-btn, .route-swap-btn, .route-play-btn, .route-click-btn,
+.rv-action-btn, .rv-tb-back, .rv-tb-btn, .rv-cam-btn, .rv-sim-dir-btn,
+.chat-send-btn, .chat-close-btn, .chat-suggestion-btn,
+.collision-tab-btn, .collapse-btn, .drawer-collapse-btn {
+    box-shadow: var(--raise-shadow);
+}
+
 /* 슬라이더: 트랙 = 파인 홈, 썸 = 가공된 노브(radial 하이라이트 + 바닥 그림자).
    #routeSpeedSlider은 제외 — 항로 재생 바(.route-progress-*)와 같은 파란 링 썸으로 통일. */
 .rv-layout-b .rv-sim-row input[type="range"]::-webkit-slider-runnable-track {
@@ -9477,25 +9486,153 @@ button, .btn, [class*="-btn"] {
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.025);
 }
 
-/* ── 당직사관 제안 트레이 ── */
-.tab-badge { margin-left: 4px; padding: 0 5px; border-radius: 8px; font-size: 10px; background: var(--primary, #2f6fed); color: #fff; }
-#proposalSection { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow-y: auto; }
-.proposal-card { cursor: default; }
-.proposal-card.done { opacity: 0.6; }
-.pc-brief { font-size: 12px; line-height: 1.45; color: var(--text-main, #f4f4f5); }
-.pc-src { font-size: 9px; padding: 0 4px; border: 1px solid currentColor; border-radius: 3px; opacity: 0.7; }
-.pc-evidence { align-self: flex-start; background: none; border: none; padding: 0; font: inherit; font-size: 11px; color: var(--text-sub, #a1a1aa); cursor: pointer; }
-.pc-evidence:hover { color: var(--primary, #2f6fed); }
-.pc-actions { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
-.pc-btn { padding: 3px 10px; border-radius: 3px; border: 1px solid var(--primary, #2f6fed); background: none; color: var(--primary, #2f6fed); font: inherit; font-size: 11px; cursor: pointer; }
-.pc-approve { background: var(--primary, #2f6fed); color: #fff; }
-.pc-dismiss { border-color: var(--text-sub, #a1a1aa); color: var(--text-sub, #a1a1aa); }
-.pc-reason { font: inherit; font-size: 11px; background: transparent; color: var(--text-sub, #a1a1aa); border: 1px solid rgba(255,255,255,0.15); border-radius: 3px; padding: 2px 4px; }
-.pc-status { font-size: 11px; color: var(--text-sub, #a1a1aa); }
-.proposal-history { border-top: 1px solid rgba(255,255,255,0.08); }
-.proposal-history > summary { padding: 6px 12px; font-size: 11px; color: var(--text-sub, #a1a1aa); cursor: pointer; }
-.proposal-drawer { border-top: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.25); }
-.proposal-drawer-head { display: flex; align-items: center; gap: 10px; padding: 6px 12px; font-size: 11px; }
-.proposal-drawer-head a { margin-left: auto; color: var(--primary, #2f6fed); }
-.proposal-drawer-head button { background: none; border: none; color: inherit; cursor: pointer; }
-.proposal-drawer pre { margin: 0; padding: 8px 12px; max-height: 40vh; overflow: auto; font-size: 10.5px; line-height: 1.4; white-space: pre; }
+/* Operator decision support, using the existing dashboard palette. */
+#proposalSection { padding: 12px; overflow-y: auto; min-height: 0; }
+#proposalSection[hidden], #collisionSection[hidden] { display: none !important; }
+.proposal-card { padding: 12px; margin-bottom: 10px; border: 1px solid var(--panel-border); border-radius: 7px; background: var(--panel-bg); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.proposal-card p { margin: 6px 0; }
+.proposal-card summary { cursor: pointer; color: var(--text-sub); }
+.proposal-card ol { padding-left: 20px; }
+.pc-status { color: var(--caution); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+/* 관측 지연 — 위험이 사라진 게 아니라 자료가 잠시 끊긴 상태다. 사건을 닫지 않고
+   이 배지로 알리며, 그동안 승인 버튼만 잠긴다. danger 가 아니라 caution 단계. */
+.pc-stale {
+    padding: 1px 6px;
+    border: 1px solid var(--sev-caution);
+    border-radius: var(--radius-tag);
+    color: var(--sev-caution);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+.pc-stale-note { color: var(--text-sub); font-size: 11px; }
+
+/* ── 제안 탭 도구줄: 당직 인계 · 알림 ── */
+.proposal-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.proposal-tools button {
+    background: var(--btn-surface); color: var(--text-main);
+    border: 1px solid var(--btn-border); border-radius: var(--radius-pill);
+    padding: 5px 10px; font-size: 11px; cursor: pointer; transition: var(--btn-transition);
+}
+.proposal-tools button:hover:not(:disabled) { background: var(--btn-surface-hover); border-color: var(--btn-border-hover); }
+.proposal-tools button:disabled { opacity: .45; cursor: default; }
+/* 켜진 알림은 눌린 상태로 — 켜져 있는지 문구를 읽지 않고도 보이게 */
+.proposal-tools button[aria-pressed="true"] { background: var(--primary-muted); border-color: var(--primary); }
+.proposal-tools .pc-note { flex-basis: 100%; }
+.proposal-tools .pc-note:empty { display: none; }
+/* 담당 해역 — 제안이 어느 범위에서 나오는지. 조용한 계기 표기(수치는 mono). */
+.pc-aor { flex-basis: 100%; color: var(--text-dim); font-family: var(--font-data); font-size: 10px; letter-spacing: .02em; }
+.pc-aor:empty { display: none; }
+
+/* ── 당직 인계 다이얼로그 ──
+   교대자가 "지난 인계 이후 무엇이 있었고 지금 무엇을 넘겨받는가" 를 한 화면에서 확인하고
+   이어받는다. 열린 사건은 위험 순서(서버 rank_key)로 온다. 다른 다이얼로그와 같은 표면 토큰. */
+.handoff-dialog {
+    box-sizing: border-box; width: min(720px, 95vw); max-height: 92vh; overflow: auto; padding: 24px;
+    background: var(--panel-bg); color: var(--text-main);
+    border: 1px solid var(--panel-border); border-radius: var(--radius-group); box-shadow: var(--shadow-panel);
+    font-family: var(--font-body); font-size: 13px; line-height: 1.65;
+}
+.handoff-dialog::backdrop { background: var(--dialog-backdrop); }
+.handoff-dialog header { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.handoff-dialog header button { white-space: nowrap; flex-shrink: 0; }
+.handoff-dialog h2 { margin: 0; font-family: var(--font-display); font-size: 22px; }
+.handoff-dialog h3 { margin: 22px 0 8px; font-family: var(--font-display); font-size: 15px; }
+.handoff-dialog h3 span { margin-left: 6px; color: var(--secondary); font-family: var(--font-data); font-size: 12px; font-weight: 400; }
+.handoff-last { margin: 4px 0 0; color: var(--secondary); font-size: 12px; }
+.handoff-intro { margin: 10px 0 0; max-width: 62ch; color: var(--secondary); }
+.handoff-dialog button {
+    font: inherit; font-size: 12px; color: var(--text-main); background: var(--btn-surface);
+    border: 1px solid var(--btn-border); border-radius: var(--radius-pill); padding: 6px 11px; cursor: pointer;
+    transition: var(--btn-transition);
+}
+.handoff-dialog button:hover:not(:disabled) { background: var(--btn-surface-hover); border-color: var(--btn-border-hover); }
+.handoff-dialog button:disabled { opacity: .45; cursor: default; }
+.handoff-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--divider); }
+.handoff-list li {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 9px 0; border-bottom: 1px solid var(--divider);
+}
+.handoff-list li > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.handoff-list strong { font-weight: 600; overflow-wrap: anywhere; }
+.handoff-list small { flex-basis: 100%; color: var(--secondary); font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.handoff-list .handoff-empty { color: var(--text-dim); justify-content: flex-start; }
+.handoff-form { display: grid; gap: 10px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--divider); }
+.handoff-form label { display: grid; gap: 5px; font-size: 12px; color: var(--secondary); }
+.handoff-form small { color: var(--text-dim); }
+.handoff-form input, .handoff-form textarea {
+    box-sizing: border-box; width: 100%; font: inherit; color: var(--text-main);
+    background: var(--control-bg); border: 1px solid var(--panel-border); border-radius: var(--radius-pill); padding: 8px;
+}
+.handoff-form textarea { min-height: 64px; resize: vertical; }
+.handoff-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.handoff-actions p { margin: 0; color: var(--secondary); font-size: 12px; }
+.handoff-dialog .handoff-submit { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.handoff-dialog .handoff-submit:hover:not(:disabled) { background: var(--accent-glow); border-color: var(--accent-glow); }
+@media (max-width: 600px) {
+    .handoff-dialog { padding: 16px; }
+    .handoff-list li { align-items: flex-start; flex-direction: column; }
+}
+.proposal-card button { background: var(--btn-surface); color: var(--text-main); border: 1px solid var(--btn-border); border-radius: 5px; padding: 7px 10px; cursor: pointer; }
+.proposal-card button:disabled { opacity: .5; cursor: wait; }
+
+/* ── 제안 카드 버튼 위계 ──────────────────────────────────────────
+   1단 .pc-actions  판단 그 자체 (승인·기각·추적 종료). 승인만 채운 primary.
+   2단 .pc-tools    다이얼로그를 여는 조사 도구. 기본 버튼 무게.
+   3단 .pc-knowledge 같은 근거 화면의 질문별 바로가기. 조용한 텍스트 링크.
+   세 단이 전부 같은 무게였을 때는 카드에 버튼 8개가 평평하게 깔려
+   무엇이 주 동작인지 읽히지 않았다. */
+.pc-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.proposal-card [data-act="approve"] {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+    font-weight: 600;
+}
+.proposal-card [data-act="approve"]:hover:not(:disabled) { background: var(--accent-glow); border-color: var(--accent-glow); }
+/* 추적 종료는 되돌리기 어려운 동작이라 danger 로 테두리만 — 채우면 승인과 경합한다. */
+.proposal-card [data-act="stop"] { border-color: var(--sev-danger); color: var(--sev-danger); }
+
+.pc-tools { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.pc-tools button { font-size: 11px; padding: 5px 9px; }
+
+.pc-knowledge {
+    display: flex;
+    align-items: baseline;
+    gap: 4px 10px;
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid var(--panel-border);
+    flex-wrap: wrap;
+}
+.pc-knowledge > span {
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.proposal-card .pc-knowledge button {
+    background: none;
+    border: none;
+    padding: 2px 0;
+    font-size: 11px;
+    color: var(--text-sub);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: var(--panel-border);
+}
+.proposal-card .pc-knowledge button:hover { color: var(--primary); text-decoration-color: var(--primary); }
+.proposal-card input { box-sizing: border-box; width: 100%; background: var(--bg-color); color: var(--text-main); border: 1px solid var(--panel-border); padding: 6px; }
+.pc-note, #proposalMessage { color: var(--text-sub); font-size: 12px; }
+#proposalTabBadge { margin-left: 4px; }
+.decision-steps { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 12px 0 16px; padding: 0; list-style: none; counter-reset: decision-step; font-size: 12px; color: var(--secondary); }
+.decision-steps li { counter-increment: decision-step; }
+.decision-steps li::before { content: counter(decision-step) '. '; font-family: var(--font-data); }
+.decision-steps [aria-current="step"] { color: var(--text-main); font-weight: 700; border-bottom: 2px solid var(--primary); padding-bottom: 4px; }
+.proposal-guide { margin-bottom: 16px; }
+.proposal-guide strong { font-family: var(--font-display); font-size: 14px; }
+.proposal-guide .decision-steps { gap: 8px 12px; margin: 10px 0; }
+.pc-next { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--divider); }
+.proposal-card .pc-primary { width: 100%; margin-top: 6px; padding: 10px 12px; background: var(--primary); border-color: var(--primary); color: var(--text-main); font-weight: 700; }
+.proposal-card .pc-primary:hover { background: var(--accent-glow); }
+.pc-manual { margin-top: 14px; }

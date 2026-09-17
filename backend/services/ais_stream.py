@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import os
 
 from . import history_writer
+from backend.data_platform.capture import capture_message, close_journal
 from backend.services.metrics import ais_messages_total, ais_vessels_active, alerts_fired_total
 
 logger = logging.getLogger(__name__)
@@ -460,6 +461,8 @@ def _ais_stream_loop():
                 if not raw_msg:
                     continue
                 
+                capture_message(raw_msg)
+
                 try:
                     data = json.loads(raw_msg)
                 except json.JSONDecodeError:
@@ -682,6 +685,8 @@ def _run_ais_loop():
         _ais_stream_loop()
     except Exception as e:
         logger.error(f"AIS Stream thread crashed: {e}")
+    finally:
+        close_journal()
 
 
 def start_ais_stream():
@@ -731,3 +736,9 @@ def stop_ais_stream():
 
     _save_cache()  # Save on shutdown
     logger.info("AIS Stream stopping...")
+
+
+def get_watch_vessels(pair):
+    """Copy only the requested live vessels, including local reception times."""
+    with _vessels_lock:
+        return [dict(_vessels[int(m)], mmsi=int(m)) for m in pair if int(m) in _vessels]

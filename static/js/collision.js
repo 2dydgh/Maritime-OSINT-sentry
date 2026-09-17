@@ -81,10 +81,8 @@ function switchCollisionTab(tab) {
     document.querySelectorAll('.collision-tab-btn').forEach(function(b) {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
-    var sec = document.getElementById('collisionSection');
-    var prop = document.getElementById('proposalSection');
-    if (sec) sec.hidden = (tab === 'proposals');
-    if (prop) prop.hidden = (tab !== 'proposals');
+    document.getElementById('collisionSection').hidden = tab === 'proposals';
+    document.getElementById('proposalSection').hidden = tab !== 'proposals';
     if (tab !== 'proposals') renderCollisionList();
 }
 window.switchCollisionTab = switchCollisionTab;
@@ -94,8 +92,8 @@ var tabDist = document.getElementById('collisionTabDistance');
 var tabMl = document.getElementById('collisionTabMl');
 if (tabDist) tabDist.addEventListener('click', function() { switchCollisionTab('distance'); });
 if (tabMl) tabMl.addEventListener('click', function() { switchCollisionTab('ml'); });
-var tabProp = document.getElementById('collisionTabProposals');
-if (tabProp) tabProp.addEventListener('click', function() { switchCollisionTab('proposals'); });
+var tabProposals = document.getElementById('collisionTabProposals');
+if (tabProposals) tabProposals.addEventListener('click', function() { switchCollisionTab('proposals'); });
 
 function collisionSeverityBadge(severity) {
     // Dot carries the colour; text stays calm light grey so the row doesn't read
@@ -139,8 +137,19 @@ function _collisionCard(r, sevHex, sevLabel, loud, area) {
         </div>\
         <div class="cr-row2">\
             <span class="cr-ship-b" title="' + r.ship_b.name + '"><small>\u2192</small> ' + r.ship_b.name + '</span>\
-            <span class="cr-area">' + area + '</span>\
+            <span class="cr-area">' + area + '</span><button class="cr-compare" data-scenario-compare>시나리오 비교</button>\
         </div>';
+}
+
+// 선택한 쌍. 행 HTML 에 실시간 좌표(data-lat-*)가 들어 있어 AIS 갱신마다
+// innerHTML 이 통째로 갈리므로, .selected 클래스만으로는 선택이 유지되지 않는다.
+// 쌍을 따로 들고 있다가 재렌더 후 다시 입힌다.
+var _selectedPair = null;
+
+function _restoreCollisionSelection(list) {
+    if (!_selectedPair) return;
+    var row = list.querySelector('.collision-row[data-mmsi-a="' + _selectedPair[0] + '"][data-mmsi-b="' + _selectedPair[1] + '"]');
+    if (row) row.classList.add('selected');
 }
 
 function _renderCollisionTicker(list, cardsHtml, count) {
@@ -152,6 +161,7 @@ function _renderCollisionTicker(list, cardsHtml, count) {
     var prevScroll = list.scrollTop;
     list.innerHTML = cardsHtml;
     list.scrollTop = prevScroll;
+    _restoreCollisionSelection(list);
 }
 
 // 이벤트 위임: collisionList에 한 번만 등록
@@ -164,6 +174,7 @@ function _ensureCollisionDelegation() {
     list.addEventListener('click', function(e) {
         var card = e.target.closest('.collision-row');
         if (!card) return;
+        if (e.target.closest('[data-scenario-compare]')) { e.stopPropagation(); CollisionScenarios.open(card.dataset.mmsiA, card.dataset.mmsiB); return; }
         _handleCollisionCardClick(card);
     });
 }
@@ -211,8 +222,6 @@ function renderCollisionList() {
 
     // ML serious risks (level >= 2) — used for both badge and HUD
     var mlSerious = (collisionData.ml?.risks || []).filter(function(r) { return r.risk_level >= 2; }).length;
-    // ponytail: 제안 수는 다음 충돌 렌더(≤10s)에 합산된다. 즉시 반영이 필요하면 WatchOfficerUI에서 renderCollisionList 호출.
-    mlSerious += (window.WatchOfficerUI && window.WatchOfficerUI.openCount()) || 0;
 
     // Update icon rail badge — pulse briefly only when the count rises
     var badge = document.getElementById('collisionBadge');
@@ -384,28 +393,11 @@ function renderCollisionList() {
     _ensureCollisionDelegation();
 }
 
-// 당직사관 제안 승인 시 호출 — 카드 클릭과 같은 추적 경로를 탄다 (CPA 재검증은 서버 규칙이 이미 했으므로 생략).
-function focusCollisionPair(mmsiA, mmsiB, riskLevel) {
-    var shipA = shipDataMap[mmsiA] || shipDataMap[String(mmsiA)];
-    var shipB = shipDataMap[mmsiB] || shipDataMap[String(mmsiB)];
-    if (!shipA || !shipB) return;
-    EventBus.emit('command:flyTo', { lat: (shipA.lat + shipB.lat) / 2, lng: (shipA.lng + shipB.lng) / 2, height: 15000 });
-    EventBus.emit('ship:selected', {
-        mmsi: mmsiA, target: mmsiB, mode: 'pair', riskLevel: riskLevel || 3,
-        latA: shipA.lat, lngA: shipA.lng, latB: shipB.lat, lngB: shipB.lng,
-        sogA: shipA.sog || 0, cogA: shipA.cog || 0, nameA: shipA.name || ''
-    });
-    _collisionTrackingActive = true;
-    startCollisionTracking(mmsiA, mmsiB);
-    showShipInfo(mmsiA);
-    highlightShip(mmsiA);
-}
-window.focusCollisionPair = focusCollisionPair;
-
 function _handleCollisionCardClick(card) {
     // Collision card selection highlight
     document.querySelectorAll('.collision-row.selected').forEach(function(c) { c.classList.remove('selected'); });
     card.classList.add('selected');
+    _selectedPair = [card.dataset.mmsiA, card.dataset.mmsiB];
 
     var mmsiA = Number(card.dataset.mmsiA);
     var mmsiB = Number(card.dataset.mmsiB);
@@ -487,6 +479,13 @@ function startCollisionTracking(mmsiA, mmsiB) {
         var shipB = shipDataMap[_collisionPairMmsiB] || shipDataMap[String(_collisionPairMmsiB)];
         if (!shipA || !shipB) { stopCollisionTracking(); return; }
 
+        if (currentMapMode === '2d') {
+            if (leafletMap) {
+                var center = [(shipA.lat + shipB.lat) / 2, (shipA.lng + shipB.lng) / 2];
+                if (!leafletMap.getBounds().contains(center)) leafletMap.panTo(center);
+            }
+            return;
+        }
         // 카메라 높이 50km 이하일 때만 자동 추적 (확대 상태)
         var camHeight = viewer.camera.positionCartographic.height;
         if (camHeight > 50000) return;
@@ -562,3 +561,29 @@ function _updateHeaderCollisionStats() {
 EventBus.on('proximity:cleared', function() {
     clearCollisionPair();
 });
+
+// Authorized map action. Direct calls expose exceptions to the execution receipt.
+window.focusApprovedCollisionPair = function(mmsiA, mmsiB) {
+    var a = shipDataMap[mmsiA], b = shipDataMap[mmsiB];
+    if (!a || !b) throw new Error('선박 위치가 현재 화면에 없습니다.');
+    if (currentMapMode === '3d' && (!viewer || viewer.isDestroyed())) throw new Error('3D 지도가 준비되지 않았습니다.');
+    if (currentMapMode === '2d' && !leafletMap) throw new Error('2D 지도가 준비되지 않았습니다.');
+    selectedProximityMmsi = null;
+    collisionTargetMmsi = mmsiB;
+    renderProximityLines(mmsiA, [{mmsi:mmsiB,lat:b.lat,lng:b.lng,
+        distance:haversineNm(a.lat,a.lng,b.lat,b.lng),mlRiskLevel:3,_selData:a}]);
+    if (currentMapMode === '2d') leafletMap.setView([(a.lat+b.lat)/2,(a.lng+b.lng)/2],12);
+    else viewer.camera.flyTo({destination:Cesium.Cartesian3.fromDegrees((a.lng+b.lng)/2,(a.lat+b.lat)/2,15000),duration:1});
+    highlightShip(mmsiA);
+    startCollisionTracking(mmsiA,mmsiB);
+    _collisionTrackingActive = true;
+    return window.isApprovedPairTracking(mmsiA,mmsiB);
+};
+window.isApprovedPairTracking = function(a,b) {
+    return !!_collisionTrackingTimer && _collisionPairMmsiA == a && _collisionPairMmsiB == b && !!shipDataMap[a] && !!shipDataMap[b];
+};
+
+window.stopApprovedPairTracking = function() {
+    stopCollisionTracking();
+    _collisionTrackingActive = false;
+};
