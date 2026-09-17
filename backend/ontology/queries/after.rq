@@ -1,0 +1,7 @@
+PREFIX m: <https://maritime-osint.example/ontology#>
+SELECT ?node ?at ?distance ?dcpa ?tcpa ?state WHERE {
+  ?proposal m:hasFollowup ?node .
+  ?node m:recordedAt ?at ; m:distanceNm ?distance ; m:status ?state .
+  OPTIONAL { ?node m:dcpaNm ?dcpa }
+  OPTIONAL { ?node m:tcpaMinutes ?tcpa }
+} ORDER BY DESC(?at)

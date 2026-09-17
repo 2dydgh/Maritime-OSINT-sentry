@@ -1,0 +1,71 @@
+@prefix m: <https://maritime-osint.example/ontology#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+<https://maritime-osint.example/ontology> a owl:Ontology ;
+    owl:versionInfo "1.1.0" ;
+    rdfs:label "해양 상황 판단 근거 온톨로지"@ko ;
+    rdfs:comment "MMSI 기반 대상 식별, 수신 관측, 가정 예측, 운용자 판단, 브라우저 실행 영수증을 구별한다. 실제 운항 변경을 추론하지 않는다."@ko .
+
+m:Record a owl:Class ; rdfs:subClassOf prov:Entity ; rdfs:label "기록"@ko .
+m:Vessel a owl:Class ; rdfs:label "AIS 식별 대상 선박"@ko ;
+    rdfs:comment "MMSI를 기준으로 연결하며 선박의 영구적 물리 동일성을 보증하지 않는다."@ko .
+m:AISObservation a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "AIS 수신 관측"@ko .
+m:AnalysisInputState a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "분석에 저장된 입력"@ko ;
+    rdfs:comment "수신 시각이 빠진 과거 입력은 AISObservation으로 주장하지 않는다."@ko .
+m:ProjectedState a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "동일 시점으로 투영한 시작 상태"@ko .
+m:RiskAnalysis a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "위험 분석"@ko .
+m:Proposal a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "집중 추적 제안"@ko .
+m:ScenarioComparison a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "시나리오 비교"@ko .
+m:Prediction a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "가정 예측 결과"@ko .
+m:Review a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "시나리오 검토"@ko .
+m:Decision a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "운용자 판단"@ko .
+m:TrackingExecution a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "지도 추적 실행 요청"@ko .
+m:ExecutionReceipt a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "브라우저 실행 영수증"@ko .
+m:FollowupAssessment a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "후속 관측 평가"@ko .
+[] a owl:AllDisjointClasses ; owl:members (m:AISObservation m:AnalysisInputState m:ProjectedState m:Prediction m:Decision m:ExecutionReceipt) .
+
+m:observedVessel a owl:ObjectProperty ; rdfs:range m:Vessel ; rdfs:label "관측 대상"@ko .
+m:involvesVessel a owl:ObjectProperty ; rdfs:range m:Vessel ; rdfs:label "관련 선박"@ko .
+m:triggeredBy a owl:ObjectProperty ; rdfs:domain m:Proposal ; rdfs:range m:RiskAnalysis ; rdfs:label "제안에 저장된 분석"@ko .
+m:hasDecision a owl:ObjectProperty ; rdfs:domain m:Proposal ; rdfs:range m:Decision ; rdfs:label "판단 기록"@ko .
+m:hasReview a owl:ObjectProperty ; rdfs:domain m:Proposal ; rdfs:range m:Review ; rdfs:label "검토 기록"@ko .
+m:hasExecution a owl:ObjectProperty ; rdfs:domain m:Proposal ; rdfs:range m:TrackingExecution ; rdfs:label "실행 요청"@ko .
+m:hasFollowup a owl:ObjectProperty ; rdfs:domain m:Proposal ; rdfs:range m:FollowupAssessment ; rdfs:label "후속 평가"@ko .
+m:basedOn a owl:ObjectProperty ; rdfs:domain m:Decision ; rdfs:range m:RiskAnalysis ; rdfs:label "승인 시 재검증 근거"@ko .
+m:usesReview a owl:ObjectProperty ; rdfs:domain m:Decision ; rdfs:range m:Review ; rdfs:label "판단 당시 포함한 검토"@ko .
+m:compares a owl:ObjectProperty ; rdfs:domain m:Review ; rdfs:range m:ScenarioComparison ; rdfs:label "검토한 비교"@ko .
+m:startsFrom a owl:ObjectProperty ; rdfs:domain m:ScenarioComparison ; rdfs:range m:ProjectedState ; rdfs:label "시작 조건"@ko .
+m:derivedFrom a owl:ObjectProperty ; rdfs:subPropertyOf prov:wasDerivedFrom ; rdfs:label "원본 수신 근거"@ko .
+m:usesObservation a owl:ObjectProperty ; rdfs:range m:AISObservation ; rdfs:label "사용한 수신 관측"@ko .
+m:usesInputState a owl:ObjectProperty ; rdfs:range m:AnalysisInputState ; rdfs:label "사용한 과거 입력"@ko .
+m:hasPrediction a owl:ObjectProperty ; rdfs:domain m:ScenarioComparison ; rdfs:range m:Prediction ; rdfs:label "가정 예측"@ko .
+m:authorizedBy a owl:ObjectProperty ; rdfs:domain m:TrackingExecution ; rdfs:range m:Decision ; rdfs:label "승인 근거"@ko .
+m:confirmedBy a owl:ObjectProperty ; rdfs:domain m:TrackingExecution ; rdfs:range m:ExecutionReceipt ; rdfs:label "브라우저 실행 확인"@ko .
+
+m:sourcePath a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "원본 저장 위치"@ko .
+m:sourcePointer a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "원본 JSON 경로"@ko .
+m:recordedAt a owl:DatatypeProperty ; rdfs:range xsd:dateTime ; rdfs:label "기록·계산 시각"@ko .
+m:receivedAt a owl:DatatypeProperty ; rdfs:range xsd:dateTime ; rdfs:label "로컬 수신 시각"@ko .
+m:monitorUntil a owl:DatatypeProperty ; rdfs:range xsd:dateTime ; rdfs:label "관측 종료 예정 시각"@ko .
+m:mmsi a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "MMSI"@ko .
+m:latitude a owl:DatatypeProperty ; rdfs:range xsd:double ; rdfs:label "위도"@ko .
+m:longitude a owl:DatatypeProperty ; rdfs:range xsd:double ; rdfs:label "경도"@ko .
+m:speedKnots a owl:DatatypeProperty ; rdfs:range xsd:double ; rdfs:label "속력 (kt)"@ko .
+m:courseDegrees a owl:DatatypeProperty ; rdfs:range xsd:double ; rdfs:label "침로 (도)"@ko .
+m:dcpaNm a owl:DatatypeProperty ; rdfs:range xsd:double ; rdfs:label "DCPA (해리)"@ko .
+m:tcpaMinutes a owl:DatatypeProperty ; rdfs:range xsd:double ; rdfs:label "TCPA (분)"@ko .
+m:distanceNm a owl:DatatypeProperty ; rdfs:range xsd:double ; rdfs:label "선박 간 거리 (해리)"@ko .
+m:minimumDistanceNm a owl:DatatypeProperty ; rdfs:range xsd:double ; rdfs:label "기간 내 최소 거리 (해리)"@ko .
+m:minimumTimeSeconds a owl:DatatypeProperty ; rdfs:range xsd:double ; rdfs:label "최소 거리 발생 경과 시간 (초)"@ko .
+m:model a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "계산 모델"@ko .
+m:status a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "저장 상태"@ko .
+m:outcome a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "판단·검토 결과"@ko .
+m:reason a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "기록된 이유"@ko .
+m:sessionId a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "브라우저 세션 식별값 (미인증)"@ko .
+m:runId a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:label "비교 기록 ID"@ko .
+m:revision a owl:DatatypeProperty ; rdfs:range xsd:integer ; rdfs:label "원본 제안 버전"@ko .
+m:AgentInvestigation a owl:Class ; rdfs:subClassOf m:Record ; rdfs:label "AI 조사 기록"@ko .
+m:usesInvestigation a owl:ObjectProperty ; rdfs:domain m:Decision ; rdfs:range m:AgentInvestigation ; rdfs:label "판단 당시 참고한 AI 조사"@ko .

@@ -600,3 +600,9 @@ async def update_collision_cache(vessels: list[dict]):
             f"Collision analysis: {len(distance_risks)} distance + {len(ml_risks)} ML risks "
             f"from {len(proximity_pairs)} pairs ({elapsed_ms:.1f}ms)"
         )
+
+
+def get_watch_snapshot():
+    """One coherent cache generation for proposal checks."""
+    with _cache_lock:
+        return {"ml": list(_cached_ml_risks), "distance": list(_cached_distance_risks), "updated_at": _cache_updated}

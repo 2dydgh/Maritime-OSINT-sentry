@@ -1,0 +1,192 @@
+/* 사건 AI 조사 다이얼로그 — theme.css 토큰만 사용.
+   포커스 링은 main.css 전역(파랑)을 상속한다. 여기서 주황으로 덮으면
+   키보드 포커스가 warning 단계처럼 읽힌다. */
+
+.investigation-dialog {
+    box-sizing: border-box;
+    width: min(1000px, 95vw);
+    max-height: 92vh;
+    overflow: auto;
+    padding: 24px;
+    background: var(--panel-bg);
+    color: var(--text-main);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-group);
+    box-shadow: var(--shadow-panel);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.7;
+}
+.investigation-dialog::backdrop { background: var(--dialog-backdrop); }
+.investigation-dialog h2,
+.investigation-dialog h3,
+.investigation-dialog h4 { font-family: var(--font-display); }
+.investigation-dialog [hidden] { display: none !important; }
+
+/* ── 헤더 ── */
+.investigation-dialog header { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.investigation-dialog h2 { margin: 0; font-size: 24px; }
+.investigation-dialog h3 { font-size: 16px; margin-top: 0; }
+.investigation-dialog h4 { margin: 20px 0 8px; }
+.investigation-dialog header p { margin: 4px 0; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.investigation-dialog small,
+.investigation-hint { color: var(--secondary); font-size: 12px; }
+/* 세 다이얼로그 공통: 제목 바로 다음 줄에서 이 화면이 무엇인지 한 번에 말한다. */
+.investigation-intro { margin: 0 0 4px; max-width: 62ch; font-size: 13px; line-height: 1.65; color: var(--secondary); }
+.investigation-dialog [data-i="case"] { color: var(--primary); font-size: 13px; }
+
+/* 스크롤바는 main.css 의 전역 규칙을 그대로 쓴다 — 여기서 다시 정의하지 말 것. */
+
+/* ── 컨트롤 ── */
+.investigation-dialog button {
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-main);
+    background: var(--btn-surface);
+    border: 1px solid var(--btn-border);
+    border-radius: var(--radius-pill);
+    padding: 8px 12px;
+}
+/* 입력류는 .proposal-card input 과 같은 언어(어두운 우물 + panel-border).
+   불투명이어야 한다 — select 펼침 목록이 이 배경으로 그려진다. */
+.investigation-dialog select,
+.investigation-dialog textarea {
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-main);
+    background: var(--control-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-pill);
+    padding: 8px 12px;
+}
+.investigation-dialog select:hover:not(:disabled),
+.investigation-dialog textarea:hover { border-color: var(--btn-border-hover); }
+/* OS 기본 위젯 대신 팔레트 화살표. 펼침 목록은 브라우저가 그리므로
+   option 의 배경·글자색을 명시해야 어두운 테마에서 읽힌다. */
+.investigation-dialog select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: var(--select-chevron);
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+}
+.investigation-dialog option { background: var(--control-bg); color: var(--text-main); }
+.investigation-dialog button { cursor: pointer; transition: var(--btn-transition); }
+.investigation-dialog button:hover:not(:disabled) { background: var(--btn-surface-hover); border-color: var(--btn-border-hover); }
+.investigation-dialog button:disabled { opacity: .45; cursor: default; }
+.investigation-controls,
+.investigation-links { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.investigation-controls label { margin-left: auto; font-size: 12px; }
+.investigation-controls select { max-width: 260px; }
+
+/* ── 상태 · 오류 ── */
+.investigation-dialog [data-i="error"] { color: var(--sev-danger); }
+/* 연결 끊김은 일시적 — danger 가 아니라 warning 단계로 둔다. */
+.investigation-dialog [data-i="connection"] { color: var(--sev-warning); }
+
+/* ── 조사 결과 ── */
+.investigation-dialog [data-i="result"] { margin: 20px 0; overflow-wrap: anywhere; }
+.investigation-conclusion { padding-bottom: 16px; }
+.investigation-action { margin: 8px 0; font-family: var(--font-display); font-size: 22px; color: var(--accent-glow); }
+.investigation-facts {
+    padding: 14px;
+    background: var(--surface-inset);
+    border-left: 3px solid var(--primary);
+}
+.investigation-facts p { margin: 6px 0; }
+.investigation-gaps { margin-top: 16px; }
+
+/* ── 다음 행동 · 판단 입력 ── */
+.investigation-next {
+    margin: 20px 0;
+    padding: 18px;
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-pill);
+}
+.investigation-next p { margin: 8px 0; }
+.investigation-decision label { display: block; }
+.investigation-decision textarea {
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    min-height: 72px;
+    margin: 8px 0;
+    resize: vertical;
+    background: var(--bg-color);
+}
+/* 승인 유효 시간 카운트다운 — 남은 시간은 caution, 만료 후는 warning. */
+.investigation-dialog [data-i="expiry"].is-expired { color: var(--sev-warning); }
+
+/* ── 근거 상세 ── */
+.investigation-dialog [data-i="source"] {
+    margin: 20px 0;
+    padding: 18px;
+    background: var(--surface-inset);
+    border-radius: var(--radius-pill);
+    overflow-wrap: anywhere;
+}
+.investigation-dialog [data-i="summary"] dl { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr); gap: 8px; }
+.investigation-dialog [data-i="summary"] dt { color: var(--secondary); }
+.investigation-dialog [data-i="summary"] dd { margin: 0; font-family: var(--font-data); }
+.investigation-dialog details summary { cursor: pointer; }
+.investigation-dialog pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow: auto;
+    max-height: 350px;
+    padding: 15px;
+    background: var(--surface-sunken);
+    border-radius: var(--radius-tag);
+    font-family: var(--font-data);
+    font-size: 12px;
+}
+
+/* ── 실행한 확인 작업 ── */
+.investigation-activity { border-top: 1px solid var(--divider); padding-top: 20px; margin-top: 24px; }
+.investigation-events {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 16px;
+    max-height: 360px;
+    overflow: auto;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.investigation-events li {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    gap: 4px;
+    padding: 0 0 20px 14px;
+    border-left: 2px solid var(--divider);
+}
+.investigation-events li.is-done { border-color: var(--primary); }
+.investigation-events button { font-size: 11px; padding: 3px 8px; }
+
+@media (max-width: 680px) {
+    .investigation-dialog { padding: 16px; }
+    .investigation-dialog h2 { font-size: 21px; }
+    .investigation-controls label { margin-left: 0; width: 100%; }
+    .investigation-controls select { max-width: 100%; }
+    .investigation-next { padding: 12px; }
+    .investigation-events { grid-template-columns: 1fr; max-height: 260px; }
+    .investigation-dialog [data-i="summary"] dl { grid-template-columns: 1fr; }
+    .investigation-dialog [data-i="summary"] dd { margin-bottom: 8px; }
+}
+.investigation-dialog [data-i="start"].is-primary,.investigation-dialog [data-decision="approved"],.investigation-dialog [data-followup] { background: var(--primary); border-color: var(--primary); color: var(--text-main); }
+.investigation-optional { border: 1px solid var(--panel-border); border-radius: var(--radius-pill); padding: 16px; margin: 20px 0; }
+.investigation-optional h3 { margin-bottom: 6px; }
+.investigation-optional p { color: var(--secondary); font-size: 13px; margin: 6px 0 12px; }
+
+/* 실행하지 않은 계산 도구의 이유 — 경고가 아니라 설명이다. 목록에 CPA 재계산·시나리오
+   비교가 없는 게 고장이 아니라 서버가 의도적으로 막은 것임을 조용히 알린다. */
+.investigation-skipped {
+    margin: 12px 0 0;
+    padding-top: 10px;
+    border-top: 1px dashed var(--divider);
+    color: var(--secondary);
+    font-size: 12px;
+    line-height: 1.65;
+}

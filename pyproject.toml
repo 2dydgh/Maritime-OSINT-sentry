@@ -22,7 +22,9 @@ dependencies = [
     "searoute>=1.5.0",
     "websockets>=16.0",
     "pystac-client>=0.9.0",
-    "rdflib>=7.6.0",
+    "rdflib>=7.1,<8",
+    "pyshacl>=0.30,<0.32",
+    "pydantic-ai-slim[openai]>=1.0,<2",
 ]
 
 [dependency-groups]
