@@ -231,7 +231,7 @@ var ShipBuilders = (function () {
         var cv = document.createElement('canvas');
         cv.width = 96; cv.height = 256;
         var ctx = cv.getContext('2d');
-        ctx.font = "700 38px 'B612 Mono', 'JetBrains Mono', 'Pretendard Variable', monospace";
+        ctx.font = "700 38px 'JetBrains Mono', 'Pretendard Variable', monospace";
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = color;

@@ -9,15 +9,21 @@
   var STEEPNESS = 0.95;         // crest sharpness, 0..1. Higher = pointier crests; >1 loops/pinches. Visual tuning.
 
   // Component table: [angleOffsetDeg, wavelengthScale, amplitudeScale, periodScale]
-  // 6-방향 스펙트럼 — 넓은 각도 스프레드(−70..+108°) + 더 많은 옥타브로 교차파(cross-sea)
-  // 표면을 자연스럽게. MAX_WAVES=6 와 동수. CPU(heightAt)·GPU(snippet) 가 같은 표를 공유.
+  // 2-스웰 체계 — 한 방향 스웰을 옥타브로 쪼개는 대신, 주 스웰(primary)과 다른
+  // 방향에서 오는 별개의 긴 교차 스웰(secondary, ~58°)을 함께 둔다. 두 긴 파열의
+  // 주기가 달라 맥놀이(beat)하며 수면이 불규칙한 "혼란 바다(confused sea)"로 읽힌다.
+  // 진폭 합(≈2.2)은 종전과 맞춰 횡요 물리(heightAt 롤 계산)의 크기를 보존한다.
+  // MAX_WAVES=6 와 동수. CPU(heightAt)·GPU(snippet) 가 같은 표를 공유.
   var COMPONENTS = [
+    // ── 주 스웰 계열(dominant direction) ──
     [0,    1.00, 1.00,  1.00],   // primary swell — period == wavePeriod
-    [18,   0.60, 0.46,  0.68],
-    [-32,  0.42, 0.30,  0.52],
-    [52,   0.30, 0.20,  0.42],
-    [-70,  0.22, 0.13,  0.34],
-    [108,  0.15, 0.085, 0.27]
+    [16,   0.55, 0.34,  0.64],   // primary 풍성파(wind chop)
+    // ── 교차 스웰 계열(다른 사분면, 별개 주기) ──
+    [58,   0.80, 0.42,  0.86],   // secondary swell — 긴 파열, 주기 달라 주 스웰과 맥놀이
+    [74,   0.36, 0.20,  0.52],   // secondary 풍성파
+    // ── 미세 교차 잔물결 ──
+    [-30,  0.30, 0.16,  0.46],
+    [-66,  0.20, 0.10,  0.36]
   ];
 
   function buildWaves(weather) {

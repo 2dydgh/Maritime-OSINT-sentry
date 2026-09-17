@@ -533,7 +533,10 @@ var RouteViewer = (function() {
             if (which === 'from') {
                 fromPort = port;
                 var toInput = document.getElementById('routeToInput');
-                if (toInput && !toPort) toInput.focus();
+                // 이 클릭 이벤트가 아직 document까지 버블링 중이라, 지금 바로 focus()하면
+                // 도착 입력창 쪽 "바깥 클릭시 닫기" 리스너가 같은 클릭을 감지해 방금 뜬
+                // 목록을 즉시 닫아버린다. 다음 틱으로 미뤄 버블링이 끝난 뒤에 포커스한다.
+                if (toInput && !toPort) setTimeout(function () { toInput.focus(); }, 0);
             } else {
                 toPort = port;
                 var slider = document.getElementById('routeSpeedSlider');
