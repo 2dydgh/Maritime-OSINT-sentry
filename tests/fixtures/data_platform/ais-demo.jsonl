@@ -1,0 +1,5 @@
+{"MessageType":"PositionReport","MetaData":{"MMSI":999000001,"ShipName":"SYNTHETIC DEMO","time_utc":"2026-09-14T01:00:00Z"},"Message":{"PositionReport":{"UserID":999000001,"Valid":true,"Latitude":35.1,"Longitude":129.05,"Sog":12.4,"Cog":90,"TrueHeading":90}}}
+{"MessageType":"PositionReport","MetaData":{"MMSI":999000001,"ShipName":"SYNTHETIC DEMO","time_utc":"2026-09-14T01:00:00Z"},"Message":{"PositionReport":{"UserID":999000001,"Valid":true,"Latitude":35.1,"Longitude":129.05,"Sog":12.4,"Cog":90,"TrueHeading":90}}}
+{"MessageType":"PositionReport","MetaData":{"MMSI":999000001,"time_utc":"2026-09-14T00:59:00Z"},"Message":{"PositionReport":{"Latitude":35.09,"Longitude":129.04,"Sog":102.3,"Cog":360,"TrueHeading":511}}}
+{"MessageType":"PositionReport","MetaData":{"MMSI":999000001},"Message":{"PositionReport":{"Latitude":91,"Longitude":181}}}
+{"MessageType":"ShipStaticData","MetaData":{"MMSI":999000001},"Message":{"ShipStaticData":{"Name":"SYNTHETIC DEMO"}}}
