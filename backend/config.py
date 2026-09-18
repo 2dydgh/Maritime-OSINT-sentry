@@ -29,7 +29,7 @@ OPENSKY_USERNAME = os.getenv("OPENSKY_USERNAME", "")
 OPENSKY_PASSWORD = os.getenv("OPENSKY_PASSWORD", "")
 
 # App
-PORT = int(os.getenv("PORT", 8001))
+PORT = int(os.getenv("PORT", "8001"))
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 # Dev only: send Cache-Control: no-store on static assets so a plain refresh always
 # fetches the latest CSS/JS (no manual ?v= cache-busting). Keep OFF in production.

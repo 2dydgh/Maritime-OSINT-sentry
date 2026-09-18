@@ -37,7 +37,7 @@ def classify_vessel(ais_type: int, mmsi: int) -> str:
         return "military_vessel"  # Military → YELLOW
     # MMSI-based military detection: military MMSIs often start with certain prefixes
     mmsi_str = str(mmsi)
-    if mmsi_str.startswith("3380") or mmsi_str.startswith("3381"):
+    if mmsi_str.startswith(("3380", "3381")):
         return "military_vessel"  # US Navy
     if ais_type in (30, 31, 32, 33, 34):
         return "fishing"       # Fishing, towing, dredging, diving, etc.
@@ -442,7 +442,7 @@ def _ais_stream_loop():
             
             # Drain stderr in a background thread to prevent deadlock
             import threading
-            def _drain_stderr():
+            def _drain_stderr(process=process):
                 for errline in iter(process.stderr.readline, ''):
                     errline = errline.strip()
                     if errline:

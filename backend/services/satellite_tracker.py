@@ -148,9 +148,8 @@ def _fetch_satellites_from_tle_api():
     for i, term in enumerate(search_terms):
         try:
             # Rate limit: 1.5초 간격으로 요청 (interruptible — 종료 시 즉시 탈출)
-            if i > 0:
-                if _shutdown_event.wait(1.5):
-                    break
+            if i > 0 and _shutdown_event.wait(1.5):
+                break
             url = f"https://tle.ivanstanojevic.me/api/tle/?search={term}&page_size=100&format=json"
             response = fetch_with_curl(url, timeout=10)
             if response.status_code != 200:
@@ -198,7 +197,7 @@ def _tle_to_gp(name, norad_id, line1, line2):
                 exponent = int(bstar_str[-2:])
                 bstar = mantissa * (10 ** exponent)
             except Exception:
-                pass
+                logger.debug("BSTAR 필드 파싱 실패, 0으로 둠: %r", bstar_str)
         epoch_yr = int(line1[18:20])
         epoch_day = float(line1[20:32].strip())
         year = 2000 + epoch_yr if epoch_yr < 57 else 1900 + epoch_yr
@@ -412,6 +411,7 @@ def fetch_intel_satellites():
                 })
 
             except Exception:
+                logger.debug("TLE 항목 파싱 실패, 건너뜀", exc_info=True)
                 continue
 
         logger.info(f"Satellites: {len(sats)} successfully positioned")

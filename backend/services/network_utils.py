@@ -36,7 +36,7 @@ class _DummyResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise Exception(f"HTTP {self.status_code}: {self.text[:100]}")
+            raise RuntimeError(f"HTTP {self.status_code}: {self.text[:100]}")
 
 
 def _run_curl_fallback(url, method, json_data, timeout, default_headers):
@@ -60,7 +60,7 @@ def _run_curl_fallback(url, method, json_data, timeout, default_headers):
     try:
         res = subprocess.run(
             cmd, capture_output=True, text=True, timeout=timeout + 5,
-            input=stdin_data
+            input=stdin_data, check=False,  # 반환 코드는 아래에서 직접 판정한다
         )
     except subprocess.TimeoutExpired:
         logger.error(f"bash curl fallback timed out after {timeout + 5}s for {url}")
