@@ -6,45 +6,54 @@ on:
   pull_request:
     branches: [main]
 
+# 프로젝트의 패키지 매니저는 uv 이고 requires-python >= 3.12 다. 예전 워크플로는
+# pip + requirements.txt(삭제됨) + Python 3.11 을 써서 의존성 설치 단계에서 바로 죽었다.
+# Dockerfile 과 같은 방식(uv sync --frozen)으로 맞춘다.
+
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          enable-cache: true
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
+      - name: Set up Python
+        run: uv python install 3.12
 
-      - name: Run tests
-        run: python -m pytest tests/ -v --tb=short
+      - name: Install dependencies (locked)
+        run: uv sync --frozen
+
+      - name: Python tests
+        run: uv run pytest tests/ -q --tb=short
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # 제안 스토어·알림 판정·조사 뷰 로직은 Node 테스트로 검증한다(브라우저 불필요).
+      - name: JavaScript tests
+        run: node --test tests/js/*.test.mjs
 
   lint:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
 
-      - name: Install ruff
-        run: pip install ruff
-
+      # ruff 는 dev 의존성으로 버전을 고정한다(pyproject). `pip install ruff` 로 최신판을
+      # 받으면 기본 규칙 세트가 바뀔 때마다 CI 가 예고 없이 빨개진다.
       - name: Lint
-        run: ruff check backend/ tests/
+        run: uv run --frozen --only-group dev ruff check backend/ tests/
 
       - name: Format check
-        run: ruff format --check backend/ tests/
+        run: uv run --frozen --only-group dev ruff format --check backend/ tests/
 
   docker:
     runs-on: ubuntu-latest

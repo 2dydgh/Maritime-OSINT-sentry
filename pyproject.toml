@@ -44,4 +44,25 @@ dev = [
     "pillow>=12.2.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "ruff==0.16.8",
 ]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["collision_model_new", "static", "electron"]
+
+[tool.ruff.lint]
+# CI 는 ruff 기본 규칙 세트(0.16)를 그대로 쓴다. 아래는 이 코드베이스에서 의도적인 것만 제외한다.
+ignore = [
+    "BLE001",  # `except Exception`: DB·외부 서비스가 죽어도 실시간 기능은 계속 돌아야 한다(CLAUDE.md graceful degrade)
+    "C408",    # dict(a=1) 호출 스타일 — 키워드 인자 표기를 의도적으로 쓴다
+    "B008",    # FastAPI 의 `Query(...)`/`Depends(...)` 기본값은 프레임워크 관용구다
+    "TRY004",  # data_platform.normalize 는 잘못된 입력에 ValueError 를 내는 것이 호출자와의 계약이다
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 위성·Sentinel 모듈은 naive UTC datetime 을 일관되게 쓴다. 한 곳만 aware 로 바꾸면
+# 같은 모듈 안에서 naive/aware 연산이 섞여 TypeError 가 난다. 모듈 단위로 옮길 때 함께 해제.
+"backend/services/satellite_tracker.py" = ["DTZ001", "DTZ003", "DTZ007"]
+"backend/services/sentinel_search.py" = ["DTZ003"]
