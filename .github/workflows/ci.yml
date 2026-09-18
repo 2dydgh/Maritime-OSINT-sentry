@@ -61,7 +61,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t osint-sentry:ci .
+        # 외부 GSHHG 서버가 죽어도 이미지 빌드·헬스체크는 검증한다(Dockerfile 주석 참고).
+        run: docker build --build-arg GSHHG_REQUIRED=0 -t osint-sentry:ci .
 
       - name: Test health endpoint
         run: |
