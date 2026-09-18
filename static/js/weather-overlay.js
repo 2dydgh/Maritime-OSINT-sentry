@@ -295,7 +295,7 @@ function _buildWindBubble(speed, dirDeg) {
 
     // 숫자
     ctx.fillStyle = '#fff';
-    ctx.font = '700 11px "B612 Mono", "JetBrains Mono", "Pretendard Variable", monospace';
+    ctx.font = '700 11px "JetBrains Mono", "Pretendard Variable", monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(String(sp), cx, cy + 0.5);
 

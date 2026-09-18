@@ -5,28 +5,36 @@
 - Mock 폴리곤으로 교차 로직 검증
 - 실제 shapefile이 있으면 통합 테스트도 실행
 """
-import pytest
+
 from unittest.mock import patch
-from shapely.geometry import Polygon
+
+import pytest
 from shapely import STRtree
+from shapely.geometry import Polygon
 
 from backend.services import land_filter
 
-
 # --- 단위 테스트: Mock 폴리곤으로 교차 로직 검증 ---
+
 
 @pytest.fixture
 def mock_land():
     """제주도 크기의 가짜 육지 폴리곤을 주입."""
-    fake_land = Polygon([
-        (126.0, 33.0), (127.0, 33.0),
-        (127.0, 34.0), (126.0, 34.0),
-        (126.0, 33.0),
-    ])
+    fake_land = Polygon(
+        [
+            (126.0, 33.0),
+            (127.0, 33.0),
+            (127.0, 34.0),
+            (126.0, 34.0),
+            (126.0, 33.0),
+        ]
+    )
     fake_tree = STRtree([fake_land])
-    with patch.object(land_filter, '_land_geom', [fake_land]), \
-         patch.object(land_filter, '_land_tree', fake_tree), \
-         patch.object(land_filter, '_loaded', True):
+    with (
+        patch.object(land_filter, "_land_geom", [fake_land]),
+        patch.object(land_filter, "_land_tree", fake_tree),
+        patch.object(land_filter, "_loaded", True),
+    ):
         yield
 
 
@@ -57,6 +65,7 @@ SHAPEFILE_PATH = "backend/data/land/GSHHS_i_L1.shp"
 def real_land():
     """실제 shapefile이 존재하면 로드."""
     import os
+
     if not os.path.exists(SHAPEFILE_PATH):
         pytest.skip("shapefile not found — skipping integration test")
     land_filter.load_land_index(SHAPEFILE_PATH)

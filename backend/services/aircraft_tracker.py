@@ -10,7 +10,7 @@ import time
 
 import httpx
 
-from backend.config import OPENSKY_USERNAME, OPENSKY_PASSWORD
+from backend.config import OPENSKY_PASSWORD, OPENSKY_USERNAME
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +99,9 @@ _aircraft_lock = threading.Lock()
 
 _tracker_thread: threading.Thread | None = None
 _tracker_running = False
+# Interruptible backoff wait — set by stop_aircraft_tracker() so the loop wakes
+# immediately instead of blocking in time.sleep().
+_tracker_stop = threading.Event()
 
 
 def get_aircraft() -> list[dict]:
@@ -130,21 +133,25 @@ def get_aircraft() -> list[dict]:
                 no_pos_count += 1
                 continue
 
-            result.append({
-                "icao24": icao24,
-                "callsign": ac.get("callsign", ""),
-                "lat": ac.get("lat"),
-                "lng": ac.get("lng"),
-                "altitude": ac.get("altitude"),
-                "velocity": ac.get("velocity"),
-                "heading": ac.get("heading"),
-                "vertical_rate": ac.get("vertical_rate"),
-                "on_ground": ac.get("on_ground", False),
-                "category": ac.get("type", "other"),
-                "origin_country": ac.get("origin_country", ""),
-            })
+            result.append(
+                {
+                    "icao24": icao24,
+                    "callsign": ac.get("callsign", ""),
+                    "lat": ac.get("lat"),
+                    "lng": ac.get("lng"),
+                    "altitude": ac.get("altitude"),
+                    "velocity": ac.get("velocity"),
+                    "heading": ac.get("heading"),
+                    "vertical_rate": ac.get("vertical_rate"),
+                    "on_ground": ac.get("on_ground", False),
+                    "category": ac.get("type", "other"),
+                    "origin_country": ac.get("origin_country", ""),
+                }
+            )
 
-    logger.info(f"get_aircraft: total={total_before}, pruned={len(stale_keys)}, ground={ground_count}, no_pos={no_pos_count}, airborne={len(result)}")
+    logger.info(
+        f"get_aircraft: total={total_before}, pruned={len(stale_keys)}, ground={ground_count}, no_pos={no_pos_count}, airborne={len(result)}"
+    )
     return result
 
 
@@ -252,11 +259,9 @@ def _tracker_loop() -> None:
             backoff = min(backoff * 2, 120)  # double up to 120 s max
             logger.info(f"Retrying OpenSky poll in {backoff}s")
 
-        # Sleep in 1-second increments for quick shutdown response
-        elapsed = 0
-        while _tracker_running and elapsed < backoff:
-            time.sleep(1)
-            elapsed += 1
+        # Interruptible wait — wakes immediately when stop_aircraft_tracker()
+        # sets the event, otherwise blocks for the full backoff window.
+        _tracker_stop.wait(backoff)
 
 
 def start_aircraft_tracker() -> None:
@@ -268,6 +273,7 @@ def start_aircraft_tracker() -> None:
         return
 
     _tracker_running = True
+    _tracker_stop.clear()
     _tracker_thread = threading.Thread(
         target=_tracker_loop,
         daemon=True,
@@ -281,4 +287,5 @@ def stop_aircraft_tracker() -> None:
     """Signal the background polling thread to stop."""
     global _tracker_running
     _tracker_running = False
+    _tracker_stop.set()  # wake the loop out of its backoff wait immediately
     logger.info("Aircraft tracker stopping...")

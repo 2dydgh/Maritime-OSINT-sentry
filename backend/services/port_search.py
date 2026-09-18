@@ -4,8 +4,8 @@ Supports Korean and English port name search.
 """
 
 import json
-import os
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +58,12 @@ _ports = []
 
 def _load_ports():
     """Load port data from searoute's built-in ports.geojson."""
-    global _ports
     if _ports:
         return
 
     try:
         import searoute
+
         pkg_dir = os.path.dirname(searoute.__file__)
         ports_path = os.path.join(pkg_dir, "data", "ports.geojson")
 
@@ -76,14 +76,16 @@ def _load_ports():
             if len(coords) >= 2:
                 raw_name = props.get("name", "Unknown")
                 display_name = _NAME_CANONICAL.get(raw_name, raw_name)
-                _ports.append({
-                    "name": display_name,
-                    "raw_name": raw_name,
-                    "country": props.get("cty", "Unknown"),
-                    "port_code": props.get("port", ""),
-                    "lng": coords[0],
-                    "lat": coords[1],
-                })
+                _ports.append(
+                    {
+                        "name": display_name,
+                        "raw_name": raw_name,
+                        "country": props.get("cty", "Unknown"),
+                        "port_code": props.get("port", ""),
+                        "lng": coords[0],
+                        "lat": coords[1],
+                    }
+                )
 
         logger.info(f"Loaded {len(_ports)} ports from searoute database")
     except Exception as e:
@@ -103,13 +105,15 @@ def search_ports(query: str, max_results: int = 10) -> list[dict]:
             if key in seen:
                 continue
             seen.add(key)
-            results.append({
-                "name": port["name"],
-                "country": port["country"],
-                "port_code": port["port_code"],
-                "lng": port["lng"],
-                "lat": port["lat"],
-            })
+            results.append(
+                {
+                    "name": port["name"],
+                    "country": port["country"],
+                    "port_code": port["port_code"],
+                    "lng": port["lng"],
+                    "lat": port["lat"],
+                }
+            )
             if len(results) >= max_results:
                 break
         return results
@@ -145,13 +149,15 @@ def search_ports(query: str, max_results: int = 10) -> list[dict]:
         if key in seen:
             continue
         seen.add(key)
-        results.append({
-            "name": port["name"],
-            "country": port["country"],
-            "port_code": port["port_code"],
-            "lng": port["lng"],
-            "lat": port["lat"],
-        })
+        results.append(
+            {
+                "name": port["name"],
+                "country": port["country"],
+                "port_code": port["port_code"],
+                "lng": port["lng"],
+                "lat": port["lat"],
+            }
+        )
         if len(results) >= max_results:
             break
     return results

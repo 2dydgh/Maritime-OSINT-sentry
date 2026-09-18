@@ -1,17 +1,50 @@
-import os
-import logging
 import asyncio
+import json
+import logging
+import os
+import time
+from collections import deque
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from . import database, config, websocket
-from .services import ais_stream, data_fetcher, history_writer, aircraft_tracker, ais_fallback
-from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision, weather, route, aircraft, chat, hazard
+from . import config, database, websocket
+from .routers import (
+    aircraft,
+    alerts,
+    chat,
+    collision,
+    collision_scenarios,
+    data,
+    datasets,
+    events,
+    hazard,
+    health,
+    history,
+    investigations,
+    knowledge,
+    metrics,
+    proposals,
+    route,
+    satellites,
+    sentinel,
+    ships,
+    weather,
+)
 from .routers.hazard import warm_cache as warm_hazard_cache
-from .services import collision_analyzer, land_filter
+from .services import (
+    aircraft_tracker,
+    ais_fallback,
+    ais_stream,
+    collision_analyzer,
+    data_fetcher,
+    history_writer,
+    land_filter,
+    llm_agent,
+    watch_officer,
+)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +54,21 @@ logger = logging.getLogger(__name__)
 # Feed status state (broadcast 루프 전용, 단일 루프라 락 불필요)
 _feed_status = "live"
 _feed_low_streak = 0
+
+# Per-service readiness, populated during lifespan startup. Broadcast loops gate
+# on these so they don't run before their dependencies have initialized.
+_readiness = {"db": False, "ais": False, "redis": False, "llm": False}
+
+# Inbound WebSocket guards. Clients on the broadcast socket have nothing
+# meaningful to send us, so we cap frame size and message rate and otherwise
+# ignore their input — this protects the event loop from abusive connections.
+WS_MAX_MESSAGE_BYTES = 64 * 1024
+WS_RATE_WINDOW_SEC = 10.0
+WS_RATE_MAX_MSGS = 100
+# Backpressure: drop a client that can't drain the snapshot within this budget.
+WS_SEND_TIMEOUT_SEC = 5.0
+# Graceful-shutdown budget for cancelling each background task / stopping writers.
+SHUTDOWN_TIMEOUT_SEC = 5.0
 
 
 async def _build_feed_text() -> str:
@@ -38,9 +86,7 @@ async def _build_feed_text() -> str:
         snap = await ais_fallback.get_fallback_snapshot()
         snap_time_ms = ais_fallback.get_snapshot_time_ms()
 
-    status, _feed_low_streak = ais_fallback.select_feed_status(
-        len(live), len(snap), _feed_status, _feed_low_streak
-    )
+    status, _feed_low_streak = ais_fallback.select_feed_status(len(live), len(snap), _feed_status, _feed_low_streak)
     _feed_status = status
 
     if status == "fallback":
@@ -50,9 +96,8 @@ async def _build_feed_text() -> str:
     else:  # down
         ships, st = [], None
 
-    return await asyncio.to_thread(
-        ais_fallback.build_feed_payload, ships, status, st
-    )
+    return await asyncio.to_thread(ais_fallback.build_feed_payload, ships, status, st)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -60,6 +105,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up OSINT 4D Backend...")
     try:
         await database.init_db()
+        _readiness["db"] = True
     except Exception as e:
         logger.warning(f"Database init failed — running in lightweight mode: {e}")
 
@@ -76,9 +122,7 @@ async def lifespan(app: FastAPI):
 
     # Load land shapefile in background (non-blocking)
     # 서버는 즉시 시작되고, 로딩 완료 전까지 육지 필터링은 비활성 (안전한 기본값)
-    land_shapefile = os.path.join(
-        os.path.dirname(__file__), "data", "land", "ne_10m_land.shp"
-    )
+    land_shapefile = os.path.join(os.path.dirname(__file__), "data", "land", "ne_10m_land.shp")
     land_filter.start_land_index_loading(land_shapefile)
 
     # Pre-compute /hazard/korea response so the first request is instant.
@@ -89,6 +133,7 @@ async def lifespan(app: FastAPI):
     # Pre-warm searoute graph (~2s first call)
     try:
         import searoute as _sr
+
         _sr.searoute([129.0, 35.1], [103.8, 1.3])  # Busan→Singapore
         logger.info("searoute graph pre-loaded")
     except Exception as e:
@@ -96,9 +141,38 @@ async def lifespan(app: FastAPI):
 
     # Start AIS Stream Background Task
     ais_stream.start_ais_stream()
-    
+    _readiness["ais"] = True
+
     # Optional: Start period data fetcher if needed for REST fallbacks
     data_fetcher.start_data_fetcher()
+
+    # Best-effort readiness probes for optional services. These never block the
+    # real-time pipeline — a failure just leaves the flag False (graceful degrade).
+    async def _probe_redis():
+        try:
+            import redis.asyncio as _redis
+
+            client = _redis.from_url(config.REDIS_URL)
+            try:
+                await asyncio.wait_for(client.ping(), timeout=2.0)
+                _readiness["redis"] = True
+            finally:
+                await client.aclose()
+        except Exception as e:
+            logger.info(f"Redis not ready (optional): {e}")
+
+    async def _probe_llm():
+        try:
+            from .config_llm import OLLAMA_BASE_URL
+
+            client = llm_agent._get_client()
+            resp = await asyncio.wait_for(client.get(f"{OLLAMA_BASE_URL}/api/tags"), timeout=2.0)
+            _readiness["llm"] = resp.status_code == 200
+        except Exception as e:
+            logger.info(f"LLM (Ollama) not ready (optional): {e}")
+
+    asyncio.create_task(_probe_redis())
+    asyncio.create_task(_probe_llm())
 
     # Aircraft Tracker (OpenSky Network) is NOT started here — it is lazily
     # started the first time the user enables the 항공 layer, via
@@ -108,8 +182,9 @@ async def lifespan(app: FastAPI):
     async def broadcast_ships():
         while True:
             try:
-                text = await _build_feed_text()
-                await websocket.manager.broadcast_text(text)
+                if _readiness["ais"]:
+                    text = await _build_feed_text()
+                    await websocket.manager.broadcast_text(text)
             except Exception as e:
                 logger.error(f"Error in ship broadcast loop: {e}")
             await asyncio.sleep(3)  # 3s — frontend LED turns "connecting" only past 5s
@@ -120,14 +195,19 @@ async def lifespan(app: FastAPI):
     async def broadcast_aircraft():
         while True:
             try:
-                ac_list = aircraft_tracker.get_aircraft()
-                if ac_list:
-                    await websocket.manager.broadcast({
-                        "type": "aircraft_update",
-                        "aircraft": ac_list,
-                        "total_tracked": len(ac_list),
-                        "server_time_ms": int(__import__('time').time() * 1000)
-                    })
+                if _readiness["ais"]:
+                    ac_list = aircraft_tracker.get_aircraft()
+                    if ac_list:
+                        payload = {
+                            "type": "aircraft_update",
+                            "aircraft": ac_list,
+                            "total_tracked": len(ac_list),
+                            "server_time_ms": int(time.time() * 1000),
+                        }
+                        # Serialize once off-loop, then fan out the string — mirrors
+                        # the ships broadcast_text path instead of send_json per client.
+                        text = await asyncio.to_thread(json.dumps, payload)
+                        await websocket.manager.broadcast_text(text)
             except Exception as e:
                 logger.error(f"Error in aircraft broadcast loop: {e}")
             await asyncio.sleep(10)  # Broadcast every 10s (matching OpenSky poll rate)
@@ -151,37 +231,84 @@ async def lifespan(app: FastAPI):
                 # Off-loop: global snapshot is ~30k vessels under a contended lock
                 vessels = await asyncio.to_thread(ais_stream.get_ais_vessels)
                 await collision_analyzer.update_collision_cache(vessels)
+                await asyncio.to_thread(watch_officer.on_collision_update)
             except Exception as e:
                 logger.error(f"Collision analysis error: {e}")
 
     collision_task = asyncio.create_task(collision_scanner())
-    
+    from .services.investigation_store import Repository as InvestigationRepository
+
+    investigation_repo = InvestigationRepository()
+    with investigation_repo.store.transaction() as db:
+        investigation_repo.recover(db)
+
     yield
-    
+
     # Shutdown logic
     logger.info("Shutting down OSINT 4D Backend...")
+    from .services import investigation_agent
+
+    await investigation_agent.shutdown()
     ais_stream.stop_ais_stream()
-    broadcast_task.cancel()
-    collision_task.cancel()
     aircraft_tracker.stop_aircraft_tracker()
-    aircraft_broadcast_task.cancel()
     data_fetcher.stop_data_fetcher()
 
-    # Stop history writer and flush remaining buffer
+    async def _cancel(task, name):
+        """Cancel a background task and bound the wait so shutdown can't hang."""
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=SHUTDOWN_TIMEOUT_SEC)
+        except (TimeoutError, asyncio.CancelledError):
+            pass
+        except Exception as e:
+            logger.error(f"Error awaiting {name} cancellation: {e}")
+
+    await _cancel(broadcast_task, "ship broadcast")
+    await _cancel(aircraft_broadcast_task, "aircraft broadcast")
+    await _cancel(collision_task, "collision scanner")
+
+    # Stop history writer and flush remaining buffer (bounded so we don't hang)
     try:
-        await history_writer.stop_history_writer()
+        await asyncio.wait_for(history_writer.stop_history_writer(), timeout=SHUTDOWN_TIMEOUT_SEC)
+    except TimeoutError:
+        logger.error("history writer stop timed out")
     except Exception as e:
         logger.error(f"Error stopping history writer: {e}")
 
+    # Release the shared LLM httpx connection pool.
+    try:
+        await asyncio.wait_for(llm_agent.close_client(), timeout=SHUTDOWN_TIMEOUT_SEC)
+    except TimeoutError:
+        logger.error("LLM client close timed out")
+    except Exception as e:
+        logger.error(f"Error closing LLM client: {e}")
+
     await database.close_db()
+
 
 app = FastAPI(title="OSINT 4D Dashboard", lifespan=lifespan)
 
-# CORS Middleware
+# CORS Middleware — origins are env-configurable (CORS_ALLOW_ORIGINS, comma-separated).
+# Browsers reject "*" together with credentials, so if a wildcard is configured we
+# disable credentials rather than emitting an invalid CORS policy.
+_default_cors_origins = [
+    "http://localhost:8001",
+    "http://localhost:12081",
+    "http://127.0.0.1:8001",
+    "http://127.0.0.1:12081",
+    "https://maritime-osint-sentry.onrender.com",
+]
+_cors_env = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
+if _cors_env:
+    _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+else:
+    _cors_origins = _default_cors_origins
+_cors_allow_credentials = "*" not in _cors_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -189,6 +316,7 @@ app.add_middleware(
 # Dev only (DEV_NO_CACHE=1): no-store on static assets so a plain browser refresh
 # always serves the latest CSS/JS — removes the need to bump ?v= after every edit.
 if config.DEV_NO_CACHE:
+
     @app.middleware("http")
     async def _no_cache_static(request, call_next):
         resp = await call_next(request)
@@ -196,7 +324,9 @@ if config.DEV_NO_CACHE:
         if path == "/" or path.endswith((".css", ".js", ".html")):
             resp.headers["Cache-Control"] = "no-store"
         return resp
+
     logging.getLogger(__name__).info("DEV_NO_CACHE on — static assets served no-store")
+
 
 # WebSocket Endpoint
 @app.websocket("/api/v1/ws/ships")
@@ -204,19 +334,41 @@ async def websocket_ships(ws: WebSocket):
     await websocket.manager.connect(ws)
     # Immediate snapshot on connect — clients otherwise wait up to 1s for the
     # next broadcast_ships() tick, which is the dominant "서버 연결 중" delay.
+    # Backpressure: bound the send so a stalled client can't wedge the handshake.
     try:
         text = await _build_feed_text()
-        await ws.send_text(text)
+        await asyncio.wait_for(ws.send_text(text), timeout=WS_SEND_TIMEOUT_SEC)
+    except TimeoutError:
+        logger.warning("Initial ship snapshot send timed out — dropping client")
+        websocket.manager.disconnect(ws)
+        return
     except Exception as e:
         logger.error(f"Initial ship snapshot failed: {e}")
+
+    # Inbound guard: this socket is broadcast-only, so we just validate and drop
+    # client frames. Oversized frames are ignored; flooding disconnects the client.
+    recent_msgs: deque = deque()
     try:
         while True:
-            await ws.receive_text()
+            msg = await ws.receive_text()
+            if not isinstance(msg, str) or len(msg) > WS_MAX_MESSAGE_BYTES:
+                logger.warning("WS frame rejected (invalid or too large)")
+                continue
+            now = time.monotonic()
+            recent_msgs.append(now)
+            while recent_msgs and now - recent_msgs[0] > WS_RATE_WINDOW_SEC:
+                recent_msgs.popleft()
+            if len(recent_msgs) > WS_RATE_MAX_MSGS:
+                logger.warning("WS client exceeded inbound rate limit — disconnecting")
+                break
+            # No commands are processed on this socket; frame is intentionally ignored.
     except WebSocketDisconnect:
-        websocket.manager.disconnect(ws)
+        pass
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+    finally:
         websocket.manager.disconnect(ws)
+
 
 # Aircraft tracker control — the OpenSky poller is started on demand the first
 # time the user turns on the 항공 layer, rather than at server boot.
@@ -225,10 +377,12 @@ async def aircraft_start():
     aircraft_tracker.start_aircraft_tracker()
     return {"status": "started"}
 
+
 @app.post("/api/v1/aircraft/stop")
 async def aircraft_stop():
     aircraft_tracker.stop_aircraft_tracker()
     return {"status": "stopped"}
+
 
 # Include Routers
 app.include_router(ships.router, prefix="/api/v1")
@@ -246,9 +400,15 @@ app.include_router(route.router, prefix="/api/v1")
 app.include_router(aircraft.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(hazard.router, prefix="/api/v1")
+app.include_router(datasets.router, prefix="/api/v1")
+app.include_router(proposals.router, prefix="/api/v1")
+app.include_router(knowledge.router, prefix="/api/v1")
+app.include_router(investigations.router, prefix="/api/v1")
+app.include_router(collision_scenarios.router, prefix="/api/v1")
 
 # Static Files — resolve path for both normal and PyInstaller frozen mode
 import sys as _sys
+
 if getattr(_sys, "frozen", False):
     _base_dir = getattr(_sys, "_MEIPASS", os.path.dirname(_sys.executable))
 else:
@@ -258,4 +418,5 @@ app.mount("/", StaticFiles(directory=_static_dir, html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("backend.main:app", host="0.0.0.0", port=config.PORT, reload=True)

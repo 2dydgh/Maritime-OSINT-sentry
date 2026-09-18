@@ -1,0 +1,325 @@
+/* 항적 시나리오 비교 다이얼로그 — UI 크롬은 theme.css 토큰만 사용.
+   예외는 항적 계열색 두 개(--track-*)뿐이다: 지도/3D 위에 얹히는 데이터 인코딩이라
+   UI 팔레트가 아니라 범례와 짝을 이룬다. collision-scenarios.js 의 리터럴과
+   반드시 같은 값을 유지할 것.
+   포커스 링은 main.css 전역(파랑)을 상속한다 — 주황으로 덮지 말 것. */
+
+.scenario-dialog {
+    /* 항적 계열색 — js 의 tracks() 리터럴과 1:1 대응 */
+    --track-baseline: #58a6ff;      /* 기준 유지 · 파랑 점선 */
+    --track-alternative: #ffb454;   /* 변경안 · 주황 실선 */
+    --track-subject: #eef3fc;       /* 상대 선박 */
+    --track-nearby: #7d899e;        /* 주변 선박 */
+
+    box-sizing: border-box;
+    width: min(1100px, 94vw);
+    max-height: 92vh;
+    overflow: auto;
+    padding: 24px;
+    background: var(--panel-bg);
+    color: var(--text-main);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-group);
+    box-shadow: var(--shadow-panel);
+    font-family: var(--font-body);
+}
+.scenario-dialog::backdrop { background: var(--dialog-backdrop); }
+.scenario-dialog h2 { font-family: var(--font-display); margin: 5px 0; font-size: 23px; }
+.scenario-dialog [hidden] { display: none !important; }
+
+/* ── 헤더 ── */
+.scenario-playback { display: flex; align-items: center; gap: 12px; }
+.scenario-dialog header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.scenario-dialog small { color: var(--secondary); letter-spacing: .15em; }
+/* 무엇을 하는 화면인지 제목 바로 밑에서 한 번에 말한다. 나머지 두 다이얼로그와 같은 자리. */
+.scenario-intro { margin: 6px 0 0; max-width: 62ch; color: var(--secondary); font-size: 13px; line-height: 1.65; }
+
+/* 스크롤바는 main.css 의 전역 규칙을 그대로 쓴다 — 여기서 다시 정의하지 말 것. */
+
+/* ── 컨트롤 ── */
+.scenario-dialog button {
+    font: inherit;
+    color: var(--text-main);
+    background: var(--btn-surface);
+    border: 1px solid var(--btn-border);
+    border-radius: var(--radius-pill);
+    padding: 8px;
+    cursor: pointer;
+    transition: var(--btn-transition);
+}
+/* 입력류는 .proposal-card input 과 같은 언어(어두운 우물 + panel-border).
+   버튼의 반투명 표면을 쓰면 안 된다 — select 펼침 목록이 그 배경으로 그려진다. */
+.scenario-dialog input,
+.scenario-dialog select {
+    font: inherit;
+    color: var(--text-main);
+    background: var(--control-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-pill);
+    padding: 8px;
+}
+.scenario-dialog input:hover:not(:disabled),
+.scenario-dialog select:hover:not(:disabled) { border-color: var(--btn-border-hover); }
+/* OS 기본 위젯 대신 팔레트 화살표를 쓴다. 펼침 목록은 브라우저가 그리므로
+   option 의 배경·글자색을 명시해야 어두운 테마에서 읽힌다. */
+.scenario-dialog select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: var(--select-chevron);
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+}
+.scenario-dialog option { background: var(--control-bg); color: var(--text-main); }
+/* range 는 기본 트랙을 살리고 색만 브랜드로 — 테두리·패딩을 얹으면 형태가 깨진다. */
+.scenario-dialog input[type="range"] { padding: 0; border: 0; background: none; accent-color: var(--primary); }
+.scenario-dialog button:hover:not(:disabled) { background: var(--btn-surface-hover); border-color: var(--btn-border-hover); }
+.scenario-dialog button:disabled { opacity: .45; cursor: default; }
+/* ── 입력 폼 ──
+   6칸이 한 줄에 평평하게 늘어서 있어 무엇이 필수 조건이고 무엇이 미세 가정인지
+   읽히지 않았다. 질문 세 개로 묶는다: 무엇을 바꾸나 / 얼마나 내다보나 /
+   얼마나 빨리 반응하나. 마지막은 기본값이 있는 보조 입력이라 무게를 낮춘다. */
+.scenario-dialog form { display: flex; gap: 10px 18px; align-items: end; flex-wrap: wrap; margin: 16px 0; }
+/* fieldset 은 block 으로 두고 실제 가로 배치는 안쪽 .sf-row 가 한다 —
+   fieldset 에 직접 display:flex 를 걸면 legend 처리가 브라우저마다 갈린다. */
+.sf-group { display: block; margin: 0; padding: 0; border: 0; min-width: 0; }
+.sf-group > legend {
+    display: block;
+    margin-bottom: 7px;
+    padding: 0;
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.09em;
+}
+.sf-row { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
+.sf-group.is-secondary > legend { color: var(--text-muted); }
+.sf-group.is-secondary label { color: var(--text-dim); }
+.sf-group.is-secondary input { background: none; border-color: var(--divider); }
+.sf-group.is-secondary input:focus { background: var(--control-bg); }
+.scenario-dialog label { display: grid; gap: 5px; font-size: 12px; }
+.scenario-dialog label select { max-width: 260px; }
+.scenario-dialog input[type="number"] { width: 84px; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+/* 회피 기동 프리셋 — "무엇을 넣어야 하나" 를 없앤다. 값은 현재 값 기준 상대 변경이라
+   입력칸을 채워줄 뿐이고, 계산은 여전히 조건 비교하기로 한다. */
+.sf-presets { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.sf-presets > span { color: var(--text-dim); font-size: 10px; letter-spacing: 0.09em; margin-right: 2px; }
+.sf-presets button { padding: 4px 9px; font-size: 11px; border-radius: var(--radius-tag); color: var(--secondary); }
+.sf-presets button:hover { color: var(--text-main); }
+/* 바꾼 게 없으면 계산해봐야 '변화 없음' 만 나온다. 왜 못 누르는지 옆에서 말해준다. */
+.sf-hint { flex-basis: 100%; margin: 8px 0 0; color: var(--caution); font-size: 12px; }
+.sf-hint:empty { display: none; }
+
+/* 유일한 주 동작 — 옆의 입력들과 같은 무게로 두면 어디를 눌러야 할지 모른다. */
+.sf-submit { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.sf-submit:hover:not(:disabled) { background: var(--accent-glow); border-color: var(--accent-glow); }
+
+/* ── 빈 상태 ──────────────────────────────────────────────────
+   스냅샷이 오기 전(특히 패널 헤더의 '저장한 비교'로 바로 들어온 경우)에는
+   입력 폼·무대·재생이 전부 동작하지 않는다. '변경할 선박' 은 옵션이 0개라
+   열면 빈 목록이 나오고, 계산·재생 버튼은 disabled 다. 죽은 컨트롤을 늘어놓는
+   대신 감추고, 이때 유일하게 할 수 있는 일(기록 고르기)만 남긴다. */
+.scenario-dialog.is-empty form,
+.scenario-dialog.is-empty .scenario-metrics,
+.scenario-dialog.is-empty .scenario-stage,
+.scenario-dialog.is-empty .scenario-playback,
+.scenario-dialog.is-empty .scenario-legend,
+.scenario-dialog.is-empty .scenario-details,
+.scenario-dialog.is-empty .scenario-viewswitch { display: none; }
+/* 남은 하나를 화면의 주어로 올린다. */
+.scenario-dialog.is-empty .scenario-stagebar { justify-content: flex-start; margin-top: 18px; }
+.scenario-dialog.is-empty .scenario-records { gap: 10px; }
+.scenario-dialog.is-empty [data-sc="message"] { font-size: 14px; color: var(--text-main); }
+
+/* ── 무대 위 제어줄 — 보기 전환(왼쪽)과 기록 불러오기(오른쪽)는 다른 일이다. ── */
+.scenario-stagebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.scenario-viewswitch { display: flex; gap: 2px; padding: 2px; background: var(--surface-sunken); border-radius: var(--radius-group); }
+.scenario-viewswitch button { background: none; border: 0; font-size: 12px; padding: 6px 12px; border-radius: var(--radius-pill); color: var(--secondary); }
+/* 배타 선택이므로 현재 보기가 눌린 상태로 보여야 한다. */
+.scenario-viewswitch button[aria-pressed="true"] { background: var(--primary-muted); color: var(--text-main); box-shadow: var(--seg-active-shadow); }
+.scenario-records { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scenario-dialog [data-sc="message"] { font-size: 13px; color: var(--secondary); min-height: 18px; }
+
+/* ── 비교 결과 ───────────────────────────────────────────────
+   이 화면의 답은 "얼마나 벌어졌나"다. 판정(.scenario-verdict)이 먼저 오고
+   원시값(.scenario-breakdown)은 근거로 물러난다. 예전에는 두 값이 같은 무게로
+   나란히 있어 운용자가 차이를 암산해야 했다. */
+.scenario-metrics { margin: 16px 0; }
+
+.scenario-verdict {
+    display: grid;
+    gap: 1px;
+    background: var(--divider);      /* 1px 헤어라인을 gap 으로 — 행마다 테두리를 두르지 않는다 */
+    border: 1px solid var(--divider);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+}
+.sv-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: baseline;
+    gap: 8px 20px;
+    padding: 13px 16px;
+    background: var(--surface-inset);
+}
+.sv-label { color: var(--secondary); font-size: 12px; }
+.sv-pair { font-family: var(--font-data); font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sv-from { color: var(--text-dim); }
+.sv-arrow { margin: 0 6px; color: var(--text-dim); }
+.sv-to { color: var(--text-main); font-weight: 700; }
+.sv-unit { margin-left: 5px; color: var(--secondary); font-size: 12px; }
+.sv-delta {
+    justify-self: end;
+    min-width: 8.5em;
+    text-align: right;
+    font-family: var(--font-data);
+    font-size: 19px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--text-main);
+}
+/* 주의가 필요한 방향(가까워짐 / 근접 쌍 증가)에만 색을 쓴다. 벌어진 쪽을 초록으로
+   칠하면 "이렇게 해도 안전하다"로 읽히는데 이 계산은 안전 판정이 아니다. */
+.sv-row.is-attention .sv-delta { color: var(--sev-caution); }
+
+.scenario-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.scenario-breakdown article { min-width: 0; padding: 12px 14px; background: var(--surface-inset); border-radius: var(--radius-pill); }
+.scenario-breakdown h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 9px;
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--text-main);
+}
+/* 범례와 같은 스와치 어휘로 두 열의 정체를 항적 색과 묶는다. */
+.scenario-breakdown h4::before { content: ""; width: 16px; flex-shrink: 0; }
+.sb-baseline h4::before { border-top: 2px dashed var(--track-baseline); }
+.sb-alternative h4::before { border-top: 2px solid var(--track-alternative); }
+.scenario-breakdown dl {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 5px 12px;
+    margin: 0;
+    font-size: 12px;
+}
+.scenario-breakdown dt { color: var(--secondary); }
+.scenario-breakdown dd { margin: 0; font-family: var(--font-data); font-variant-numeric: tabular-nums; color: var(--text-main); }
+.scenario-breakdown dd:last-of-type { font-family: var(--font-body); color: var(--secondary); }
+
+/* ── 무대 (2D 지도 / 3D) ── */
+.scenario-stage {
+    position: relative;
+    height: 360px;
+    background: var(--ocean-depth);
+    border: 1px solid var(--panel-border);
+}
+.scenario-map,
+.scenario-three { width: 100%; height: 100%; }
+.scenario-three canvas { display: block; }
+
+/* 입력이 바뀐 뒤 아직 재계산하지 않은 결과 — 살아있는 값처럼 보이지 않게 죽인다. */
+.scenario-metrics.is-stale,
+.scenario-stage.is-stale { opacity: .45; filter: saturate(.4); transition: opacity .2s ease, filter .2s ease; }
+
+.scenario-ocean-controls {
+    position: absolute;
+    z-index: 2;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.scenario-ocean-controls button { background: var(--btn-overlay-bg); border-color: var(--btn-overlay-border); font-size: 12px; }
+.scenario-ocean-controls button:hover { background: var(--btn-overlay-bg-hover); border-color: var(--btn-overlay-border-hover); }
+.scenario-ocean-controls button[aria-pressed="true"] { background: var(--primary-muted); border-color: var(--primary); }
+.scenario-ocean-controls span { font-size: 11px; color: var(--text-main); text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
+.scenario-ocean-note {
+    position: absolute;
+    z-index: 2;
+    bottom: 10px;
+    left: 12px;
+    right: 12px;
+    padding: 5px 8px;
+    background: var(--btn-overlay-bg);
+    color: var(--secondary);
+    font-size: 11px;
+    pointer-events: none;
+}
+
+/* ── 재생 ──
+   이동(재생·슬라이더·시계)과 점프(최접근 시점)는 다른 종류의 동작이라 분리한다. */
+.scenario-playback { margin-top: 12px; flex-wrap: wrap; justify-content: space-between; }
+.sp-transport { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 240px; }
+.sp-transport input { flex: 1; min-width: 100px; }
+.scenario-playback output { font-family: var(--font-data); font-variant-numeric: tabular-nums; color: var(--text-main); }
+.sp-jump { font-size: 12px; color: var(--secondary); }
+
+/* ── 범례 · 주석 ──
+   "파랑 점선: 기준" 이라고 글로 쓰던 것을 실제 선 견본으로 바꾼다. 지도에 그려진
+   선과 같은 색·같은 파선 패턴이라 눈으로 바로 대조된다. */
+.scenario-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 12px 0; }
+.scenario-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.scenario-legend .sw { width: 18px; flex-shrink: 0; }
+.sw-base { border-top: 2px dashed var(--track-baseline); }
+.sw-alt { border-top: 2px solid var(--track-alternative); }
+.sw-subject { border-top: 2px solid var(--track-subject); }
+.sw-nearby { border-top: 2px solid var(--track-nearby); }
+.sl-note { margin-left: auto; color: var(--text-dim); }
+
+.scenario-legend,
+.scenario-details { font-size: 12px; line-height: 1.7; color: var(--secondary); }
+.scenario-details summary { cursor: pointer; }
+.scenario-dialog .scenario-details strong { color: var(--caution); }
+
+/* 충돌 목록 행의 비교 버튼(.cr-compare)은 main.css 가 소유한다 —
+   메인 목록의 행 요소를 다이얼로그 스타일시트에서 꾸미고 있던 것을 정리했다. */
+
+/* ── 판단 이후 후속 관측 (decision-followup.js) ── */
+.decision-followup {
+    margin-top: 20px;
+    padding: 16px;
+    background: var(--surface-inset);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-pill);
+    font-size: 13px;
+    line-height: 1.7;
+}
+.decision-followup h3 { font-family: var(--font-display); margin-top: 0; }
+.decision-followup form { border-bottom: 1px solid var(--divider); padding-bottom: 14px; }
+.decision-followup form p { flex-basis: 100%; margin: 0; }
+.decision-followup label:has(input) { flex: 1; min-width: 160px; }
+.decision-followup input { box-sizing: border-box; width: 100%; }
+.followup-metrics { display: flex; flex-wrap: wrap; gap: 16px; }
+.decision-followup svg { width: 100%; max-height: 160px; }
+.decision-followup svg text { fill: var(--secondary); font-size: 10px; }
+.decision-followup table { width: 100%; border-collapse: collapse; text-align: left; }
+.decision-followup th,
+.decision-followup td { padding: 6px; border-bottom: 1px solid var(--divider); }
+.decision-followup td { font-family: var(--font-data); }
+
+@media (max-width: 600px) {
+    .scenario-dialog { padding: 14px; }
+    .scenario-dialog h2 { font-size: 19px; }
+    .scenario-stage { height: 280px; }
+    .scenario-records select, .scenario-dialog label select { max-width: 100%; }
+    .scenario-stagebar { flex-direction: column; align-items: stretch; }
+    .scenario-breakdown { grid-template-columns: 1fr; }
+    .sf-group { width: 100%; }
+    /* 좁아지면 라벨을 한 줄 위로 올리고 값·차이를 같은 줄에 붙여 읽는다. */
+    .sv-row { grid-template-columns: 1fr auto; gap: 4px 12px; }
+    .sv-label { grid-column: 1 / -1; }
+    .sv-delta { min-width: 0; font-size: 17px; }
+    .sl-note { margin-left: 0; }
+}
+.scenario-rate { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main); }
+.scenario-rate select { width: auto; min-width: 76px; }
+.scenario-header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.scenario-result-guide,.scenario-return-guide { margin: 16px 0; padding: 16px; border-left: 3px solid var(--primary); background: var(--surface-inset); font-size: 13px; line-height: 1.7; scroll-margin-top: 80px; }
+.scenario-result-guide h3,.scenario-return-guide h3 { margin: 0 0 8px; font-size: 16px; }
+.scenario-result-guide p,.scenario-return-guide p { margin: 6px 0; }
+.scenario-return-guide button { margin-top: 8px; }
+.followup-optional { margin-top: 18px; }

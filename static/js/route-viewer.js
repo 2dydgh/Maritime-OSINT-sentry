@@ -120,7 +120,7 @@ var RouteViewer = (function() {
             m.on('mouseover', function() {
                 // Preview the pick: green if this click sets 출발, red if 도착.
                 var slot = activeTargetSlot();
-                var c = slot === 'from' ? '#10b981' : slot === 'to' ? '#ef4444' : '#fbbf24';
+                var c = slot === 'from' ? '#10b981' : slot === 'to' ? '#ef4444' : '#d9a441';
                 m.setStyle({ radius: 8, fillColor: c });
             });
             m.on('mouseout', function() { m.setStyle({ radius: 6, fillColor: '#4d9bff' }); });
@@ -310,7 +310,7 @@ var RouteViewer = (function() {
         searchPanel.className = 'route-overlay-panel';
         searchPanel.innerHTML =
             '<div class="route-panel-header">' +
-                '<span class="route-panel-title"><i class="fa-solid fa-route"></i> 관습 항로 추론</span>' +
+                '<span class="route-panel-title">관습 항로 추론</span>' +
                 '<button id="routePanelToggle" class="route-panel-toggle" title="접기"><i class="fa-solid fa-chevron-up"></i></button>' +
             '</div>' +
             '<div id="routePanelBody" class="route-panel-body">' +
@@ -409,7 +409,7 @@ var RouteViewer = (function() {
         infoPanel.style.display = 'none';
         infoPanel.innerHTML =
             '<div class="route-panel-header">' +
-                '<span class="route-panel-title"><i class="fa-solid fa-chart-line"></i> 경로 정보</span>' +
+                '<span class="route-panel-title">경로 정보</span>' +
             '</div>' +
             '<div class="route-info-body">' +
                 '<div class="route-info-route-name">' +
@@ -533,7 +533,10 @@ var RouteViewer = (function() {
             if (which === 'from') {
                 fromPort = port;
                 var toInput = document.getElementById('routeToInput');
-                if (toInput && !toPort) toInput.focus();
+                // 이 클릭 이벤트가 아직 document까지 버블링 중이라, 지금 바로 focus()하면
+                // 도착 입력창 쪽 "바깥 클릭시 닫기" 리스너가 같은 클릭을 감지해 방금 뜬
+                // 목록을 즉시 닫아버린다. 다음 틱으로 미뤄 버블링이 끝난 뒤에 포커스한다.
+                if (toInput && !toPort) setTimeout(function () { toInput.focus(); }, 0);
             } else {
                 toPort = port;
                 var slider = document.getElementById('routeSpeedSlider');
@@ -962,6 +965,8 @@ var RouteViewer = (function() {
         var latlngs = routeCoords.map(function(c) { return [c[1], c[0]]; });
 
         routeLine = L.polyline(latlngs, {
+            // 위성 지도 위에서 파랑은 바다에 묻힌다 — 항로선은 노랑(사용자 확정).
+            // 선박 마커는 파랑을 유지해 선(항로) vs 점(선박)이 서로 구분된다.
             color: '#eab308',
             weight: 4,
             opacity: 0.95,

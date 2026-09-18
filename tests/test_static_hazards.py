@@ -1,5 +1,5 @@
 """정적 위험구역 GeoJSON 로딩 및 셀 교차 판정 테스트."""
-import os
+
 from shapely.geometry import box
 
 from backend.services import static_hazards
@@ -9,8 +9,7 @@ def test_load_returns_five_features():
     feats = static_hazards.load()
     assert len(feats) == 5
     ids = {f["properties"]["id"] for f in feats}
-    assert ids == {"uldolmok", "jeju_strait", "busan_approach",
-                   "incheon_approach", "mokpo_approach"}
+    assert ids == {"uldolmok", "jeju_strait", "busan_approach", "incheon_approach", "mokpo_approach"}
 
 
 def test_intersecting_returns_uldolmok_for_jindo_cell():

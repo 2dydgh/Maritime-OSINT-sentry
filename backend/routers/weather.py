@@ -1,8 +1,12 @@
+import logging
 import time
+
 import httpx
 from fastapi import APIRouter
+
 from backend.services import korea_hex_grid as _khg
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["weather"])
 
 _cache = {"data": None, "ts": 0}
@@ -43,13 +47,15 @@ async def get_marine_weather():
     points = []
     for i, entry in enumerate(entries):
         current = entry.get("current", {})
-        points.append({
-            "lat": _GRID_PAIRS[i][0],
-            "lon": _GRID_PAIRS[i][1],
-            "wave_height": current.get("wave_height", 0),
-            "wave_direction": current.get("wave_direction", 0),
-            "wave_period": current.get("wave_period", 0),
-        })
+        points.append(
+            {
+                "lat": _GRID_PAIRS[i][0],
+                "lon": _GRID_PAIRS[i][1],
+                "wave_height": current.get("wave_height", 0),
+                "wave_direction": current.get("wave_direction", 0),
+                "wave_period": current.get("wave_period", 0),
+            }
+        )
 
     result = {"points": points, "timestamp": now}
     _cache["data"] = result
@@ -69,7 +75,7 @@ async def get_wind_data():
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             for start in range(0, len(_GRID_PAIRS), BATCH):
-                batch = _GRID_PAIRS[start:start + BATCH]
+                batch = _GRID_PAIRS[start : start + BATCH]
                 lats = ",".join(str(p[0]) for p in batch)
                 lons = ",".join(str(p[1]) for p in batch)
                 url = (
@@ -84,6 +90,7 @@ async def get_wind_data():
                 entries = raw if isinstance(raw, list) else [raw]
                 all_entries.extend(entries)
     except Exception:
+        logger.exception("wind weather upstream request failed")
         # API down — return stale cache or empty
         if _wind_cache.get("data"):
             return _wind_cache["data"]
@@ -94,13 +101,15 @@ async def get_wind_data():
         if i >= len(_GRID_PAIRS):
             break
         current = entry.get("current", {})
-        points.append({
-            "lat": _GRID_PAIRS[i][0],
-            "lon": _GRID_PAIRS[i][1],
-            "wind_speed": current.get("wind_speed_10m", 0),
-            "wind_direction": current.get("wind_direction_10m", 0),
-            "precipitation": current.get("precipitation", 0),
-        })
+        points.append(
+            {
+                "lat": _GRID_PAIRS[i][0],
+                "lon": _GRID_PAIRS[i][1],
+                "wind_speed": current.get("wind_speed_10m", 0),
+                "wind_direction": current.get("wind_direction_10m", 0),
+                "precipitation": current.get("precipitation", 0),
+            }
+        )
 
     result = {"points": points, "timestamp": now}
     _wind_cache["data"] = result
@@ -134,7 +143,7 @@ async def get_korea_grid_weather():
     async with httpx.AsyncClient(timeout=30) as client:
         # Marine (wave)
         for start in range(0, len(cells), BATCH):
-            batch = cells[start:start + BATCH]
+            batch = cells[start : start + BATCH]
             lats = ",".join(str(p[0]) for p in batch)
             lons = ",".join(str(p[1]) for p in batch)
             url = (
@@ -150,12 +159,12 @@ async def get_korea_grid_weather():
                     entries = [entries]
                 for i, e in enumerate(entries):
                     marine_by_idx[start + i] = e.get("current", {})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("korea-grid marine batch failed: %s", e)
 
         # Forecast (wind, visibility) — wind in knots
         for start in range(0, len(cells), BATCH):
-            batch = cells[start:start + BATCH]
+            batch = cells[start : start + BATCH]
             lats = ",".join(str(p[0]) for p in batch)
             lons = ",".join(str(p[1]) for p in batch)
             url = (
@@ -172,23 +181,25 @@ async def get_korea_grid_weather():
                     entries = [entries]
                 for i, e in enumerate(entries):
                     forecast_by_idx[start + i] = e.get("current", {})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("korea-grid forecast batch failed: %s", e)
 
     merged = []
     for i, (lat, lng) in enumerate(cells):
         m = marine_by_idx.get(i, {})
         f = forecast_by_idx.get(i, {})
-        merged.append({
-            "lat": lat,
-            "lng": lng,
-            "wave_height":    m.get("wave_height")    or 0.0,
-            "wave_direction": m.get("wave_direction") or 0.0,
-            "wave_period":    m.get("wave_period")    or 0.0,
-            "wind_speed":     f.get("wind_speed_10m") or 0.0,        # knots
-            "wind_direction": f.get("wind_direction_10m") or 0.0,
-            "visibility":     f.get("visibility")     or 20000.0,    # meters
-        })
+        merged.append(
+            {
+                "lat": lat,
+                "lng": lng,
+                "wave_height": m.get("wave_height") or 0.0,
+                "wave_direction": m.get("wave_direction") or 0.0,
+                "wave_period": m.get("wave_period") or 0.0,
+                "wind_speed": f.get("wind_speed_10m") or 0.0,  # knots
+                "wind_direction": f.get("wind_direction_10m") or 0.0,
+                "visibility": f.get("visibility") or 20000.0,  # meters
+            }
+        )
 
     result = {"cells": merged, "timestamp": now}
     _korea_cache["data"] = result

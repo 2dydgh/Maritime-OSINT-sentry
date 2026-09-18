@@ -7,13 +7,13 @@ Collision Risk Analyzer — 거리 기반 + ML 모델 이중 분석
 3단계-B: da10-service ML 모델 호출 (XGBoost 충돌 위험도 0~3)
 """
 
-import os
-import math
-import time
 import asyncio
-import threading
 import logging
-from datetime import datetime, timezone
+import math
+import os
+import threading
+import time
+from datetime import UTC, datetime
 
 import httpx
 
@@ -24,23 +24,23 @@ logger = logging.getLogger(__name__)
 # --- 상수 ---
 NM_TO_KM = 1.852
 EARTH_RADIUS_KM = 6371.0
-PROXIMITY_NM = 5.0           # 1단계 근접 필터 반경
-MIN_SOG_KTS = 2.0            # 2단계 정지/저속 선박 제외 기준 (GPS 드리프트+조류 감안, 1.0→2.0 상향)
-TCPA_MAX_MIN = 20            # TCPA 20분 이내만 관심
-TCPA_MIN_MIN = 1.0           # TCPA 1분 미만은 이미 해소 직전 → 스킵
+PROXIMITY_NM = 5.0  # 1단계 근접 필터 반경
+MIN_SOG_KTS = 2.0  # 2단계 정지/저속 선박 제외 기준 (GPS 드리프트+조류 감안, 1.0→2.0 상향)
+TCPA_MAX_MIN = 20  # TCPA 20분 이내만 관심
+TCPA_MIN_MIN = 1.0  # TCPA 1분 미만은 이미 해소 직전 → 스킵
 
-HEAD_ON_ANGLE = 30.0         # COG 차이 150~210도 → head-on 판정
+HEAD_ON_ANGLE = 30.0  # COG 차이 150~210도 → head-on 판정
 
 # --- Class A/B 조합별 임계값 ---
 CLASS_THRESHOLDS = {
     "AA": {
-        "dcpa_danger": 0.5,       # nm — 위험
-        "dcpa_caution": 0.75,     # nm — 경고
-        "dcpa_warning": 1.0,      # nm — 주의
+        "dcpa_danger": 0.5,  # nm — 위험
+        "dcpa_caution": 0.75,  # nm — 경고
+        "dcpa_warning": 1.0,  # nm — 주의
         "dcpa_danger_head_on": 0.3,
         "dcpa_caution_head_on": 0.4,
         "dcpa_warning_head_on": 0.5,
-        "tcpa_max": 20,           # 분
+        "tcpa_max": 20,  # 분
     },
     "AB": {
         "dcpa_danger": 0.3,
@@ -122,7 +122,7 @@ def _compute_tcpa_dcpa(lat1, lon1, sog1, cog1, lat2, lon2, sog2, cog2):
     vv = dvx * dvx + dvy * dvy
     if vv < 1e-12:
         dist = math.sqrt(rx * rx + ry * ry)
-        return float('inf'), dist
+        return float("inf"), dist
 
     rv = rx * dvx + ry * dvy
     tcpa = -rv / vv
@@ -159,9 +159,9 @@ def _classify_encounter(cog1, cog2):
         "crossing"  — 횡단 (그 외)
     """
     diff = _angle_diff(cog1, cog2)
-    if diff >= (180 - HEAD_ON_ANGLE):   # 150~180도
+    if diff >= (180 - HEAD_ON_ANGLE):  # 150~180도
         return "head-on"
-    if diff <= HEAD_ON_ANGLE:           # 0~30도
+    if diff <= HEAD_ON_ANGLE:  # 0~30도
         return "overtaking"
     return "crossing"
 
@@ -262,6 +262,79 @@ def _get_neighbor_cells(cell_x, cell_y):
             yield (cell_x + dx, cell_y + dy)
 
 
+# --- 쌍별 기하 계산 결과 캐시 (TTL + 위치 변화 시 무효화) ---
+# 키: 정렬된 MMSI 쌍 (mmsi_a < mmsi_b). 값: (position_signature, monotonic_ts, geom).
+# 5nm 근접 필터와 육지(land_filter) 차폐 검사는 캐시 밖에서 매 사이클 라이브로
+# 재평가하고(=육지 상태가 권위적으로 유지됨), 그 뒤의 비싼 TCPA/DCPA·조우 기하만
+# 위치가 동일할 때 재사용한다. 위치(또는 SOG/COG/class)가 바뀌면 시그니처가 달라져
+# 자동 무효화되며, TTL 초과 시에도 만료된다.
+_PAIR_CACHE_TTL_S = 300  # 5분
+_pair_geom_cache: dict[tuple[int, int], tuple] = {}
+
+
+def _reset_pair_cache_for_test() -> None:
+    _pair_geom_cache.clear()
+
+
+def _pair_signature(v: dict, other: dict) -> tuple:
+    """위치/속도/방향/class 로 구성한 쌍 시그니처. 하나라도 바뀌면 캐시 무효화."""
+    return (
+        v["lat"],
+        v["lng"],
+        v["sog"],
+        v["cog"],
+        v.get("ais_class", "A"),
+        other["lat"],
+        other["lng"],
+        other["sog"],
+        other["cog"],
+        other.get("ais_class", "A"),
+    )
+
+
+def _pair_geometry(v: dict, other: dict, dist: float):
+    """육지 검사를 통과한 근접 쌍의 기하(조우 후보·TCPA/DCPA·필터) 계산.
+
+    Returns:
+        통과 시 (tcpa_min, dcpa_nm, current_dist_nm, encounter, pair_class),
+        필터링되면 None. (육지·5nm 근접 검사는 호출자가 이미 수행)
+    """
+    if not _is_collision_candidate(
+        v["lat"],
+        v["lng"],
+        v["sog"],
+        v["cog"],
+        other["lat"],
+        other["lng"],
+        other["sog"],
+        other["cog"],
+    ):
+        return None
+
+    tcpa, dcpa = _compute_tcpa_dcpa(
+        v["lat"],
+        v["lng"],
+        v["sog"],
+        v["cog"],
+        other["lat"],
+        other["lng"],
+        other["sog"],
+        other["cog"],
+    )
+
+    pair_class = _get_pair_class(v, other)
+    tcpa_max = CLASS_THRESHOLDS[pair_class]["tcpa_max"]
+
+    if tcpa < TCPA_MIN_MIN or tcpa > tcpa_max:
+        return None
+
+    if dist > 2.0 and dcpa > dist * 0.5:
+        return None
+
+    encounter = _classify_encounter(v["cog"], other["cog"])
+    return (round(tcpa, 1), round(dcpa, 3), round(dist, 2), encounter, pair_class)
+
+
 def _build_proximity_pairs(vessels: list[dict]) -> list[dict]:
     """5nm 이내 이동 중인 선박 쌍을 필터링하고 TCPA/DCPA를 계산.
 
@@ -271,6 +344,12 @@ def _build_proximity_pairs(vessels: list[dict]) -> list[dict]:
     moving = [v for v in vessels if v.get("sog", 0) >= MIN_SOG_KTS]
     if len(moving) < 2:
         return []
+
+    now = time.monotonic()
+    # 만료된 캐시 엔트리 정리 (더 이상 근접하지 않는 쌍이 무한정 쌓이지 않도록).
+    if _pair_geom_cache:
+        for k in [k for k, val in _pair_geom_cache.items() if now - val[1] >= _PAIR_CACHE_TTL_S]:
+            _pair_geom_cache.pop(k, None)
 
     grid = _build_grid(moving)
     pairs = []
@@ -295,48 +374,36 @@ def _build_proximity_pairs(vessels: list[dict]) -> list[dict]:
                 if dist > PROXIMITY_NM:
                     continue
 
-                # 육지 차폐 필터: 두 선박 사이에 육지가 있으면 스킵
-                if land_filter.is_land_between(
-                    v["lat"], v["lng"], other["lat"], other["lng"]
-                ):
+                # 육지 차폐 필터: 두 선박 사이에 육지가 있으면 스킵.
+                # 캐시 밖에서 매 사이클 라이브로 재평가해 육지 상태를 권위적으로 유지한다
+                # (육지에 막힌 쌍은 캐시에 기록되지 않으므로 stale-allow 가 생기지 않는다).
+                if land_filter.is_land_between(v["lat"], v["lng"], other["lat"], other["lng"]):
                     continue
 
-                # 충돌 후보 판별: 접근 중 + 최소 한 척이 상대를 향해야 통과
-                if not _is_collision_candidate(
-                    v["lat"], v["lng"], v["sog"], v["cog"],
-                    other["lat"], other["lng"], other["sog"], other["cog"],
-                ):
+                # 비싼 TCPA/DCPA·조우 기하: 위치(시그니처)가 동일하고 TTL 내면 재사용.
+                sig = _pair_signature(v, other)
+                cached = _pair_geom_cache.get(pair_key)
+                if cached is not None and cached[0] == sig and now - cached[1] < _PAIR_CACHE_TTL_S:
+                    geom = cached[2]
+                else:
+                    geom = _pair_geometry(v, other, dist)
+                    _pair_geom_cache[pair_key] = (sig, now, geom)
+
+                if geom is None:
                     continue
 
-                tcpa, dcpa = _compute_tcpa_dcpa(
-                    v["lat"], v["lng"], v["sog"], v["cog"],
-                    other["lat"], other["lng"], other["sog"], other["cog"],
+                tcpa_min, dcpa_nm, dist_nm, encounter, pair_class = geom
+                pairs.append(
+                    {
+                        "ship_a": v,
+                        "ship_b": other,
+                        "tcpa_min": tcpa_min,
+                        "dcpa_nm": dcpa_nm,
+                        "current_dist_nm": dist_nm,
+                        "encounter": encounter,
+                        "pair_class": pair_class,
+                    }
                 )
-
-                # Class 조합별 TCPA 상한 적용
-                pair_class = _get_pair_class(v, other)
-                tcpa_max = CLASS_THRESHOLDS[pair_class]["tcpa_max"]
-
-                # TCPA가 음수(이미 지나감), 해소 직전(< 1분), 너무 먼 미래면 스킵
-                if tcpa < TCPA_MIN_MIN or tcpa > tcpa_max:
-                    continue
-
-                # 현재 거리 대비 DCPA 감소율이 너무 낮으면 실질 위험 아님
-                # (예: 4.5nm 거리인데 DCPA 0.9nm → 접근은 하지만 위험 수준 아님)
-                if dist > 2.0 and dcpa > dist * 0.5:
-                    continue
-
-                encounter = _classify_encounter(v["cog"], other["cog"])
-
-                pairs.append({
-                    "ship_a": v,
-                    "ship_b": other,
-                    "tcpa_min": round(tcpa, 1),
-                    "dcpa_nm": round(dcpa, 3),
-                    "current_dist_nm": round(dist, 2),
-                    "encounter": encounter,
-                    "pair_class": pair_class,
-                })
 
     return pairs
 
@@ -358,7 +425,7 @@ def _make_ship_info(v: dict) -> dict:
 def analyze_distance_risks(proximity_pairs: list[dict]) -> list[dict]:
     """거리 기반 DCPA/TCPA 임계값 판정. Class 조합 + 조우 유형별 차등 적용."""
     risks = []
-    now_ts = datetime.now(timezone.utc).isoformat()
+    now_ts = datetime.now(UTC).isoformat()
 
     for pair in proximity_pairs:
         dcpa = pair["dcpa_nm"]
@@ -385,17 +452,19 @@ def analyze_distance_risks(proximity_pairs: list[dict]) -> list[dict]:
         else:
             severity = "warning"
 
-        risks.append({
-            "ship_a": _make_ship_info(pair["ship_a"]),
-            "ship_b": _make_ship_info(pair["ship_b"]),
-            "tcpa_min": pair["tcpa_min"],
-            "dcpa_nm": pair["dcpa_nm"],
-            "current_dist_nm": pair["current_dist_nm"],
-            "severity": severity,
-            "encounter": encounter,
-            "pair_class": pair_class,
-            "ts": now_ts,
-        })
+        risks.append(
+            {
+                "ship_a": _make_ship_info(pair["ship_a"]),
+                "ship_b": _make_ship_info(pair["ship_b"]),
+                "tcpa_min": pair["tcpa_min"],
+                "dcpa_nm": pair["dcpa_nm"],
+                "current_dist_nm": pair["current_dist_nm"],
+                "severity": severity,
+                "encounter": encounter,
+                "pair_class": pair_class,
+                "ts": now_ts,
+            }
+        )
 
     _sev_order = {"danger": 0, "caution": 1, "warning": 2}
     risks.sort(key=lambda r: (_sev_order.get(r["severity"], 9), r["tcpa_min"]))
@@ -484,7 +553,7 @@ async def analyze_ml_risks(proximity_pairs: list[dict]) -> list[dict]:
         return []
 
     risks = []
-    now_ts = datetime.now(timezone.utc).isoformat()
+    now_ts = datetime.now(UTC).isoformat()
 
     for i, pair in enumerate(proximity_pairs):
         if i >= len(predictions):
@@ -493,16 +562,18 @@ async def analyze_ml_risks(proximity_pairs: list[dict]) -> list[dict]:
         if risk_level == 0:
             continue  # 안전은 제외
 
-        risks.append({
-            "ship_a": _make_ship_info(pair["ship_a"]),
-            "ship_b": _make_ship_info(pair["ship_b"]),
-            "risk_level": risk_level,
-            "risk_label": ML_RISK_LABELS.get(risk_level, "알수없음"),
-            "current_dist_nm": pair["current_dist_nm"],
-            "tcpa_min": pair["tcpa_min"],
-            "dcpa_nm": pair["dcpa_nm"],
-            "ts": now_ts,
-        })
+        risks.append(
+            {
+                "ship_a": _make_ship_info(pair["ship_a"]),
+                "ship_b": _make_ship_info(pair["ship_b"]),
+                "risk_level": risk_level,
+                "risk_label": ML_RISK_LABELS.get(risk_level, "알수없음"),
+                "current_dist_nm": pair["current_dist_nm"],
+                "tcpa_min": pair["tcpa_min"],
+                "dcpa_nm": pair["dcpa_nm"],
+                "ts": now_ts,
+            }
+        )
 
     # 위험도 높은 순, 같으면 TCPA 짧은 순
     risks.sort(key=lambda r: (-r["risk_level"], r["tcpa_min"]))
@@ -553,3 +624,9 @@ async def update_collision_cache(vessels: list[dict]):
             f"Collision analysis: {len(distance_risks)} distance + {len(ml_risks)} ML risks "
             f"from {len(proximity_pairs)} pairs ({elapsed_ms:.1f}ms)"
         )
+
+
+def get_watch_snapshot():
+    """One coherent cache generation for proposal checks."""
+    with _cache_lock:
+        return {"ml": list(_cached_ml_risks), "distance": list(_cached_distance_risks), "updated_at": _cache_updated}

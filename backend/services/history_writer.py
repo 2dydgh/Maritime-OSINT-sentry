@@ -6,12 +6,11 @@ AIS 위치 데이터를 메모리 버퍼에 쌓다가 일정 개수/시간마다
 
 import asyncio
 import logging
-import time
 import threading
-from datetime import datetime, timezone
-from typing import Optional
+import time
+from datetime import UTC, datetime
 
-from backend.services.metrics import db_writes_total, db_write_duration_seconds
+from backend.services.metrics import db_write_duration_seconds, db_writes_total
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +23,10 @@ SAMPLE_INTERVAL_SEC = 30  # 선박당 위치 기록 최소 간격 (초)
 _buffer: list[dict] = []
 _buffer_lock = threading.Lock()  # 스레드 간 안전을 위해 threading.Lock 사용
 _last_record_time: dict[str, float] = {}  # mmsi → 마지막 기록 시간
-_flush_task: Optional[asyncio.Task] = None
+_flush_task: asyncio.Task | None = None
 _running = False
 _db_pool = None
-_main_loop: Optional[asyncio.AbstractEventLoop] = None  # 메인 이벤트 루프 저장
+_main_loop: asyncio.AbstractEventLoop | None = None  # 메인 이벤트 루프 저장
 
 
 async def init_history_writer(db_pool) -> None:
@@ -44,7 +43,7 @@ async def init_history_writer(db_pool) -> None:
 
 async def stop_history_writer() -> None:
     """Stop the history writer and flush remaining buffer."""
-    global _running, _flush_task
+    global _running
     _running = False
 
     if _flush_task:
@@ -108,8 +107,8 @@ async def _flush_buffer() -> None:
                         r["object_id"],
                         r["object_type"],
                         r["record_time"],
-                        r["lng"],       # X (경도)
-                        r["lat"],       # Y (위도)
+                        r["lng"],  # X (경도)
+                        r["lat"],  # Y (위도)
                         r["altitude"],  # Z (고도)
                         r["altitude"],
                         r["velocity"],
@@ -117,7 +116,7 @@ async def _flush_buffer() -> None:
                         r["ship_type"],
                     )
                     for r in records_to_insert
-                ]
+                ],
             )
         logger.info(f"History writer: flushed {len(records_to_insert)} records to DB")
         duration = time.monotonic() - start_time
@@ -136,7 +135,7 @@ def record_position(
     heading: float,
     ship_type: str = "unknown",
     ship_name: str = "UNKNOWN",
-    timestamp: Optional[datetime] = None
+    timestamp: datetime | None = None,
 ) -> None:
     """
     Record a vessel position for later batch insertion.
@@ -157,7 +156,7 @@ def record_position(
         record = {
             "object_id": mmsi_str,
             "object_type": "ship",
-            "record_time": timestamp or datetime.now(timezone.utc),
+            "record_time": timestamp or datetime.now(UTC),
             "lat": lat,
             "lng": lng,
             "altitude": 0.0,
@@ -173,9 +172,7 @@ def record_position(
     # 배치 사이즈 도달 시 메인 루프에서 flush 스케줄링
     if buffer_size >= BATCH_SIZE and _main_loop and _running:
         try:
-            _main_loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(_flush_buffer())
-            )
+            _main_loop.call_soon_threadsafe(lambda: asyncio.create_task(_flush_buffer()))
         except RuntimeError:
             pass
 
@@ -204,7 +201,8 @@ def update_ship_type(mmsi: int, ship_type: str) -> None:
                       AND (ship_type IS NULL OR ship_type = 'unknown')
                       AND record_time > NOW() - INTERVAL '1 hour'
                     """,
-                    ship_type, mmsi_str
+                    ship_type,
+                    mmsi_str,
                 )
                 if result and result != "UPDATE 0":
                     logger.debug(f"Updated ship_type for MMSI {mmsi_str}: {result}")
@@ -212,9 +210,6 @@ def update_ship_type(mmsi: int, ship_type: str) -> None:
             logger.warning(f"Failed to update ship_type for MMSI {mmsi_str}: {e}")
 
     try:
-        _main_loop.call_soon_threadsafe(
-            lambda: asyncio.create_task(_do_update())
-        )
+        _main_loop.call_soon_threadsafe(lambda: asyncio.create_task(_do_update()))
     except RuntimeError:
         pass
-

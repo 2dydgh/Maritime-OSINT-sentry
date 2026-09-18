@@ -1,0 +1,188 @@
+/* 사건 판단 근거 다이얼로그 — 색·폰트·반경은 theme.css 토큰만 사용한다.
+   포커스 링은 main.css 전역 규칙(파랑)을 그대로 상속한다. 여기서 덮지 말 것:
+   이 앱에서 주황은 caution/warning 이라 포커스가 경보처럼 읽힌다. */
+
+.knowledge-dialog {
+    box-sizing: border-box;
+    width: min(1080px, 95vw);
+    max-height: 92vh;
+    padding: 24px;
+    overflow: auto;
+    background: var(--panel-bg);
+    color: var(--text-main);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-group);
+    box-shadow: var(--shadow-panel);
+    font-family: var(--font-body);
+}
+.knowledge-dialog::backdrop { background: var(--dialog-backdrop); }
+.knowledge-dialog h2,
+.knowledge-dialog h3,
+.knowledge-dialog h4 { font-family: var(--font-display); }
+.knowledge-dialog [hidden] { display: none !important; }
+
+/* 스크롤바는 main.css 의 전역 규칙을 그대로 쓴다 — 여기서 다시 정의하지 말 것. */
+
+/* ── 헤더 ── */
+.knowledge-dialog header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    position: sticky;
+    top: -24px;
+    z-index: 2;
+    padding: 12px 0;
+    background: var(--panel-bg);
+}
+.knowledge-dialog h2 { margin: 4px 0; font-size: 23px; }
+.knowledge-dialog h3 { font-size: 16px; }
+.knowledge-dialog small { letter-spacing: .12em; color: var(--secondary); }
+.knowledge-case { margin: 7px 0 0; color: var(--primary); font-size: 15px; overflow-wrap: anywhere; }
+/* 세 다이얼로그 공통: 제목 바로 다음 줄에서 이 화면이 무엇인지 한 번에 말한다. */
+.knowledge-intro { margin: 0 0 4px; max-width: 62ch; font-size: 13px; line-height: 1.65; color: var(--secondary); }
+
+/* ── 컨트롤 ── */
+.knowledge-dialog button,
+.knowledge-dialog a {
+    font: inherit;
+    font-size: 12px;
+    color: var(--text-main);
+    background: var(--btn-surface);
+    border: 1px solid var(--btn-border);
+    border-radius: var(--radius-pill);
+    padding: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: var(--btn-transition);
+}
+.knowledge-dialog button:hover,
+.knowledge-dialog a:hover { background: var(--btn-surface-hover); border-color: var(--btn-border-hover); }
+.knowledge-dialog button[aria-pressed="true"] {
+    background: var(--primary-muted);
+    border-color: var(--primary);
+    color: var(--text-main);
+}
+.knowledge-dialog nav,
+.knowledge-tools,
+.knowledge-citations { display: flex; gap: 8px; flex-wrap: wrap; }
+.knowledge-dialog nav { margin: 15px 0; }
+.knowledge-tools { align-items: center; }
+.knowledge-tools [data-ke="status"] { flex: 1; margin: 0; min-width: 180px; }
+
+/* ── 답변 · 확인할 점 ── */
+.knowledge-dialog [data-ke="status"],
+.knowledge-note { font-size: 12px; color: var(--secondary); line-height: 1.7; }
+.knowledge-dialog [data-ke="answer"] {
+    margin: 15px 0;
+    padding: 1px 16px 14px;
+    background: var(--surface-inset);
+    border-left: 3px solid var(--primary);
+    line-height: 1.8;
+}
+/* 확인할 점 = 미해결 항목이므로 caution 단계. danger 로 올리지 말 것. */
+.knowledge-dialog [data-ke="gaps"] { font-size: 13px; line-height: 1.8; color: var(--caution); }
+
+/* ── 근거 카드 ── */
+.knowledge-nodes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+/* 관련 표시는 main.css 의 심각도 행(.nearby-row)과 같은 엣지바 문법을 따른다:
+   왼쪽 3px 는 항상 자리를 차지하고 색만 바뀌므로 관련/무관 사이에 레이아웃이 밀리지 않는다.
+   위쪽 액센트는 둥근 모서리와 부딪히고 이 코드베이스의 카드 문법도 아니다. */
+.knowledge-node {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--divider);
+    border-left: 3px solid transparent;
+    border-radius: var(--radius-pill);
+}
+.knowledge-node.is-relevant { border-left-color: var(--primary); }
+.knowledge-type { font-size: 11px; color: var(--secondary); }
+.knowledge-node h4 { margin: 8px 0; font-size: 14px; overflow-wrap: anywhere; }
+/* 같은 선박·같은 종류의 기록이 여러 건일 때 이 시각만이 구분자다. */
+.knowledge-node-time {
+    margin-left: 7px;
+    font-family: var(--font-data);
+    font-size: 11px;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    color: var(--secondary);
+    white-space: nowrap;
+}
+.knowledge-node dl {
+    display: grid;
+    grid-template-columns: minmax(90px, 1fr) minmax(0, 2fr);
+    gap: 6px;
+    font-size: 12px;
+}
+.knowledge-node dt { color: var(--secondary); }
+.knowledge-node dd { margin: 0; overflow-wrap: anywhere; font-family: var(--font-data); }
+
+/* ── 기록 사이의 연결 ── */
+.knowledge-dialog [data-ke="relations"] {
+    margin: 24px 0;
+    padding: 0 0 20px;
+    border-bottom: 1px solid var(--divider);
+}
+.knowledge-edge { display: grid; grid-template-columns: 1fr 180px 1fr; gap: 8px; align-items: center; margin: 8px 0; }
+.knowledge-edge span { text-align: center; color: var(--secondary); font-size: 12px; }
+.knowledge-edge button {
+    overflow-wrap: anywhere;
+    text-align: left;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.knowledge-edge button small { display: block; margin-bottom: 3px; letter-spacing: 0; font-size: 11px; color: var(--secondary); }
+.knowledge-dialog [data-ke="moreEdges"] { margin-top: 10px; }
+.knowledge-dialog [data-ke="more"] { margin-top: 12px; }
+
+/* ── 근거 상세 ── */
+.knowledge-dialog [data-ke="source"] {
+    margin-top: 20px;
+    padding: 15px;
+    background: var(--surface-inset);
+    border: 1px solid var(--divider);
+    border-radius: var(--radius-pill);
+    scroll-margin-top: 120px;
+    line-height: 1.7;
+}
+.knowledge-source-summary dl {
+    display: grid;
+    grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr);
+    gap: 8px;
+    font-size: 13px;
+}
+.knowledge-source-summary dt { color: var(--secondary); }
+.knowledge-source-summary dd { margin: 0; overflow-wrap: anywhere; font-family: var(--font-data); }
+.knowledge-dialog [data-ke="sourceStatus"] { font-size: 12px; color: var(--secondary); }
+.knowledge-dialog [data-ke="sourcePath"] { overflow-wrap: anywhere; font-size: 12px; font-family: var(--font-data); }
+
+.knowledge-dialog details { margin-top: 20px; font-size: 13px; }
+.knowledge-dialog summary { cursor: pointer; padding: 8px 0; }
+.knowledge-dialog pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow: auto;
+    max-height: 400px;
+    font-family: var(--font-data);
+    font-size: 12px;
+    background: var(--surface-sunken);
+    padding: 12px;
+    border-radius: var(--radius-tag);
+}
+.knowledge-dialog .knowledge-technical {
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid var(--divider);
+    color: var(--secondary);
+    line-height: 1.7;
+}
+
+@media (max-width: 650px) {
+    .knowledge-dialog { padding: 14px; }
+    .knowledge-dialog header { top: -14px; }
+    .knowledge-dialog h2 { font-size: 19px; }
+    .knowledge-nodes { grid-template-columns: 1fr; }
+    .knowledge-edge { grid-template-columns: 1fr; }
+    .knowledge-edge span { text-align: left; }
+}

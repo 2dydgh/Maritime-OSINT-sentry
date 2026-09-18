@@ -19,16 +19,26 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.12-slim-bookworm AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl unzip \
+    curl unzip nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 육지 차폐 필터용 GSHHG 고해상도 해안선 데이터
+# AIS 스트림 프록시(backend/ais_proxy.js)용 Node 의존성
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# 육지 차폐 필터용 GSHHG 고해상도 해안선 데이터.
+# SOEST 서버 한 곳에 의존하므로 재시도·타임아웃을 두고, CI(GSHHG_REQUIRED=0)에서는 실패해도
+# 빌드를 계속한다 — land_filter 는 셰이프파일이 없으면 경고만 남기고 육지 차폐 없이 동작한다.
+# 운영 빌드(기본값 1)는 데이터 없이 조용히 나가지 않도록 그대로 실패시킨다.
+ARG GSHHG_REQUIRED=1
 RUN mkdir -p backend/data/land && \
-    curl -L -o /tmp/gshhg.zip "https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip" && \
-    unzip -o /tmp/gshhg.zip "GSHHS_shp/i/GSHHS_i_L1.*" -d /tmp/ && \
-    cp /tmp/GSHHS_shp/i/GSHHS_i_L1.* backend/data/land/ && \
+    { curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 300 \
+        -o /tmp/gshhg.zip "https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip" && \
+      unzip -o /tmp/gshhg.zip "GSHHS_shp/i/GSHHS_i_L1.*" -d /tmp/ && \
+      cp /tmp/GSHHS_shp/i/GSHHS_i_L1.* backend/data/land/ ; } || \
+    { [ "$GSHHG_REQUIRED" = "0" ] || exit 1; echo "WARN: GSHHG 다운로드 실패 — 육지 차폐 없이 빌드합니다"; } && \
     rm -rf /tmp/gshhg.zip /tmp/GSHHS_shp
 
 # builder가 만든 가상환경(.venv)을 복사

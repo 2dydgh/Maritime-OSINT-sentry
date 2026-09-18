@@ -1,6 +1,7 @@
 """Health check endpoint for load balancers and monitoring."""
 
 import time
+
 from fastapi import APIRouter
 
 router = APIRouter()

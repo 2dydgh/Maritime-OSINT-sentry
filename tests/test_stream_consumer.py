@@ -1,17 +1,24 @@
 import json
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from backend.services.stream_consumer import StreamConsumer
 
 
 def make_stream_entry(mmsi, lat, lng, speed=10.0):
     """Helper to create a Redis Stream entry in the format returned by XREAD."""
-    data = json.dumps({
-        "mmsi": mmsi, "lat": lat, "lng": lng,
-        "speed": speed, "heading": 0, "ship_type": "cargo",
-        "timestamp": "2026-03-19T10:00:00Z",
-    })
+    data = json.dumps(
+        {
+            "mmsi": mmsi,
+            "lat": lat,
+            "lng": lng,
+            "speed": speed,
+            "heading": 0,
+            "ship_type": "cargo",
+            "timestamp": "2026-03-19T10:00:00Z",
+        }
+    )
     return (b"1234567890-0", {b"data": data.encode()})
 
 

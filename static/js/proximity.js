@@ -309,7 +309,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
                 (sel.lat + tgt.lat) / 2
             ),
             text: prefix + dist.toFixed(1) + ' nm',
-            font: isCollisionTarget ? 'bold 14px B612 Mono, JetBrains Mono, Pretendard Variable' : '12px B612 Mono, JetBrains Mono, Pretendard Variable',
+            font: isCollisionTarget ? 'bold 14px JetBrains Mono, Pretendard Variable' : '12px JetBrains Mono, Pretendard Variable',
             fillColor: color.cesium,
             outlineColor: Cesium.Color.BLACK,
             outlineWidth: 3,
@@ -368,7 +368,7 @@ function renderProximityLines(selectedMmsi, nearbyVessels) {
                 var cpaLabel = proximityCpaLabels.add({
                     position: Cesium.Cartesian3.fromDegrees(cpa.lng, cpa.lat),
                     text: 'CPA ' + cpa.dcpaNm.toFixed(2) + 'nm\n' + cpa.tcpaMin.toFixed(1) + 'min',
-                    font: 'bold 11px B612 Mono, JetBrains Mono, Pretendard Variable',
+                    font: 'bold 11px JetBrains Mono, Pretendard Variable',
                     fillColor: Cesium.Color.WHITE,
                     outlineColor: Cesium.Color.BLACK,
                     outlineWidth: 3,

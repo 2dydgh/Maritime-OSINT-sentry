@@ -1,0 +1,13 @@
+PREFIX m: <https://maritime-osint.example/ontology#>
+SELECT ?status ?decision ?outcome ?reason ?at ?analysis ?dcpa ?tcpa ?execution ?receipt ?receiptStatus
+WHERE {
+  ?proposal m:status ?status .
+  OPTIONAL {
+    ?proposal m:hasDecision ?decision .
+    OPTIONAL { ?decision m:outcome ?outcome }
+    OPTIONAL { ?decision m:reason ?reason }
+    OPTIONAL { ?decision m:recordedAt ?at }
+    OPTIONAL { ?decision m:basedOn ?analysis . ?analysis m:dcpaNm ?dcpa . OPTIONAL { ?analysis m:tcpaMinutes ?tcpa } }
+  }
+  OPTIONAL { ?proposal m:hasExecution ?execution . OPTIONAL { ?execution m:confirmedBy ?receipt . ?receipt m:status ?receiptStatus } }
+}

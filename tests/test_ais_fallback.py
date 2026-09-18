@@ -1,12 +1,13 @@
 import json
-import pytest
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime, timezone
+
+import pytest
 
 from backend.services import ais_fallback
 
-
 # ── Task 1: select_feed_status ──
+
 
 def test_live_when_count_above_threshold():
     status, streak = ais_fallback.select_feed_status(500, 0, "live", 0)
@@ -43,7 +44,7 @@ def test_sustained_low_switches_to_fallback():
 
 
 def test_sustained_low_no_snapshot_is_down():
-    status, streak = ais_fallback.select_feed_status(0, 0, "live", 1)
+    status, _streak = ais_fallback.select_feed_status(0, 0, "live", 1)
     assert status == "down"
 
 
@@ -60,6 +61,7 @@ def test_recovers_to_live_immediately():
 
 # ── Task 2: get_fallback_snapshot + cache ──
 
+
 def _mock_pool(rows):
     """asyncpg 풀 모킹: pool.acquire() async context → conn.fetch(...) → rows."""
     conn = MagicMock()
@@ -75,12 +77,18 @@ def _mock_pool(rows):
 @pytest.mark.asyncio
 async def test_snapshot_maps_rows_to_live_shape():
     ais_fallback._reset_cache_for_test()
-    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=timezone.utc)
-    rows = [{
-        "object_id": "440123456", "lng": 129.04, "lat": 35.11,
-        "velocity": 12.4, "heading": 180.0, "ship_type": "cargo",
-        "record_time": rt,
-    }]
+    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=UTC)
+    rows = [
+        {
+            "object_id": "440123456",
+            "lng": 129.04,
+            "lat": 35.11,
+            "velocity": 12.4,
+            "heading": 180.0,
+            "ship_type": "cargo",
+            "record_time": rt,
+        }
+    ]
     ships = await ais_fallback.get_fallback_snapshot(pool=_mock_pool(rows))
     assert len(ships) == 1
     s = ships[0]
@@ -97,13 +105,20 @@ async def test_snapshot_maps_rows_to_live_shape():
 async def test_snapshot_decimal_columns_are_json_serializable():
     # PostGIS numeric 컬럼은 Decimal 로 온다 → float 로 변환돼 json.dumps 가능해야 함.
     from decimal import Decimal
+
     ais_fallback._reset_cache_for_test()
-    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=timezone.utc)
-    rows = [{
-        "object_id": "440123456", "lng": Decimal("129.04"), "lat": Decimal("35.11"),
-        "velocity": Decimal("12.4"), "heading": Decimal("180"), "ship_type": "cargo",
-        "record_time": rt,
-    }]
+    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=UTC)
+    rows = [
+        {
+            "object_id": "440123456",
+            "lng": Decimal("129.04"),
+            "lat": Decimal("35.11"),
+            "velocity": Decimal("12.4"),
+            "heading": Decimal(180),
+            "ship_type": "cargo",
+            "record_time": rt,
+        }
+    ]
     ships = await ais_fallback.get_fallback_snapshot(pool=_mock_pool(rows))
     text = ais_fallback.build_feed_payload(ships, "fallback", now_ms=1750000005000)
     d = json.loads(text)  # Decimal 이 남아있으면 build_feed_payload 에서 터진다
@@ -122,9 +137,18 @@ async def test_snapshot_empty_when_no_pool():
 @pytest.mark.asyncio
 async def test_snapshot_uses_cache_within_ttl():
     ais_fallback._reset_cache_for_test()
-    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=timezone.utc)
-    rows = [{"object_id": "1", "lng": 0.0, "lat": 0.0, "velocity": 0.0,
-             "heading": 0.0, "ship_type": "unknown", "record_time": rt}]
+    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=UTC)
+    rows = [
+        {
+            "object_id": "1",
+            "lng": 0.0,
+            "lat": 0.0,
+            "velocity": 0.0,
+            "heading": 0.0,
+            "ship_type": "unknown",
+            "record_time": rt,
+        }
+    ]
     pool = _mock_pool(rows)
     await ais_fallback.get_fallback_snapshot(pool=pool)
     await ais_fallback.get_fallback_snapshot(pool=pool)
@@ -134,10 +158,11 @@ async def test_snapshot_uses_cache_within_ttl():
 
 # ── Task 3: build_feed_payload ──
 
+
 def test_payload_includes_feed_status_and_ships():
     text = ais_fallback.build_feed_payload(
-        [{"mmsi": 1, "lat": 1.0, "lng": 2.0}], "fallback",
-        snapshot_time_ms=1750000000000, now_ms=1750000005000)
+        [{"mmsi": 1, "lat": 1.0, "lng": 2.0}], "fallback", snapshot_time_ms=1750000000000, now_ms=1750000005000
+    )
     d = json.loads(text)
     assert d["type"] == "ships_update"
     assert d["feed_status"] == "fallback"
@@ -155,6 +180,7 @@ def test_payload_empty_is_still_valid_heartbeat():
 
 
 # ── Regression: 스냅샷 창은 데이터 최신 시각 기준 (now() 아님) ──
+
 
 def test_snapshot_query_anchors_to_latest_record_not_wallclock():
     """라이브 끊김 시 history_writer 도 안 쓰므로 now()-30분 창은 0행이 된다.

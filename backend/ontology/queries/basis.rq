@@ -1,0 +1,6 @@
+PREFIX m: <https://maritime-osint.example/ontology#>
+SELECT DISTINCT ?node WHERE {
+  { ?proposal m:triggeredBy ?seed }
+  UNION { ?proposal m:hasDecision ?seed }
+  ?seed (m:basedOn|m:usesReview|m:usesInvestigation|m:compares|m:startsFrom|m:derivedFrom|m:usesObservation|m:usesInputState|m:hasPrediction)* ?node .
+}

@@ -6,7 +6,12 @@ import os
 # 로컬 개발은 기본값(localhost) 그대로 동작.
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "60"))  # seconds
+# Clamp to a minimum of 1 second — a 0/negative timeout would make httpx fail
+# (or block) on every request. Fall back to the 60s default on a malformed value.
+try:
+    OLLAMA_TIMEOUT = max(1, int(os.getenv("OLLAMA_TIMEOUT", "60")))  # seconds
+except ValueError:
+    OLLAMA_TIMEOUT = 60
 
 SYSTEM_PROMPT = """당신은 해양 상황 인식 시스템의 AI 어시스턴트입니다.
 반드시 한국어로만 답변합니다. 중국어, 일본어, 기타 언어는 절대 사용하지 않습니다.

@@ -7,11 +7,9 @@ hallucinated tools, references/topo resolve correctly, and the executor runs
 resolved steps via execute_tool while preserving the {text, actions} contract.
 """
 
-import json
-
 import pytest
 
-from backend.services import llm_planner, llm_agent
+from backend.services import llm_agent, llm_planner
 
 
 # ---------------------------------------------------------------------------
@@ -20,10 +18,10 @@ from backend.services import llm_planner, llm_agent
 @pytest.mark.parametrize(
     "msg, expected",
     [
-        ("부산으로 가줘", False),                              # single domain
-        ("이 배 우현으로 선회하다가 전복시켜", False),          # single domain (roll), reactive handles it
+        ("부산으로 가줘", False),  # single domain
+        ("이 배 우현으로 선회하다가 전복시켜", False),  # single domain (roll), reactive handles it
         ("부산에서 광양까지 항로 그리고 사고위험 알려줘", True),  # route + hazard + connector
-        ("일본 주변 해역 선박 보여주고 항로도 그려줘", True),    # area + fleet + route (>=3)
+        ("일본 주변 해역 선박 보여주고 항로도 그려줘", True),  # area + fleet + route (>=3)
         ("", False),
     ],
 )
@@ -116,16 +114,26 @@ def test_topo_sort_cycle_falls_back_to_declared_order():
 async def test_execute_plan_runs_resolved_steps_and_collects_actions(monkeypatch):
     """A fully-resolved 3-step plan executes deterministically; actions from
     tool results accumulate; summary is stubbed."""
-    plan = llm_planner.validate_plan({
-        "goal": "부산→광양 항로 + 도착지 위험",
-        "steps": [
-            {"n": 1, "tool": "open_route_screen", "args": {}, "needs": []},
-            {"n": 2, "tool": "plan_route",
-             "args": {"from": "busan", "to": "gwangyang", "size_class": "C"}, "needs": [1]},
-            {"n": 3, "tool": "get_hazard_summary",
-             "args": {"lat": "{{2.toLat}}", "lon": "{{2.toLng}}", "radius_nm": 30}, "needs": [2]},
-        ],
-    })
+    plan = llm_planner.validate_plan(
+        {
+            "goal": "부산→광양 항로 + 도착지 위험",
+            "steps": [
+                {"n": 1, "tool": "open_route_screen", "args": {}, "needs": []},
+                {
+                    "n": 2,
+                    "tool": "plan_route",
+                    "args": {"from": "busan", "to": "gwangyang", "size_class": "C"},
+                    "needs": [1],
+                },
+                {
+                    "n": 3,
+                    "tool": "get_hazard_summary",
+                    "args": {"lat": "{{2.toLat}}", "lon": "{{2.toLng}}", "radius_nm": 30},
+                    "needs": [2],
+                },
+            ],
+        }
+    )
 
     async def fake_summarize(client, user_message, executed, context_msg):
         # All three steps must have executed before summary.
@@ -134,9 +142,7 @@ async def test_execute_plan_runs_resolved_steps_and_collects_actions(monkeypatch
 
     monkeypatch.setattr(llm_agent, "_summarize", fake_summarize)
 
-    out = await llm_agent._execute_plan(
-        client=None, plan=plan, user_message="...", context=None, context_msg=None
-    )
+    out = await llm_agent._execute_plan(client=None, plan=plan, user_message="...", context=None, context_msg=None)
 
     assert out["text"] == "요약 완료"
     # open_route_screen + plan_route emit frontend actions; get_hazard_summary doesn't.
@@ -165,12 +171,14 @@ async def test_execute_plan_clarify_short_circuits(monkeypatch):
 @pytest.mark.asyncio
 async def test_execute_plan_delegates_unresolved_step(monkeypatch):
     """A step whose ref can't resolve is handed to the reactive fallback."""
-    plan = llm_planner.validate_plan({
-        "goal": "g",
-        "steps": [
-            {"n": 1, "tool": "get_hazard_summary", "args": {"lat": "{{7.toLat}}"}, "needs": []},
-        ],
-    })
+    plan = llm_planner.validate_plan(
+        {
+            "goal": "g",
+            "steps": [
+                {"n": 1, "tool": "get_hazard_summary", "args": {"lat": "{{7.toLat}}"}, "needs": []},
+            ],
+        }
+    )
 
     delegated = {}
 

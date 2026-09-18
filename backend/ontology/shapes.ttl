@@ -1,0 +1,82 @@
+@prefix m: <https://maritime-osint.example/ontology#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+m:InvestigationShape a sh:NodeShape ; sh:targetClass m:AgentInvestigation ;
+ sh:property [ sh:path m:recordedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+ sh:property [ sh:path m:outcome ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path m:reason ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+m:InvestigationReferenceShape a sh:NodeShape ; sh:targetSubjectsOf m:usesInvestigation ;
+ sh:property [ sh:path m:usesInvestigation ; sh:maxCount 1 ; sh:class m:AgentInvestigation ] ;
+ sh:sparql [ sh:message "AI 조사 확인 시각은 운용자 판단 이후일 수 없습니다."@ko ;
+ sh:select """PREFIX m: <https://maritime-osint.example/ontology#>
+ SELECT $this WHERE { $this m:recordedAt ?decision ; m:usesInvestigation/m:recordedAt ?investigation . FILTER(?investigation > ?decision) }""" ] .
+
+m:SourceShape a sh:NodeShape ; sh:targetSubjectsOf m:sourcePath ;
+ sh:property [ sh:path m:sourcePath ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path m:sourcePointer ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+m:VesselShape a sh:NodeShape ; sh:targetClass m:Vessel ;
+ sh:property [ sh:path m:mmsi ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9]{9}$" ] .
+m:ObservationShape a sh:NodeShape ; sh:targetClass m:AISObservation ;
+ sh:not [ sh:class m:Prediction ] ;
+ sh:property [ sh:path m:observedVessel ; sh:minCount 1 ; sh:maxCount 1 ; sh:class m:Vessel ] ;
+ sh:property [ sh:path m:receivedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+ sh:property [ sh:path m:latitude ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:double ; sh:minInclusive -90 ; sh:maxInclusive 90 ] ;
+ sh:property [ sh:path m:longitude ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:double ; sh:minInclusive -180 ; sh:maxInclusive 180 ] .
+m:InputShape a sh:NodeShape ; sh:targetClass m:AnalysisInputState ;
+ sh:property [ sh:path m:observedVessel ; sh:minCount 1 ; sh:maxCount 1 ; sh:class m:Vessel ] .
+m:ProjectionShape a sh:NodeShape ; sh:targetClass m:ProjectedState ;
+ sh:not [ sh:class m:AISObservation ] ;
+ sh:property [ sh:path m:derivedFrom ; sh:minCount 1 ; sh:maxCount 1 ; sh:class m:AISObservation ] ;
+ sh:property [ sh:path m:recordedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .
+m:AnalysisShape a sh:NodeShape ; sh:targetClass m:RiskAnalysis ;
+ sh:property [ sh:path m:recordedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+ sh:property [ sh:path m:dcpaNm ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:double ; sh:minInclusive 0 ] ;
+ sh:property [ sh:path m:usesObservation ; sh:class m:AISObservation ] ;
+ sh:property [ sh:path m:usesInputState ; sh:class m:AnalysisInputState ] .
+m:ProposalShape a sh:NodeShape ; sh:targetClass m:Proposal ;
+ sh:property [ sh:path m:involvesVessel ; sh:minCount 2 ; sh:maxCount 2 ; sh:class m:Vessel ] ;
+ sh:property [ sh:path m:triggeredBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class m:RiskAnalysis ] ;
+ sh:property [ sh:path m:hasDecision ; sh:maxCount 1 ; sh:class m:Decision ] .
+m:ComparisonShape a sh:NodeShape ; sh:targetClass m:ScenarioComparison ;
+ sh:property [ sh:path m:startsFrom ; sh:minCount 2 ; sh:maxCount 2 ; sh:class m:ProjectedState ] ;
+ sh:property [ sh:path m:hasPrediction ; sh:minCount 2 ; sh:maxCount 2 ; sh:class m:Prediction ] ;
+ sh:property [ sh:path m:runId ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+m:PredictionShape a sh:NodeShape ; sh:targetClass m:Prediction ;
+ sh:not [ sh:class m:AISObservation ] ;
+ sh:property [ sh:path m:minimumDistanceNm ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:double ; sh:minInclusive 0 ] .
+m:ReviewShape a sh:NodeShape ; sh:targetClass m:Review ;
+ sh:property [ sh:path m:compares ; sh:minCount 1 ; sh:maxCount 1 ; sh:class m:ScenarioComparison ] ;
+ sh:property [ sh:path m:reason ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path m:outcome ; sh:minCount 1 ; sh:in ("reference"^^xsd:string "deferred"^^xsd:string "rejected"^^xsd:string) ] .
+m:DecisionShape a sh:NodeShape ; sh:targetClass m:Decision ;
+ sh:property [ sh:path m:recordedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+ sh:property [ sh:path m:reason ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path m:outcome ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ("approved"^^xsd:string "dismissed"^^xsd:string) ] ;
+ sh:property [ sh:path m:usesReview ; sh:class m:Review ] ;
+ sh:property [ sh:path m:basedOn ; sh:class m:RiskAnalysis ] .
+m:ExecutionShape a sh:NodeShape ; sh:targetClass m:TrackingExecution ;
+ sh:property [ sh:path m:authorizedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class m:Decision ] ;
+ sh:property [ sh:path m:confirmedBy ; sh:class m:ExecutionReceipt ] .
+m:ReceiptShape a sh:NodeShape ; sh:targetClass m:ExecutionReceipt ;
+ sh:property [ sh:path m:recordedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+ sh:property [ sh:path m:status ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ("tracking"^^xsd:string "failed"^^xsd:string "completed"^^xsd:string) ] .
+m:FollowupShape a sh:NodeShape ; sh:targetClass m:FollowupAssessment ;
+ sh:property [ sh:path m:recordedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+ sh:property [ sh:path m:usesObservation ; sh:minCount 2 ; sh:maxCount 2 ; sh:class m:AISObservation ] ;
+ sh:property [ sh:path m:distanceNm ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:double ; sh:minInclusive 0 ] .
+
+m:AnalysisShape sh:property [ sh:path [ sh:alternativePath (m:usesObservation m:usesInputState) ] ; sh:minCount 2 ; sh:maxCount 2 ] .
+m:ReviewShape sh:property [ sh:path m:recordedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .
+m:ExecutionShape sh:property [ sh:path m:authorizedBy ; sh:node [ sh:property [ sh:path m:outcome ; sh:hasValue "approved"^^xsd:string ] ] ] .
+m:DecisionShape sh:sparql [
+ sh:message "판단 이후 작성된 검토가 당시 판단 근거로 연결되어 있습니다."@ko ;
+ sh:select """
+ PREFIX m: <https://maritime-osint.example/ontology#>
+ SELECT $this WHERE {
+   $this m:recordedAt ?at ; m:usesReview ?review .
+   ?review m:recordedAt ?reviewAt .
+   FILTER(?reviewAt > ?at)
+ }
+ """
+] .

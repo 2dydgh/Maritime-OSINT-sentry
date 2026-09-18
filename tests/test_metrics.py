@@ -1,11 +1,7 @@
 from backend.services.metrics import (
     ais_messages_total,
     ais_vessels_active,
-    ais_message_lag_seconds,
     db_write_duration_seconds,
-    db_writes_total,
-    websocket_connections_active,
-    alerts_fired_total,
 )
 
 

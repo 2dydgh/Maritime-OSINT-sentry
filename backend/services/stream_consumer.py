@@ -2,10 +2,10 @@
 
 import json
 import logging
-import time
 import threading
+import time
 
-from backend.services.metrics import stream_consume_total, stream_lag_messages, ais_vessels_active
+from backend.services.metrics import ais_vessels_active, stream_consume_total, stream_lag_messages
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +13,7 @@ STALE_THRESHOLD_SEC = 15 * 60  # 15분 이상 업데이트 없으면 제거
 
 
 class StreamConsumer:
-    def __init__(self, redis_client, stream_key="ais:raw",
-                 group="osint_consumers", consumer_name="worker-1"):
+    def __init__(self, redis_client, stream_key="ais:raw", group="osint_consumers", consumer_name="worker-1"):
         self._redis = redis_client
         self._stream_key = stream_key
         self._group = group
@@ -47,8 +46,7 @@ class StreamConsumer:
         """Return snapshot of active vessels, pruning stale ones."""
         now = time.time()
         with self._lock:
-            stale = [k for k, v in self._vessels.items()
-                     if now - v.get("last_updated", 0) > STALE_THRESHOLD_SEC]
+            stale = [k for k, v in self._vessels.items() if now - v.get("last_updated", 0) > STALE_THRESHOLD_SEC]
             for k in stale:
                 del self._vessels[k]
             ais_vessels_active.set(len(self._vessels))
@@ -87,8 +85,7 @@ class StreamConsumer:
     async def run(self, history_writer=None):
         """Main consume loop — call from asyncio task."""
         self._running = True
-        logger.info("StreamConsumer started: group=%s, consumer=%s",
-                     self._group, self._consumer_name)
+        logger.info("StreamConsumer started: group=%s, consumer=%s", self._group, self._consumer_name)
         while self._running:
             try:
                 messages = await self.consume_batch()
@@ -105,6 +102,7 @@ class StreamConsumer:
             except Exception as e:
                 logger.error("StreamConsumer error: %s", e)
                 import asyncio
+
                 await asyncio.sleep(1)
 
     def stop(self):

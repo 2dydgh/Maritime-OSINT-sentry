@@ -20,6 +20,8 @@ FALLBACK_LOW_STREAK_TICKS = 2
 
 _SNAPSHOT_WINDOW = "30 minutes"
 _CACHE_TTL_S = 60
+# 최악의 경우 풀스캔을 막기 위한 스냅샷 상한 (선박 수 기준).
+_SNAPSHOT_LIMIT = 50000
 # 창은 wall-clock now() 가 아니라 "DB 에 기록된 최신 시각" 기준으로 잡는다.
 # 라이브가 끊기면 history_writer 도 새 행을 안 쓰므로, now()-30분 창은 항상
 # 비어 있게 된다(= fallback 이 필요한 바로 그 순간에 0척). 데이터 최신 시각을
@@ -34,6 +36,7 @@ WHERE object_type = 'ship'
         SELECT max(record_time) FROM trajectories WHERE object_type = 'ship'
       ) - interval '{_SNAPSHOT_WINDOW}'
 ORDER BY object_id, record_time DESC
+LIMIT {_SNAPSHOT_LIMIT}
 """
 
 _cache: list[dict] = []
@@ -41,9 +44,7 @@ _cache_ts: float = 0.0
 _snapshot_time_ms: int | None = None
 
 
-def select_feed_status(
-    live_count: int, fallback_count: int, prev_status: str, low_streak: int
-) -> tuple[str, int]:
+def select_feed_status(live_count: int, fallback_count: int, prev_status: str, low_streak: int) -> tuple[str, int]:
     """다음 feed_status 와 갱신된 low_streak 를 결정한다 (순수 함수).
 
     - live_count 가 임계치 이상이면 즉시 live, streak 리셋.
@@ -99,27 +100,29 @@ async def get_fallback_snapshot(pool=None) -> list[dict]:
             rt = r["record_time"]
             if max_ts is None or rt > max_ts:
                 max_ts = rt
-            ships.append({
-                "mmsi": mmsi,
-                "name": (meta.get(mmsi, {}).get("name") or "UNKNOWN"),
-                "type": r["ship_type"] or "unknown",
-                # PostGIS numeric 컬럼은 Decimal 로 와서 json.dumps 가 깨진다 → float 강제.
-                "lat": round(float(r["lat"]), 5),
-                "lng": round(float(r["lng"]), 5),
-                "heading": float(r["heading"] or 0),
-                "sog": round(float(r["velocity"] or 0), 1),
-                "cog": 0,  # trajectories 테이블에 COG 컬럼 없음
-                "callsign": "",
-                "destination": "UNKNOWN",
-                "imo": 0,
-                "country": ais_stream.get_country_from_mmsi(mmsi),
-                "length": 0,
-                "beam": 0,
-                "draught": 0,
-                "eta": "",
-                "ais_class": "A",
-                "status": "",
-            })
+            ships.append(
+                {
+                    "mmsi": mmsi,
+                    "name": (meta.get(mmsi, {}).get("name") or "UNKNOWN"),
+                    "type": r["ship_type"] or "unknown",
+                    # PostGIS numeric 컬럼은 Decimal 로 와서 json.dumps 가 깨진다 → float 강제.
+                    "lat": round(float(r["lat"]), 5),
+                    "lng": round(float(r["lng"]), 5),
+                    "heading": float(r["heading"] or 0),
+                    "sog": round(float(r["velocity"] or 0), 1),
+                    "cog": 0,  # trajectories 테이블에 COG 컬럼 없음
+                    "callsign": "",
+                    "destination": "UNKNOWN",
+                    "imo": 0,
+                    "country": ais_stream.get_country_from_mmsi(mmsi),
+                    "length": 0,
+                    "beam": 0,
+                    "draught": 0,
+                    "eta": "",
+                    "ais_class": "A",
+                    "status": "",
+                }
+            )
 
         _cache = ships
         _cache_ts = now

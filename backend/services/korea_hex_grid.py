@@ -4,8 +4,10 @@ Defines the cell coordinates over Korean EEZ. Score computation (compute_cells,
 normalize functions, top_cause) lives in this module but is added in
 subsequent tasks.
 """
+
 import logging
 import math
+
 from backend.services import land_filter
 
 logger = logging.getLogger(__name__)
@@ -17,8 +19,8 @@ CELL_DEG = 0.3
 # spacing comes out to CELL_DEG exactly, so the grid behaves like a regular
 # 0.3° column grid while still tiling without gaps or overlaps.
 _HEX_RADIUS_DEG = CELL_DEG / math.sqrt(3)
-_ROW_SPACING_DEG = 1.5 * _HEX_RADIUS_DEG       # ≈ 0.26°
-_ROW_OFFSET_DEG = CELL_DEG / 2                 # ≈ 0.15°
+_ROW_SPACING_DEG = 1.5 * _HEX_RADIUS_DEG  # ≈ 0.26°
+_ROW_OFFSET_DEG = CELL_DEG / 2  # ≈ 0.15°
 
 # Cells whose center has no land within this many degrees are considered
 # deep open ocean and excluded.
@@ -88,11 +90,11 @@ from shapely.geometry import box
 from backend.services import static_hazards
 
 # 가중치
-_W_WAVE    = 0.30
-_W_WIND    = 0.25
-_W_VIS     = 0.20
+_W_WAVE = 0.30
+_W_WIND = 0.25
+_W_VIS = 0.20
 _W_TRAFFIC = 0.10
-_W_STATIC  = 0.15
+_W_STATIC = 0.15
 
 _MIN_RAW = 0.30
 
@@ -123,11 +125,11 @@ def _weather_by_cell(weather: dict) -> dict[tuple[float, float], dict]:
 
 def _top_cause(subscores: dict, raw: dict) -> str:
     contrib = {
-        "wave":    _W_WAVE    * subscores["wave"],
-        "wind":    _W_WIND    * subscores["wind"],
-        "vis":     _W_VIS     * subscores["vis"],
+        "wave": _W_WAVE * subscores["wave"],
+        "wind": _W_WIND * subscores["wind"],
+        "vis": _W_VIS * subscores["vis"],
         "traffic": _W_TRAFFIC * subscores["traffic"],
-        "static":  _W_STATIC  * subscores["static"],
+        "static": _W_STATIC * subscores["static"],
     }
     top = max(contrib, key=contrib.get)
     if top == "wave":
@@ -158,30 +160,29 @@ def compute_cells(weather: dict, vessels: list[dict], features: list[dict]) -> l
     out: list[dict] = []
     for lat, lng in korea_cells():
         w = weather_map.get((lat, lng), {})
-        wave_m  = float(w.get("wave_height", 0.0) or 0.0)
+        wave_m = float(w.get("wave_height", 0.0) or 0.0)
         wind_kt = float(w.get("wind_speed", 0.0) or 0.0)
-        vis_m   = float(w.get("visibility", 20000.0) or 20000.0)
+        vis_m = float(w.get("visibility", 20000.0) or 20000.0)
         n_ships = traffic_map.get((lat, lng), 0)
 
-        cell_poly = box(lng - CELL_DEG / 2, lat - CELL_DEG / 2,
-                        lng + CELL_DEG / 2, lat + CELL_DEG / 2)
+        cell_poly = box(lng - CELL_DEG / 2, lat - CELL_DEG / 2, lng + CELL_DEG / 2, lat + CELL_DEG / 2)
         static_hits = static_hazards.intersecting(cell_poly)
         static_score = 1.0 if static_hits else 0.0
         static_names = [f["properties"]["name"] for f in static_hits]
 
         subscores = {
-            "wave":    _normalize_wave(wave_m),
-            "wind":    _normalize_wind(wind_kt),
-            "vis":     _normalize_visibility(vis_m),
+            "wave": _normalize_wave(wave_m),
+            "wind": _normalize_wind(wind_kt),
+            "vis": _normalize_visibility(vis_m),
             "traffic": _normalize_traffic(n_ships),
-            "static":  static_score,
+            "static": static_score,
         }
         raw = (
-            _W_WAVE    * subscores["wave"] +
-            _W_WIND    * subscores["wind"] +
-            _W_VIS     * subscores["vis"] +
-            _W_TRAFFIC * subscores["traffic"] +
-            _W_STATIC  * subscores["static"]
+            _W_WAVE * subscores["wave"]
+            + _W_WIND * subscores["wind"]
+            + _W_VIS * subscores["vis"]
+            + _W_TRAFFIC * subscores["traffic"]
+            + _W_STATIC * subscores["static"]
         )
         if raw < _MIN_RAW:
             continue
@@ -190,27 +191,28 @@ def compute_cells(weather: dict, vessels: list[dict], features: list[dict]) -> l
         raw_values = {
             "wave_raw": wave_m,
             "wind_raw": wind_kt,
-            "vis_raw":  vis_m / 1000.0,
+            "vis_raw": vis_m / 1000.0,
             "traffic_n": n_ships,
             "static_names": static_names,
         }
-        out.append({
-            "lat": lat, "lng": lng,
-            "score": score,
-            "cause": _top_cause(subscores, raw_values),
-            "subscores": {
-                "wave":    round(subscores["wave"],    3),
-                "wind":    round(subscores["wind"],    3),
-                "vis":     round(subscores["vis"],     3),
-                "traffic": round(subscores["traffic"], 3),
-                "static":  round(subscores["static"],  3),
-                "wave_raw":    round(wave_m, 2),
-                "wind_raw":    round(wind_kt, 1),
-                "vis_raw":     round(vis_m / 1000.0, 2),
-                "traffic_n":   n_ships,
-                "static_names": static_names,
-            },
-        })
+        out.append(
+            {
+                "lat": lat,
+                "lng": lng,
+                "score": score,
+                "cause": _top_cause(subscores, raw_values),
+                "subscores": {
+                    "wave": round(subscores["wave"], 3),
+                    "wind": round(subscores["wind"], 3),
+                    "vis": round(subscores["vis"], 3),
+                    "traffic": round(subscores["traffic"], 3),
+                    "static": round(subscores["static"], 3),
+                    "wave_raw": round(wave_m, 2),
+                    "wind_raw": round(wind_kt, 1),
+                    "vis_raw": round(vis_m / 1000.0, 2),
+                    "traffic_n": n_ships,
+                    "static_names": static_names,
+                },
+            }
+        )
     return out
-
-

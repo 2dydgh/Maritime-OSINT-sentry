@@ -12,9 +12,9 @@ to keep in sync.
 """
 
 import json
+import logging
 import math
 import os
-import logging
 from typing import Any
 
 from backend.services import ais_stream, collision_analyzer
@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 # Known Korean port coordinates
 # ---------------------------------------------------------------------------
 KOREAN_PORTS: dict[str, dict] = {
-    "busan":     {"lat": 35.10,  "lon": 129.05, "name": "부산항"},
-    "incheon":   {"lat": 37.45,  "lon": 126.60, "name": "인천항"},
-    "ulsan":     {"lat": 35.50,  "lon": 129.38, "name": "울산항"},
-    "gwangyang": {"lat": 34.90,  "lon": 127.70, "name": "광양항"},
-    "pyeongtaek":{"lat": 36.97,  "lon": 126.83, "name": "평택항"},
-    "mokpo":     {"lat": 34.78,  "lon": 126.38, "name": "목포항"},
-    "jeju":      {"lat": 33.52,  "lon": 126.53, "name": "제주항"},
+    "busan": {"lat": 35.10, "lon": 129.05, "name": "부산항"},
+    "incheon": {"lat": 37.45, "lon": 126.60, "name": "인천항"},
+    "ulsan": {"lat": 35.50, "lon": 129.38, "name": "울산항"},
+    "gwangyang": {"lat": 34.90, "lon": 127.70, "name": "광양항"},
+    "pyeongtaek": {"lat": 36.97, "lon": 126.83, "name": "평택항"},
+    "mokpo": {"lat": 34.78, "lon": 126.38, "name": "목포항"},
+    "jeju": {"lat": 33.52, "lon": 126.53, "name": "제주항"},
 }
 
 # Area search radius in nautical miles
@@ -126,6 +126,7 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
 # ---------------------------------------------------------------------------
 # Individual tool implementations
 # ---------------------------------------------------------------------------
+
 
 @tool(
     "get_ships",
@@ -318,10 +319,7 @@ def _tool_get_collision_risks(arguments: dict) -> dict:
     params={
         "port": param(
             "string",
-            (
-                "한국 항구 이름 (영문 소문자). "
-                "busan, incheon, ulsan, gwangyang, pyeongtaek, mokpo, jeju 중 하나."
-            ),
+            ("한국 항구 이름 (영문 소문자). busan, incheon, ulsan, gwangyang, pyeongtaek, mokpo, jeju 중 하나."),
             enum=_PORT_KEYS,
         ),
         "lat": param("number", "중심 위도 (port 미지정 시 필수)."),
@@ -363,17 +361,19 @@ def _tool_get_area_status(arguments: dict) -> dict:
         if dist <= radius_nm:
             v_type = v.get("type", "unknown")
             type_counts[v_type] = type_counts.get(v_type, 0) + 1
-            nearby.append({
-                "mmsi": v["mmsi"],
-                "name": v.get("name", "UNKNOWN"),
-                "type": v_type,
-                "lat": v_lat,
-                "lon": v_lng,
-                "speed": v.get("sog", 0),
-                "destination": v.get("destination", "UNKNOWN"),
-                "distance_nm": round(dist, 2),
-                "country": v.get("country", "UNKNOWN"),
-            })
+            nearby.append(
+                {
+                    "mmsi": v["mmsi"],
+                    "name": v.get("name", "UNKNOWN"),
+                    "type": v_type,
+                    "lat": v_lat,
+                    "lon": v_lng,
+                    "speed": v.get("sog", 0),
+                    "destination": v.get("destination", "UNKNOWN"),
+                    "distance_nm": round(dist, 2),
+                    "country": v.get("country", "UNKNOWN"),
+                }
+            )
 
     # Sort by distance
     nearby.sort(key=lambda x: x["distance_nm"])
@@ -487,10 +487,7 @@ def _tool_filter_ships(arguments: dict) -> dict:
         label = "모든 선박 유형 표시"
     else:
         # Normalize "military" → "military_vessel" for frontend consistency
-        active_types = [
-            "military_vessel" if t == "military" else t
-            for t in (types or [])
-        ]
+        active_types = ["military_vessel" if t == "military" else t for t in (types or [])]
         if active_types:
             label = f"선박 필터: {', '.join(active_types)}"
         else:
@@ -636,10 +633,24 @@ def _tool_open_roll_viewer(arguments: dict) -> dict:
 
 _ROLL_CAMERA_VIEWS = {"bow": "선수", "stern": "선미", "beam": "측면", "top": "탑뷰"}
 _ROLL_CAMERA_ALIAS = {
-    "선수": "bow", "선두": "bow", "뱃머리": "bow", "정면": "bow", "front": "bow",
-    "선미": "stern", "후미": "stern", "뒤": "stern", "back": "stern", "rear": "stern", "aft": "stern",
-    "측면": "beam", "옆": "beam", "side": "beam",
-    "탑": "top", "탑뷰": "top", "위": "top", "상단": "top",
+    "선수": "bow",
+    "선두": "bow",
+    "뱃머리": "bow",
+    "정면": "bow",
+    "front": "bow",
+    "선미": "stern",
+    "후미": "stern",
+    "뒤": "stern",
+    "back": "stern",
+    "rear": "stern",
+    "aft": "stern",
+    "측면": "beam",
+    "옆": "beam",
+    "side": "beam",
+    "탑": "top",
+    "탑뷰": "top",
+    "위": "top",
+    "상단": "top",
 }
 
 
@@ -839,12 +850,18 @@ def _tool_set_roll_scenario(arguments: dict) -> dict:
         return {"error": "최소 한 개 이상의 시나리오 파라미터를 지정해야 합니다."}
 
     label_parts = []
-    if "windSpeed" in params:    label_parts.append(f"풍속 {params['windSpeed']:.0f}kt")
-    if "waveHeight" in params:   label_parts.append(f"파고 {params['waveHeight']:.1f}m")
-    if "wavePeriod" in params:   label_parts.append(f"주기 {params['wavePeriod']:.0f}s")
-    if "waveDirection" in params: label_parts.append(f"파향 {params['waveDirection']:.0f}°")
-    if "timeScale" in params:    label_parts.append(f"시간 {params['timeScale']:.1f}×")
-    if "shipSpeed" in params:    label_parts.append(f"속력 {params['shipSpeed']:.1f}kt")
+    if "windSpeed" in params:
+        label_parts.append(f"풍속 {params['windSpeed']:.0f}kt")
+    if "waveHeight" in params:
+        label_parts.append(f"파고 {params['waveHeight']:.1f}m")
+    if "wavePeriod" in params:
+        label_parts.append(f"주기 {params['wavePeriod']:.0f}s")
+    if "waveDirection" in params:
+        label_parts.append(f"파향 {params['waveDirection']:.0f}°")
+    if "timeScale" in params:
+        label_parts.append(f"시간 {params['timeScale']:.1f}×")
+    if "shipSpeed" in params:
+        label_parts.append(f"속력 {params['shipSpeed']:.1f}kt")
 
     return {
         "action": "set_roll_scenario",
@@ -911,16 +928,24 @@ def _tool_plan_route(arguments: dict) -> dict:
     frm = _resolve_point(arguments.get("from", ""))
     to = _resolve_point(arguments.get("to", ""))
     if not frm:
-        return {"error": f"출발지를 인식할 수 없습니다: {arguments.get('from')!r}. 한국 항구 이름 또는 'lat,lng'를 쓰세요."}
+        return {
+            "error": f"출발지를 인식할 수 없습니다: {arguments.get('from')!r}. 한국 항구 이름 또는 'lat,lng'를 쓰세요."
+        }
     if not to:
-        return {"error": f"도착지를 인식할 수 없습니다: {arguments.get('to')!r}. 한국 항구 이름 또는 'lat,lng'를 쓰세요."}
+        return {
+            "error": f"도착지를 인식할 수 없습니다: {arguments.get('to')!r}. 한국 항구 이름 또는 'lat,lng'를 쓰세요."
+        }
     size_class = (arguments.get("size_class") or "").strip().upper() or None
     if size_class and size_class not in ("A", "B", "C", "D", "E"):
         size_class = None
     return {
         "action": "plan_route",
-        "fromLat": frm[0], "fromLng": frm[1], "fromName": frm[2],
-        "toLat": to[0], "toLng": to[1], "toName": to[2],
+        "fromLat": frm[0],
+        "fromLng": frm[1],
+        "fromName": frm[2],
+        "toLat": to[0],
+        "toLng": to[1],
+        "toName": to[2],
         "sizeClass": size_class,
         "label": f"항로 추론: {frm[2]} → {to[2]}" + (f" ({size_class}급)" if size_class else ""),
     }
@@ -1072,7 +1097,9 @@ def _tool_get_hazard_summary(arguments: dict) -> dict:
 
     if not near:
         return {
-            "area": area_name, "radius_nm": radius_nm, "cell_count": 0,
+            "area": area_name,
+            "radius_nm": radius_nm,
+            "cell_count": 0,
             "summary": f"{area_name} 반경 {radius_nm:.0f}nm 내 사고 위험 격자 데이터가 없습니다.",
         }
 
@@ -1081,9 +1108,7 @@ def _tool_get_hazard_summary(arguments: dict) -> dict:
     low = [c for _, c in near if c.get("score", 0) < 40]
     top = sorted(near, key=lambda x: -x[1].get("score", 0))[:3]
     top_causes = [
-        {"cause": c.get("cause", "—"), "score": round(c.get("score", 0), 1),
-         "dist_nm": round(d, 1)}
-        for d, c in top
+        {"cause": c.get("cause", "—"), "score": round(c.get("score", 0), 1), "dist_nm": round(d, 1)} for d, c in top
     ]
     return {
         "area": area_name,
@@ -1128,5 +1153,5 @@ def execute_tool(name: str, arguments: dict) -> dict:
         logger.debug("Tool '%s' executed successfully", name)
         return result
     except Exception as exc:
-        logger.exception("Tool '%s' raised an exception: %s", name, exc)
+        logger.exception("Tool '%s' raised an exception", name)
         return {"error": f"도구 실행 오류 ({name}): {exc}"}

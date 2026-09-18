@@ -28,6 +28,14 @@ services:
       OPENSKY_USERNAME: ${OPENSKY_USERNAME:-}
       OPENSKY_PASSWORD: ${OPENSKY_PASSWORD:-}
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      DATA_PLATFORM_ENABLED: ${DATA_PLATFORM_ENABLED:-false}
+      DATA_PLATFORM_DB: /app/var/data-platform/journal.sqlite3
+      WATCH_DB: /app/var/data-platform/watch-officer.sqlite3
+      WATCH_DCPA_NM: ${WATCH_DCPA_NM:-0.3}
+      WATCH_TCPA_MIN: ${WATCH_TCPA_MIN:-10}
+      WATCH_COOLDOWN_MIN: ${WATCH_COOLDOWN_MIN:-30}
+    volumes:
+      - platform_data:/app/var/data-platform
     depends_on:
       db:
         condition: service_started
@@ -110,6 +118,7 @@ services:
     # ▲▲▲ GPU 사용 시 ▲▲▲
 
 volumes:
+  platform_data:
   postgis_data:
   redis_data:
   ollama_data:

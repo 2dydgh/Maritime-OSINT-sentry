@@ -1,0 +1,150 @@
+/* Shared dashboard palette and typography. */
+@font-face {
+    font-family: 'S-CoreDream-6Bold';
+    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/S-CoreDream-6Bold.woff') format('woff');
+    font-weight: 700;
+    font-style: normal;
+}
+
+:root {
+    /* ══ Admiralty Navy ══ deeper, more deliberate than the stock tech-blue.
+       Background carries a faint navy-ink tint (not neutral black); the single
+       brand colour is a saturated admiralty blue. All cautions/warnings use
+       chart-amber — blue↔amber is the complementary pair real marine
+       instruments use so warnings separate cleanly from the UI. */
+    /* ══ Typography tokens ══ each role is a Latin→Korean fallback chain:
+       the browser picks per-glyph, so English renders in the Latin face and
+       Korean falls through to the Hangul face on the same line.
+         brand   → wordmark & hero numbers (Orbitron)
+         display → titles & buttons (Rajdhani / S-CoreDream for Hangul —
+                   keeps title hierarchy distinct from body even in Korean)
+         body    → running text (Inter)
+         data    → numbers & gauges (JetBrains Mono — HUD/terminal face) */
+    --font-brand:   'Orbitron', sans-serif;
+    --font-display: 'Rajdhani', 'S-CoreDream-6Bold', 'Pretendard Variable', sans-serif;
+    --font-body:    'Inter', 'Pretendard Variable', sans-serif;
+    --font-data:    'JetBrains Mono', 'Pretendard Variable', monospace;
+    --bg-color: #0a0e16;          /* navy-ink, not neutral black */
+    --panel-bg: #131a29;
+    --panel-bg-solid: rgba(19, 26, 41, 0.95);
+    --panel-border: rgba(120, 150, 200, 0.10);
+    --primary: #2f6fed;           /* admiralty navy — deeper than stock #3b82f6 */
+    --primary-muted: rgba(47, 111, 237, 0.12);
+    --primary-glow: rgba(47, 111, 237, 0.3);
+    --secondary: #94a3b8;
+
+    /* ── Chart-amber CAUTION — the signature. Complementary to the navy so
+       every warning reads instantly. Spend the boldness here only. ── */
+    --caution: #f5a623;
+    --caution-muted: rgba(245, 166, 35, 0.14);
+    --caution-glow: rgba(245, 166, 35, 0.40);
+    --depth-contour: #1a3050;     /* hairline sounding/contour lines */
+
+    /* ── Map control "glass" — ONE material for every passive control floating
+       over the map (search, 2D/3D toggle, layer chips, zoom). Near-solid (0.88)
+       so it reads like the solid side panels, with a faint blur to still float. */
+    --map-glass-bg: rgba(10, 14, 22, 0.88);
+    --map-glass-border: rgba(130, 165, 215, 0.18);
+    --map-glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+
+    /* ── Canonical 3-tier severity ramp — built for HIERARCHY, not a rainbow.
+       The amateur tell is three equally-bright warm colours (yellow/orange/red).
+       Instead: caution is a calm muted gold that recedes, danger is the only
+       vivid one, so the eye jumps straight to real danger. One ramp everywhere
+       (was a scatter of #eab308/#fbbf24/#fb923c/#f97316/#f43f5e across JS+CSS). */
+    --sev-caution: #d9a441;          /* muted gold — recedes, "note" not "alarm" */
+    --sev-warning: #ec7a2c;          /* clear orange */
+    --sev-danger:  #ef4444;          /* vivid red — the only loud step. Single source:
+                                        change here to retint ALL danger reds. */
+    --sev-danger-rgb: 239, 68, 68;   /* same color as RGB triplet for rgba() tints */
+    --sev-caution-glow: rgba(217, 164, 65, 0.32);
+    --sev-warning-glow: rgba(236, 122, 44, 0.40);
+    --sev-danger-glow:  rgba(var(--sev-danger-rgb), 0.48);
+
+    /* ── Tactical Marine Color Tokens ── */
+    --ocean-depth: #03070d;
+    --sonar-phosphor: #00e5c9;
+    --survival-orange: #ff5d22;
+    --nautical-brass: #cf9d53;
+    --sea-foam: #94aab5;
+    --hull-steel: #111926;
+    /* Single brand blue: --accent now equals --primary so the two blues that
+       used to coexist (#1e44c0 vs #2f6fed) are unified. --accent-glow is the
+       sky-blue previously hardcoded as rgba(77, 155, 255) for hover/glow halos. */
+    --accent: #2f6fed;
+    --accent-glow: #4d9bff;
+    --accent-red: var(--sev-danger);   /* alias → single danger source */
+    --accent-green: #22c55e;
+    --accent-amber: var(--caution); /* alias: transient warning-state shares caution hue */
+    --accent-yellow: #eab308;
+    --text-main: #f4f4f5;
+    --text-sub: #a1a1aa;
+    --text-dim: #52525b;
+    --text-muted: #3f3f46;
+    --gradient-accent: linear-gradient(90deg, #5b8ef5, var(--primary));
+    --accent-line: linear-gradient(90deg, #2f6fed 0%, #5b8ef5 50%, transparent 100%);
+    --shadow-panel: 0 4px 20px rgba(0, 0, 0, 0.3);
+    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.2);
+    --panel-gradient: #0a0e16;
+    --highlight-line: linear-gradient(90deg, transparent, rgba(47, 111, 237, 0.15), transparent);
+    --glow-blue: rgba(47, 111, 237, 0.04);
+    --glow-blue-strong: rgba(47, 111, 237, 0.08);
+    /* Radius scale — unify control shapes */
+    --radius-tag: 4px;      /* tiny static tags */
+    --radius-pill: 7px;     /* interactive pill buttons & chips */
+    --radius-group: 10px;   /* segmented-control containers */
+
+    /* ── Button system — shared interactive surface + motion tokens ──
+       Same-role controls (toggles, primary actions, overlay buttons) draw their
+       default/hover/active states from these so they stay in lockstep. */
+    --btn-surface:        rgba(255, 255, 255, 0.06);  /* ghost / toggle resting */
+    --btn-surface-hover:  rgba(255, 255, 255, 0.12);
+    --btn-surface-active: rgba(255, 255, 255, 0.16);  /* pressed */
+    --btn-border:         rgba(255, 255, 255, 0.10);
+    --btn-border-hover:   rgba(255, 255, 255, 0.22);
+    --btn-transition:     all 0.15s ease;
+    /* Overlay buttons floating over map/3D imagery need dark contrast + blue glow */
+    --btn-overlay-bg:        rgba(8, 18, 38, 0.82);
+    --btn-overlay-bg-hover:  rgba(15, 30, 60, 0.92);
+    /* Resting state is neutral (no blue at rest); blue appears only on hover/active
+       so the accent reads as "interaction", not a random standing colour. */
+    --btn-overlay-border:       rgba(255, 255, 255, 0.14);
+    --btn-overlay-border-hover: rgba(47, 111, 237, 0.85);
+    --btn-overlay-glow:       0 2px 10px rgba(0, 0, 0, 0.5);
+    --btn-overlay-glow-hover: 0 0 16px rgba(47, 111, 237, 0.35), 0 2px 12px rgba(0, 0, 0, 0.5);
+
+    /* 계기판 깊이 문법 — 광원 하나(위). well=파인 면(읽는 것), raise=솟은 컨트롤(만지는 것) */
+    --well-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+    --raise-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.35);
+    --press-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+    --seg-active-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --knob-bg: radial-gradient(circle at 35% 30%, #26354f, #0a0e16 72%);
+    --knob-shadow: 0 0 6px rgba(47, 111, 237, 0.45), 0 1px 2px rgba(0, 0, 0, 0.55);
+
+    /* ── 모달 다이얼로그 표면 — 근거/조사/시나리오 전면 창 공용 ──
+       패널 위에 한 단계 더 얹히는 창이라 자체 배경·경계가 필요하다.
+       inset  = 패널 위로 솟은 근거 박스, sunken = 원본 JSON처럼 파인 면. */
+    --dialog-backdrop: rgba(3, 9, 20, 0.80);
+    --surface-inset:   #17283d;
+    --surface-sunken:  #0b1421;
+    --divider:         rgba(120, 150, 200, 0.20);
+
+    /* ── 폼 컨트롤 ──
+       .proposal-card input 과 같은 언어 — 패널보다 어두운 "우물" 면.
+       반드시 불투명일 것: <select> 의 펼침 목록이 이 배경을 그대로 쓰기 때문에
+       rgba 를 주면 페이지 위에 반투명 팝업이 그려져 글자가 읽히지 않는다.
+       --btn-surface(반투명 흰색)는 버튼 전용이며 입력류에 쓰면 안 된다. */
+    --control-bg:       var(--bg-color);
+    --control-bg-hover: #0e141f;
+    /* select 화살표 — appearance:none 으로 OS 위젯을 걷어낸 뒤 이걸 얹는다.
+       data URI 안에서는 var() 가 안 되므로 색은 --secondary(#94a3b8) 와 같은 값을 박는다. */
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+    /* ── 스크롤바 ──
+       값은 main.css 가 이미 20여 곳에 개별로 쓰던 것과 동일하다. 토큰으로 올려
+       전역 규칙 한 벌에서 쓰고, 새 스크롤 영역이 매번 누락되는 일을 끝낸다. */
+    --scrollbar-thumb:       rgba(255, 255, 255, 0.10);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.18);
+    --scrollbar-track:       rgba(0, 0, 0, 0.10);
+}
+

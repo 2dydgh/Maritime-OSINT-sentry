@@ -1,16 +1,23 @@
 # tests/test_collision_land_filter.py
 """collision_analyzer의 육지 필터 통합 테스트."""
-import pytest
+
 from unittest.mock import patch
 
-from backend.services import land_filter, collision_analyzer
+import pytest
+
+from backend.services import collision_analyzer, land_filter
 
 
 def _make_vessel(mmsi, lat, lng, sog=10.0, cog=90.0):
     return {
-        "mmsi": mmsi, "lat": lat, "lng": lng,
-        "sog": sog, "cog": cog,
-        "name": f"SHIP-{mmsi}", "type": "cargo", "country": "KR",
+        "mmsi": mmsi,
+        "lat": lat,
+        "lng": lng,
+        "sog": sog,
+        "cog": cog,
+        "name": f"SHIP-{mmsi}",
+        "type": "cargo",
+        "country": "KR",
     }
 
 
