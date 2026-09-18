@@ -1,8 +1,10 @@
 """Optional raw capture at the existing AIS ingestion boundary."""
 import logging
 import threading
+
 from backend import config
 from backend.services.metrics import Counter
+
 from .journal import Journal
 
 logger = logging.getLogger(__name__)

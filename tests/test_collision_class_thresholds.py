@@ -1,8 +1,7 @@
 """collision_analyzer의 Class A/B 차등 임계값 테스트."""
 from unittest.mock import patch
 
-from backend.services import collision_analyzer
-from backend.services import land_filter
+from backend.services import collision_analyzer, land_filter
 
 
 def test_get_pair_class_aa():

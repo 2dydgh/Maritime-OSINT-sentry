@@ -1,9 +1,11 @@
 import copy
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from backend.services import collision_scenarios as s
+
 from backend.routers.collision_scenarios import router
+from backend.services import collision_scenarios as s
 
 NOW=1800000000
 A,B,C=111111111,222222222,333333333

@@ -6,6 +6,7 @@ subsequent tasks.
 """
 import logging
 import math
+
 from backend.services import land_filter
 
 logger = logging.getLogger(__name__)

@@ -5,13 +5,13 @@
 - Mock 폴리곤으로 교차 로직 검증
 - 실제 shapefile이 있으면 통합 테스트도 실행
 """
-import pytest
 from unittest.mock import patch
-from shapely.geometry import Polygon
+
+import pytest
 from shapely import STRtree
+from shapely.geometry import Polygon
 
 from backend.services import land_filter
-
 
 # --- 단위 테스트: Mock 폴리곤으로 교차 로직 검증 ---
 

@@ -1,22 +1,50 @@
-import os
-import json
-import time
-import logging
 import asyncio
+import json
+import logging
+import os
+import time
 from collections import deque
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from . import database, config, websocket
-from .services import ais_stream, data_fetcher, history_writer, aircraft_tracker, ais_fallback, llm_agent
-from .routers import ships, satellites, events, data, sentinel, alerts, history, metrics, health, collision, weather, route, aircraft, chat, hazard
-from .routers import datasets, proposals, collision_scenarios, knowledge, investigations
-from .services import watch_officer
+from . import config, database, websocket
+from .routers import (
+    aircraft,
+    alerts,
+    chat,
+    collision,
+    collision_scenarios,
+    data,
+    datasets,
+    events,
+    hazard,
+    health,
+    history,
+    investigations,
+    knowledge,
+    metrics,
+    proposals,
+    route,
+    satellites,
+    sentinel,
+    ships,
+    weather,
+)
 from .routers.hazard import warm_cache as warm_hazard_cache
-from .services import collision_analyzer, land_filter
+from .services import (
+    aircraft_tracker,
+    ais_fallback,
+    ais_stream,
+    collision_analyzer,
+    data_fetcher,
+    history_writer,
+    land_filter,
+    llm_agent,
+    watch_officer,
+)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -232,7 +260,7 @@ async def lifespan(app: FastAPI):
         task.cancel()
         try:
             await asyncio.wait_for(task, timeout=SHUTDOWN_TIMEOUT_SEC)
-        except (asyncio.CancelledError, asyncio.TimeoutError):
+        except (TimeoutError, asyncio.CancelledError):
             pass
         except Exception as e:
             logger.error(f"Error awaiting {name} cancellation: {e}")
@@ -246,7 +274,7 @@ async def lifespan(app: FastAPI):
         await asyncio.wait_for(
             history_writer.stop_history_writer(), timeout=SHUTDOWN_TIMEOUT_SEC
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.error("history writer stop timed out")
     except Exception as e:
         logger.error(f"Error stopping history writer: {e}")
@@ -254,7 +282,7 @@ async def lifespan(app: FastAPI):
     # Release the shared LLM httpx connection pool.
     try:
         await asyncio.wait_for(llm_agent.close_client(), timeout=SHUTDOWN_TIMEOUT_SEC)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.error("LLM client close timed out")
     except Exception as e:
         logger.error(f"Error closing LLM client: {e}")
@@ -310,7 +338,7 @@ async def websocket_ships(ws: WebSocket):
     try:
         text = await _build_feed_text()
         await asyncio.wait_for(ws.send_text(text), timeout=WS_SEND_TIMEOUT_SEC)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("Initial ship snapshot send timed out — dropping client")
         websocket.manager.disconnect(ws)
         return
@@ -377,6 +405,7 @@ app.include_router(collision_scenarios.router, prefix="/api/v1")
 
 # Static Files — resolve path for both normal and PyInstaller frozen mode
 import sys as _sys
+
 if getattr(_sys, "frozen", False):
     _base_dir = getattr(_sys, "_MEIPASS", os.path.dirname(_sys.executable))
 else:

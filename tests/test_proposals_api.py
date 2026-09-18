@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
 from backend.routers import proposals
 from backend.services import watch_officer as w
-from tests.test_watch_officer import data, NOW
+from tests.test_watch_officer import NOW, data
 
 
 def test_approval_and_execution_api(tmp_path, monkeypatch):

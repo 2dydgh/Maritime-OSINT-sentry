@@ -1,5 +1,7 @@
-from fastapi import APIRouter, HTTPException
 import logging
+
+from fastapi import APIRouter, HTTPException
+
 from ..services.aircraft_tracker import get_aircraft
 
 router = APIRouter(tags=["aircraft"])

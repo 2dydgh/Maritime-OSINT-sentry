@@ -2,7 +2,7 @@
 import hashlib
 import json
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 VERSION = 'ais-position-v1'
 POSITION_TYPES = {'PositionReport', 'StandardClassBPositionReport'}
@@ -12,10 +12,10 @@ def utc_time(value: str) -> str:
     if not isinstance(value, str):
         raise ValueError('timestamp must be a timezone-aware string')
     # AISStream historically includes a redundant UTC suffix after +0000.
-    dt = datetime.fromisoformat(value.removesuffix(' UTC').replace('Z', '+00:00'))
+    dt = datetime.fromisoformat(value.removesuffix(' UTC'))
     if dt.tzinfo is None:
         raise ValueError('timestamp must include a timezone')
-    return dt.astimezone(timezone.utc).isoformat(timespec='microseconds')
+    return dt.astimezone(UTC).isoformat(timespec='microseconds')
 
 
 def number(value, field, minimum, maximum, *, exclusive=False):

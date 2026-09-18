@@ -1,7 +1,9 @@
 import logging
 import time
+
 import httpx
 from fastapi import APIRouter
+
 from backend.services import korea_hex_grid as _khg
 
 logger = logging.getLogger(__name__)

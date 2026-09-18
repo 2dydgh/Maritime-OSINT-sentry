@@ -7,11 +7,10 @@ hallucinated tools, references/topo resolve correctly, and the executor runs
 resolved steps via execute_tool while preserving the {text, actions} contract.
 """
 
-import json
 
 import pytest
 
-from backend.services import llm_planner, llm_agent
+from backend.services import llm_agent, llm_planner
 
 
 # ---------------------------------------------------------------------------

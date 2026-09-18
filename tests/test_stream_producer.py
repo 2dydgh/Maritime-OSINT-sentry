@@ -1,6 +1,7 @@
 import json
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, patch
 
 from backend.services.stream_producer import StreamProducer
 

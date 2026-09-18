@@ -1,5 +1,6 @@
 import asyncio
 import logging
+
 from . import config
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,6 @@ async def init_db():
         db_pool = None
 
 async def close_db():
-    global db_pool
     if db_pool and _HAS_ASYNCPG:
         await db_pool.close()
         logger.info("Database connection pool closed.")

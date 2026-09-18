@@ -3,8 +3,9 @@ import argparse
 import hashlib
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+
 from backend import config
 
 
@@ -34,7 +35,7 @@ def inventory(paths=None):
 
 def backup(directory, paths=None):
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=False)
-    manifest={'created_at':datetime.now(timezone.utc).isoformat(),'files':{},'note':'DB별 일관된 순차 백업이며 전체 서비스의 단일 시점 스냅샷은 아닙니다. 원본을 삭제하지 않습니다.'}
+    manifest={'created_at':datetime.now(UTC).isoformat(),'files':{},'note':'DB별 일관된 순차 백업이며 전체 서비스의 단일 시점 스냅샷은 아닙니다. 원본을 삭제하지 않습니다.'}
     for name,path in (paths or sources()).items():
         path=Path(path)
         if not path.exists():continue

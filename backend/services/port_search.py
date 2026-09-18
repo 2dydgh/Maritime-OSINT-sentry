@@ -4,8 +4,8 @@ Supports Korean and English port name search.
 """
 
 import json
-import os
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,6 @@ _ports = []
 
 def _load_ports():
     """Load port data from searoute's built-in ports.geojson."""
-    global _ports
     if _ports:
         return
 

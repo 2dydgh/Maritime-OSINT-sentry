@@ -1,10 +1,10 @@
 import json
-import pytest
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime, timezone
+
+import pytest
 
 from backend.services import ais_fallback
-
 
 # ── Task 1: select_feed_status ──
 
@@ -43,7 +43,7 @@ def test_sustained_low_switches_to_fallback():
 
 
 def test_sustained_low_no_snapshot_is_down():
-    status, streak = ais_fallback.select_feed_status(0, 0, "live", 1)
+    status, _streak = ais_fallback.select_feed_status(0, 0, "live", 1)
     assert status == "down"
 
 
@@ -75,7 +75,7 @@ def _mock_pool(rows):
 @pytest.mark.asyncio
 async def test_snapshot_maps_rows_to_live_shape():
     ais_fallback._reset_cache_for_test()
-    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=timezone.utc)
+    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=UTC)
     rows = [{
         "object_id": "440123456", "lng": 129.04, "lat": 35.11,
         "velocity": 12.4, "heading": 180.0, "ship_type": "cargo",
@@ -98,10 +98,10 @@ async def test_snapshot_decimal_columns_are_json_serializable():
     # PostGIS numeric 컬럼은 Decimal 로 온다 → float 로 변환돼 json.dumps 가능해야 함.
     from decimal import Decimal
     ais_fallback._reset_cache_for_test()
-    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=timezone.utc)
+    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=UTC)
     rows = [{
         "object_id": "440123456", "lng": Decimal("129.04"), "lat": Decimal("35.11"),
-        "velocity": Decimal("12.4"), "heading": Decimal("180"), "ship_type": "cargo",
+        "velocity": Decimal("12.4"), "heading": Decimal(180), "ship_type": "cargo",
         "record_time": rt,
     }]
     ships = await ais_fallback.get_fallback_snapshot(pool=_mock_pool(rows))
@@ -122,7 +122,7 @@ async def test_snapshot_empty_when_no_pool():
 @pytest.mark.asyncio
 async def test_snapshot_uses_cache_within_ttl():
     ais_fallback._reset_cache_for_test()
-    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=timezone.utc)
+    rt = datetime(2026, 6, 22, 1, 0, 0, tzinfo=UTC)
     rows = [{"object_id": "1", "lng": 0.0, "lat": 0.0, "velocity": 0.0,
              "heading": 0.0, "ship_type": "unknown", "record_time": rt}]
     pool = _mock_pool(rows)

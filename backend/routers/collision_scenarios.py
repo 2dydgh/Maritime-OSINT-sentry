@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from backend.services import collision_scenarios as service, watch_officer
+
+from backend.services import collision_scenarios as service
+from backend.services import watch_officer
 
 router=APIRouter(prefix='/collision/scenarios',tags=['collision-scenarios'])
 

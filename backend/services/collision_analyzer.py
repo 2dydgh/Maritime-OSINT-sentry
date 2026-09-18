@@ -7,13 +7,13 @@ Collision Risk Analyzer — 거리 기반 + ML 모델 이중 분석
 3단계-B: da10-service ML 모델 호출 (XGBoost 충돌 위험도 0~3)
 """
 
-import os
-import math
-import time
 import asyncio
-import threading
 import logging
-from datetime import datetime, timezone
+import math
+import os
+import threading
+import time
+from datetime import UTC, datetime
 
 import httpx
 
@@ -405,7 +405,7 @@ def _make_ship_info(v: dict) -> dict:
 def analyze_distance_risks(proximity_pairs: list[dict]) -> list[dict]:
     """거리 기반 DCPA/TCPA 임계값 판정. Class 조합 + 조우 유형별 차등 적용."""
     risks = []
-    now_ts = datetime.now(timezone.utc).isoformat()
+    now_ts = datetime.now(UTC).isoformat()
 
     for pair in proximity_pairs:
         dcpa = pair["dcpa_nm"]
@@ -531,7 +531,7 @@ async def analyze_ml_risks(proximity_pairs: list[dict]) -> list[dict]:
         return []
 
     risks = []
-    now_ts = datetime.now(timezone.utc).isoformat()
+    now_ts = datetime.now(UTC).isoformat()
 
     for i, pair in enumerate(proximity_pairs):
         if i >= len(predictions):

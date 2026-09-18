@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from .. import config
 
 router = APIRouter(tags=["data"])

@@ -23,12 +23,12 @@ from typing import Any
 import httpx
 
 from backend.config_llm import (
+    MAX_PLAN_STEPS,
     OLLAMA_BASE_URL,
     OLLAMA_TIMEOUT,
-    PLANNER_MODEL,
     PLANNER_MAX_TOKENS,
+    PLANNER_MODEL,
     PLANNER_SYSTEM_PROMPT,
-    MAX_PLAN_STEPS,
 )
 from backend.services.llm_tools import TOOL_DEFINITIONS
 

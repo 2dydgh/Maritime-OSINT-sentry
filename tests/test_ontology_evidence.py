@@ -1,17 +1,15 @@
-import copy
-import json
-import time
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pyshacl import validate
-from rdflib import Graph, Literal, RDF, XSD
+from rdflib import RDF, XSD, Graph, Literal
 
 from backend.ontology.evidence import Evidence, M, definition, load
 from backend.routers.knowledge import router
-from backend.services import collision_scenarios as s, watch_officer as w
-from tests.test_watch_officer import data, NOW, PAIR
+from backend.services import collision_scenarios as s
+from backend.services import watch_officer as w
+from tests.test_watch_officer import NOW, PAIR, data
 
 
 @pytest.fixture

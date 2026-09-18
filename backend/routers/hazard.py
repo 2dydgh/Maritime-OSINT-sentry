@@ -19,7 +19,7 @@ import time
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from backend.services import korea_hex_grid, static_hazards, land_filter
+from backend.services import korea_hex_grid, land_filter, static_hazards
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["hazard"])

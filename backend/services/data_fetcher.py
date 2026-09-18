@@ -7,7 +7,7 @@ Runs on a 60-second interval to update latest_data.
 
 import logging
 import time
-from typing import Dict, List, Any
+from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -16,7 +16,7 @@ from .ais_stream import get_ais_vessels
 logger = logging.getLogger(__name__)
 
 # Global data store
-latest_data: Dict[str, Any] = {
+latest_data: dict[str, Any] = {
     "ships": [],
     "ships_by_type": {},
     "ship_count": 0,
@@ -26,9 +26,9 @@ latest_data: Dict[str, Any] = {
 _scheduler: BackgroundScheduler = None
 
 
-def _group_ships_by_type(ships: List[dict]) -> Dict[str, List[dict]]:
+def _group_ships_by_type(ships: list[dict]) -> dict[str, list[dict]]:
     """Group ships by their type."""
-    by_type: Dict[str, List[dict]] = {}
+    by_type: dict[str, list[dict]] = {}
     for ship in ships:
         ship_type = ship.get("type", "unknown")
         if ship_type not in by_type:
@@ -85,6 +85,6 @@ def stop_data_fetcher() -> None:
         logger.info("Data fetcher stopped")
 
 
-def get_latest_data() -> Dict[str, Any]:
+def get_latest_data() -> dict[str, Any]:
     """Get the latest data snapshot."""
     return latest_data

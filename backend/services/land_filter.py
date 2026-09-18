@@ -12,9 +12,9 @@ import pickle
 import time
 from pathlib import Path
 
+from shapely import STRtree
 from shapely.geometry import LineString, shape
 from shapely.validation import make_valid
-from shapely import STRtree
 
 logger = logging.getLogger(__name__)
 

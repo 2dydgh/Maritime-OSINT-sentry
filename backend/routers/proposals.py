@@ -1,9 +1,11 @@
 """Read proposals, authorize map tracking, and receive browser acknowledgements."""
 from typing import Annotated, Literal
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, StringConstraints
+
 from backend import config
-from backend.services import watch_officer, collision_scenarios, decision_followup
+from backend.services import collision_scenarios, decision_followup, watch_officer
 
 router = APIRouter(prefix='/proposals', tags=['decision-support'])
 

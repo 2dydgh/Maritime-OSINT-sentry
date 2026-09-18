@@ -10,7 +10,7 @@ import time
 
 import httpx
 
-from backend.config import OPENSKY_USERNAME, OPENSKY_PASSWORD
+from backend.config import OPENSKY_PASSWORD, OPENSKY_USERNAME
 
 logger = logging.getLogger(__name__)
 

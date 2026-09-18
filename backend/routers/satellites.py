@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException
-from ..services.satellite_tracker import fetch_intel_satellites
 import logging
+
+from fastapi import APIRouter, HTTPException
+
+from ..services.satellite_tracker import fetch_intel_satellites
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["satellites"])

@@ -11,7 +11,7 @@ import socket
 import sqlite3
 import time
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -53,7 +53,7 @@ def in_aor(candidate):
 
 
 def iso(now):
-    return datetime.fromtimestamp(now, timezone.utc).isoformat()
+    return datetime.fromtimestamp(now, UTC).isoformat()
 
 
 def snapshot():
@@ -87,7 +87,7 @@ def validate(pair, risks, lookup, now, candidate):
         return 'analysis_stale', None
     if candidate is not None:
         try:
-            analysis_at = datetime.fromisoformat(candidate['analysis_at'].replace('Z', '+00:00')).timestamp()
+            analysis_at = datetime.fromisoformat(candidate['analysis_at']).timestamp()
             if not 0 <= now - analysis_at <= config.WATCH_MAX_ANALYSIS_AGE_SEC:
                 return 'analysis_stale', None
         except (ValueError, TypeError):
@@ -177,7 +177,7 @@ class Store:
             for p in active:
                 pair = tuple(p['pair'])
                 cand = cands.get(pair)
-                error, evidence = validate(pair, risks, lookup, now, cand)
+                error, _evidence = validate(pair, risks, lookup, now, cand)
                 if p['status'] == 'open':
                     if error in OBSERVATION_GAP:
                         # 공백은 유예하되 무한정 열어두지는 않는다.
@@ -293,7 +293,7 @@ class Store:
             d = p.get('decision')
             if d and d.get('at'):
                 try:
-                    at = datetime.fromisoformat(d['at'].replace('Z', '+00:00')).timestamp()
+                    at = datetime.fromisoformat(d['at']).timestamp()
                 except ValueError:
                     continue
                 if at >= since:

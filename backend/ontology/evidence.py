@@ -4,13 +4,13 @@ import json
 import math
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
 
 from pyshacl import validate
-from rdflib import Graph, Literal, Namespace, RDF, RDFS, URIRef, XSD
+from rdflib import RDF, RDFS, XSD, Graph, Literal, Namespace, URIRef
 
 from backend import config
 
@@ -118,12 +118,12 @@ class Evidence:
         if datatype == XSD.dateTime:
             try:
                 if isinstance(value,(int,float)) and not isinstance(value,bool):
-                    value = datetime.fromtimestamp(value,timezone.utc)
+                    value = datetime.fromtimestamp(value,UTC)
                 elif isinstance(value,str):
-                    value = datetime.fromisoformat(value.replace('Z','+00:00'))
+                    value = datetime.fromisoformat(value)
                 if not isinstance(value,datetime) or value.tzinfo is None:
                     raise ValueError('timezone required')
-                value = value.astimezone(timezone.utc)
+                value = value.astimezone(UTC)
             except (ValueError,TypeError,OverflowError,OSError):
                 self.gap('시각이 누락되었거나 시간대가 불분명한 원본 값이 있습니다: '+key)
                 return
@@ -372,7 +372,7 @@ class Evidence:
         edges = [{'from':str(a),'to':str(b),'relation':str(rel),'label':str(ontology.value(rel,RDFS.label) or rel.split('#')[-1])}
                  for a,rel,b in self.g if isinstance(b,URIRef) and str(a) in self.nodes and str(b) in self.nodes]
         return {'proposal_id':self.pid,'revision':self.p.get('revision'),'ontology_version':VERSION,
-                'generated_at':datetime.fromtimestamp(self.now,timezone.utc).isoformat(),
+                'generated_at':datetime.fromtimestamp(self.now,UTC).isoformat(),
                 'question':question,'question_label':QUESTIONS[question],'claims':claims,'gaps':self.gaps,
                 'validation':validation,'graph':{'nodes':nodes,'edges':sorted(edges,key=lambda e:(e['from'],e['relation'],e['to']))},
                 'coverage':{'followup_included':len(self.bundle.get('observations',[])),'followup_total':self.bundle.get('observation_total',0)},

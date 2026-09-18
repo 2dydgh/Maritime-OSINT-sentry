@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+
 from backend.data_platform.journal import Journal
 from backend.data_platform.normalize import normalize, utc_time
 
@@ -129,6 +130,7 @@ def test_capture_disabled_and_failure_counted(monkeypatch):
 def test_dataset_api(tmp_path, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
     from backend.routers import datasets
     with Journal(tmp_path / 'journal.sqlite3') as journal:
         seed(journal)
@@ -151,6 +153,7 @@ def test_live_proxy_boundary_captures_before_json_parsing(tmp_path, monkeypatch)
     import io
     import subprocess
     from types import SimpleNamespace
+
     from backend.services import ais_stream
     with Journal(tmp_path / 'live.sqlite3') as journal:
         lines = iter(['not-json\n', '{"error":"synthetic upstream error"}\n'])

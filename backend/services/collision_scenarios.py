@@ -3,7 +3,7 @@ import json
 import math
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -17,7 +17,7 @@ MAX_NEIGHBORS = 50
 
 
 def stamp(ts):
-    return datetime.fromtimestamp(ts, timezone.utc).isoformat()
+    return datetime.fromtimestamp(ts, UTC).isoformat()
 
 
 def valid(v, now):

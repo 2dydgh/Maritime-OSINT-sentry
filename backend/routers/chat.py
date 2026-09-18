@@ -1,8 +1,9 @@
 """Chat API endpoint for LLM agent interaction."""
 
+import logging
+
 from fastapi import APIRouter
 from pydantic import BaseModel
-import logging
 
 from backend.services import llm_agent
 

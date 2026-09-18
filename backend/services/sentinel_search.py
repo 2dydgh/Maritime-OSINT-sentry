@@ -5,6 +5,7 @@ Free, keyless search for metadata + thumbnails. Used in the right-click dossier.
 
 import logging
 from datetime import datetime, timedelta
+
 from cachetools import TTLCache
 
 logger = logging.getLogger(__name__)

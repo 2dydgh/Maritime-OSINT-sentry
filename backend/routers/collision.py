@@ -1,7 +1,9 @@
 import math
+
 from fastapi import APIRouter, HTTPException, Query
-from ..services.collision_analyzer import get_distance_risks, get_ml_risks
+
 from ..services import land_filter
+from ..services.collision_analyzer import get_distance_risks, get_ml_risks
 
 router = APIRouter(tags=["collision"])
 

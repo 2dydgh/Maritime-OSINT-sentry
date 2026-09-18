@@ -1,7 +1,9 @@
 import asyncio
-from fastapi import APIRouter, HTTPException
-import logging
 import json
+import logging
+
+from fastapi import APIRouter, HTTPException
+
 from ..database import get_db_pool
 
 router = APIRouter(tags=["events"])
@@ -34,7 +36,7 @@ async def get_military_events():
                 if isinstance(result, str):
                     return json.loads(result)
                 return result
-    except (asyncio.TimeoutError, TimeoutError):
+    except TimeoutError:
         logger.error("Timeout acquiring DB connection for events")
         raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception:
@@ -66,7 +68,7 @@ async def get_restricted_areas():
                 if isinstance(result, str):
                     return json.loads(result)
                 return result
-    except (asyncio.TimeoutError, TimeoutError):
+    except TimeoutError:
         logger.error("Timeout acquiring DB connection for restricted areas")
         raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception:

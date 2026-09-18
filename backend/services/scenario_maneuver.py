@@ -1,5 +1,6 @@
 """Hypothetical ramp maneuvers, integrated at 1 s; not calibrated ship dynamics."""
 import math
+from itertools import pairwise
 
 MODEL = 'ramped-motion-local-plane-v1'
 
@@ -29,7 +30,7 @@ def path(ship, speed, course, turn_seconds, speed_seconds, horizon, origin):
 def closest_to_path(points, other, origin):
     from backend.services import collision_scenarios as s
     vx,vy=s.velocity(other);best=None
-    for a,b in zip(points,points[1:]):
+    for a,b in pairwise(points):
         t=a['t_s'];ox=other['x_nm']+vx*t;oy=other['y_nm']+vy*t
         rx,ry=ox-a['x_nm'],oy-a['y_nm']
         dx,dy=vx-(b['x_nm']-a['x_nm']),vy-(b['y_nm']-a['y_nm'])

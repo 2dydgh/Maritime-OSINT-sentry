@@ -1,11 +1,13 @@
 """Local AIS observations and frozen prediction residuals; no execution inference."""
 import math
 from datetime import datetime
+from itertools import pairwise
+
 from backend.services import collision_scenarios as scenarios
 
 
 def timestamp(value):
-    return datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()
+    return datetime.fromisoformat(value).timestamp()
 
 
 def observe(pair, vessels, now, rule):
@@ -30,7 +32,7 @@ def observe(pair, vessels, now, rule):
 def interpolate(points, seconds):
     if seconds < points[0]['t_s'] or seconds > points[-1]['t_s']:
         return None
-    for a, b in zip(points, points[1:]):
+    for a, b in pairwise(points):
         if a['t_s'] <= seconds <= b['t_s']:
             ratio = (seconds-a['t_s'])/(b['t_s']-a['t_s'])
             return {k: a[k]+(b[k]-a[k])*ratio for k in ('x_nm', 'y_nm')}

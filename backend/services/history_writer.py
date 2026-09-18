@@ -6,12 +6,11 @@ AIS 위치 데이터를 메모리 버퍼에 쌓다가 일정 개수/시간마다
 
 import asyncio
 import logging
-import time
 import threading
-from datetime import datetime, timezone
-from typing import Optional
+import time
+from datetime import UTC, datetime
 
-from backend.services.metrics import db_writes_total, db_write_duration_seconds
+from backend.services.metrics import db_write_duration_seconds, db_writes_total
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +23,10 @@ SAMPLE_INTERVAL_SEC = 30  # 선박당 위치 기록 최소 간격 (초)
 _buffer: list[dict] = []
 _buffer_lock = threading.Lock()  # 스레드 간 안전을 위해 threading.Lock 사용
 _last_record_time: dict[str, float] = {}  # mmsi → 마지막 기록 시간
-_flush_task: Optional[asyncio.Task] = None
+_flush_task: asyncio.Task | None = None
 _running = False
 _db_pool = None
-_main_loop: Optional[asyncio.AbstractEventLoop] = None  # 메인 이벤트 루프 저장
+_main_loop: asyncio.AbstractEventLoop | None = None  # 메인 이벤트 루프 저장
 
 
 async def init_history_writer(db_pool) -> None:
@@ -44,7 +43,7 @@ async def init_history_writer(db_pool) -> None:
 
 async def stop_history_writer() -> None:
     """Stop the history writer and flush remaining buffer."""
-    global _running, _flush_task
+    global _running
     _running = False
 
     if _flush_task:
@@ -136,7 +135,7 @@ def record_position(
     heading: float,
     ship_type: str = "unknown",
     ship_name: str = "UNKNOWN",
-    timestamp: Optional[datetime] = None
+    timestamp: datetime | None = None
 ) -> None:
     """
     Record a vessel position for later batch insertion.
@@ -157,7 +156,7 @@ def record_position(
         record = {
             "object_id": mmsi_str,
             "object_type": "ship",
-            "record_time": timestamp or datetime.now(timezone.utc),
+            "record_time": timestamp or datetime.now(UTC),
             "lat": lat,
             "lng": lng,
             "altitude": 0.0,

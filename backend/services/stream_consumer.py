@@ -2,10 +2,10 @@
 
 import json
 import logging
-import time
 import threading
+import time
 
-from backend.services.metrics import stream_consume_total, stream_lag_messages, ais_vessels_active
+from backend.services.metrics import ais_vessels_active, stream_consume_total, stream_lag_messages
 
 logger = logging.getLogger(__name__)
 

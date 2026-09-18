@@ -8,11 +8,11 @@ Provides endpoints for:
 """
 
 import asyncio
-from datetime import datetime
-from typing import Optional, List
-from fastapi import APIRouter, Query, HTTPException, Request
-from pydantic import BaseModel
 import logging
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from ..database import get_db_pool
 from ..services.ais_stream import get_all_vessel_metadata, get_country_from_mmsi
@@ -29,8 +29,8 @@ class ShipPosition(BaseModel):
     type: str = "other"
     lat: float
     lng: float
-    sog: Optional[float] = None
-    heading: Optional[float] = None
+    sog: float | None = None
+    heading: float | None = None
     country: str = "UNKNOWN"
     record_time: datetime
 
@@ -38,18 +38,18 @@ class ShipPosition(BaseModel):
 class TrajectoryPoint(BaseModel):
     lat: float
     lng: float
-    sog: Optional[float] = None
-    heading: Optional[float] = None
+    sog: float | None = None
+    heading: float | None = None
     record_time: datetime
 
 
 class TimeRange(BaseModel):
-    min_time: Optional[datetime] = None
-    max_time: Optional[datetime] = None
+    min_time: datetime | None = None
+    max_time: datetime | None = None
     total_records: int
 
 
-@router.get("/ships", response_model=List[ShipPosition])
+@router.get("/ships", response_model=list[ShipPosition])
 async def get_ships_at_time(
     time: datetime = Query(..., description="ISO 8601 timestamp (e.g., 2025-03-13T14:30:00Z)")
 ):
@@ -114,7 +114,7 @@ async def get_ships_at_time(
             logger.info(f"History: Retrieved {len(ships)} ships at time {time}")
             return ships
 
-    except (asyncio.TimeoutError, TimeoutError):
+    except TimeoutError:
         logger.error(f"Timeout fetching ships at time {time}")
         raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception:
@@ -122,7 +122,7 @@ async def get_ships_at_time(
         raise HTTPException(status_code=503, detail="Failed to fetch ship positions")
 
 
-@router.get("/ships/{mmsi}", response_model=List[TrajectoryPoint])
+@router.get("/ships/{mmsi}", response_model=list[TrajectoryPoint])
 async def get_ship_trajectory(
     mmsi: str,
     start: datetime = Query(..., description="Start time (ISO 8601)"),
@@ -180,7 +180,7 @@ async def get_ship_trajectory(
             logger.info(f"History: Retrieved {len(trajectory)} trajectory points for MMSI {mmsi}")
             return trajectory
 
-    except (asyncio.TimeoutError, TimeoutError):
+    except TimeoutError:
         logger.error(f"Timeout fetching trajectory for MMSI {mmsi}")
         raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception:
@@ -194,10 +194,10 @@ async def get_bulk_trajectories(
     end: datetime = Query(..., description="End time (ISO 8601)"),
     limit_per_ship: int = Query(default=60, description="Max points per ship"),
     max_ships: int = Query(default=2000, ge=1, le=5000, description="Max number of ships to return"),
-    west: Optional[float] = Query(default=None, description="Bounding box west longitude"),
-    south: Optional[float] = Query(default=None, description="Bounding box south latitude"),
-    east: Optional[float] = Query(default=None, description="Bounding box east longitude"),
-    north: Optional[float] = Query(default=None, description="Bounding box north latitude"),
+    west: float | None = Query(default=None, description="Bounding box west longitude"),
+    south: float | None = Query(default=None, description="Bounding box south latitude"),
+    east: float | None = Query(default=None, description="Bounding box east longitude"),
+    north: float | None = Query(default=None, description="Bounding box north latitude"),
 ):
     """
     Retrieve trajectory data for ALL ships within a time range.
@@ -317,7 +317,7 @@ async def get_bulk_trajectories(
             logger.info(f"History: Retrieved trajectories for {len(ships)} ships ({len(rows)} total points)")
             return {"ships": ships}
 
-    except (asyncio.TimeoutError, TimeoutError):
+    except TimeoutError:
         logger.error("Timeout fetching bulk trajectories")
         raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception:
@@ -360,7 +360,7 @@ async def get_data_time_range():
             logger.info(f"History: Data range from {result.min_time} to {result.max_time}, {result.total_records} records")
             return result
 
-    except (asyncio.TimeoutError, TimeoutError):
+    except TimeoutError:
         logger.error("Timeout fetching data time range")
         raise HTTPException(status_code=503, detail="Database temporarily unavailable")
     except Exception:

@@ -1,5 +1,7 @@
-from fastapi import APIRouter, HTTPException
 import logging
+
+from fastapi import APIRouter, HTTPException
+
 from ..services.ais_stream import get_alerts
 
 logger = logging.getLogger(__name__)

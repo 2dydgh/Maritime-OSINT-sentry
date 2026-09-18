@@ -2,12 +2,11 @@
 import json
 import sqlite3
 from typing import Literal
-from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
-from backend.ontology.evidence import Evidence, HERE, load, digest
+from backend.ontology.evidence import HERE, Evidence, digest, load
 
 router = APIRouter(prefix='/knowledge', tags=['knowledge-evidence'])
 

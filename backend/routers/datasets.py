@@ -1,5 +1,6 @@
 """Read-only inspection of the first local data platform datasets."""
 from fastapi import APIRouter, HTTPException, Query
+
 from backend import config
 from backend.data_platform.capture import get_journal
 

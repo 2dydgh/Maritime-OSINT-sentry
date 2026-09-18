@@ -12,16 +12,16 @@ from typing import Any
 import httpx
 
 from backend.config_llm import (
+    ENABLE_PLANNER,
+    MAX_RESPONSE_TOKENS,
+    MAX_TOOL_CALLS,
     OLLAMA_BASE_URL,
     OLLAMA_MODEL,
     OLLAMA_TIMEOUT,
     SYSTEM_PROMPT,
-    MAX_RESPONSE_TOKENS,
-    MAX_TOOL_CALLS,
-    ENABLE_PLANNER,
 )
-from backend.services.llm_tools import TOOL_DEFINITIONS, execute_tool
 from backend.services import llm_planner
+from backend.services.llm_tools import TOOL_DEFINITIONS, execute_tool
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +84,10 @@ def _build_context_message(context: dict | None) -> str | None:
     name = rv.get("name") or "UNKNOWN"
     mmsi = rv.get("mmsi", "?")
     parts = [
-        f"[현재 화면 상태] 횡요각 시뮬레이션 화면이 열려 있고, 표시 중인 선박은 "
-        f"'{name}' (MMSI {mmsi}) 입니다."
+        (
+            f"[현재 화면 상태] 횡요각 시뮬레이션 화면이 열려 있고, 표시 중인 선박은 "
+            f"'{name}' (MMSI {mmsi}) 입니다."
+        )
     ]
     if rv.get("is_capsizing"):
         parts.append("현재 전복 시뮬레이션이 진행 중입니다.")
@@ -264,8 +266,8 @@ async def _run_reactive(
 
                 # Loop back to call Ollama with the tool results appended
 
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.exception("Unexpected error in reactive loop: %s", exc)
+    except Exception:  # pylint: disable=broad-except
+        logger.exception("Unexpected error in reactive loop")
         return {
             "text": "예상치 못한 오류가 발생했습니다. 관리자에게 문의해 주세요.",
             "actions": actions,
@@ -409,7 +411,7 @@ async def _execute_plan(
 # ---------------------------------------------------------------------------
 # Public interface
 # ---------------------------------------------------------------------------
-async def chat(user_message: str, history: list = None, context: dict = None) -> dict:
+async def chat(user_message: str, history: list | None = None, context: dict | None = None) -> dict:
     """Run a single user turn through the Maritime OSINT agent.
 
     Multi-domain, multi-step requests are routed through an explicit
@@ -441,8 +443,8 @@ async def chat(user_message: str, history: list = None, context: dict = None) ->
         messages = _build_initial_messages(user_message, history, context)
         return await _run_reactive(client, messages, [])
 
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.exception("Unexpected error in chat: %s", exc)
+    except Exception:  # pylint: disable=broad-except
+        logger.exception("Unexpected error in chat")
         return {
             "text": "예상치 못한 오류가 발생했습니다. 관리자에게 문의해 주세요.",
             "actions": [],

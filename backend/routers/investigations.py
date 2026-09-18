@@ -1,5 +1,6 @@
 """Manual event-scoped investigation; no agent-facing approval endpoint."""
 from fastapi import APIRouter, HTTPException
+
 from backend.services import investigation_agent as agent
 from backend.services.investigation_store import Repository
 

@@ -14,10 +14,11 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.usage import UsageLimits
 
-from backend import config, config_llm
+from backend import config_llm
 from backend.ontology.evidence import Evidence, load
-from backend.services import watch_officer as w, collision_scenarios as scenarios
-from backend.services.investigation_store import Repository, ACTIVE
+from backend.services import collision_scenarios as scenarios
+from backend.services import watch_officer as w
+from backend.services.investigation_store import ACTIVE, Repository
 
 log = logging.getLogger(__name__)
 MODEL = os.getenv('INVESTIGATION_MODEL', config_llm.OLLAMA_MODEL)

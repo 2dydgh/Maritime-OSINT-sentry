@@ -1,8 +1,7 @@
-import json
 from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import patch
 
 import pytest
+
 from backend.services import watch_officer as w
 
 NOW = 1800000000.0
@@ -150,7 +149,7 @@ def test_dismissal_never_executes_and_cooldown(setup):
 
 
 def test_receipt_lifecycle_and_stale_receipt_cannot_resurrect(setup):
-    store, risks, lookup, pid = setup
+    store, _risks, _lookup, pid = setup
     p = approve(setup)['proposal']; eid = p['execution']['id']
     with pytest.raises(ValueError,match='owner'):
         store.receipt(pid,eid,'other','tracking','',NOW+2)
@@ -188,7 +187,7 @@ def test_risk_resolution_only_with_fresh_observations(setup):
 
 
 def test_write_failure_does_not_return_execution_grant(setup,monkeypatch):
-    store,risks,lookup,pid=setup
+    store,_risks,_lookup,_pid=setup
     monkeypatch.setattr(store,'save',lambda *args: (_ for _ in ()).throw(OSError('disk full')))
     with pytest.raises(OSError): approve(setup)
     assert store.list()[0]['status']=='open'

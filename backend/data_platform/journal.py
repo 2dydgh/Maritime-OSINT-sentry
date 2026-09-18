@@ -10,7 +10,7 @@ import os
 import sqlite3
 import tempfile
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -73,7 +73,7 @@ class Journal:
 
     def append(self, payload: str, received_at=None) -> str:
         """Return only after raw input is committed; duplicates remain in raw."""
-        received_at = utc_time(received_at or datetime.now(timezone.utc).isoformat())
+        received_at = utc_time(received_at or datetime.now(UTC).isoformat())
         event_id = str(uuid4())
         with self._lock, self.db:
             self.db.execute('INSERT INTO raw_events(event_id,source,received_at,payload) VALUES(?,?,?,?)',

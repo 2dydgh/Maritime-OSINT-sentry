@@ -1,10 +1,14 @@
 import copy
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from backend.services import watch_officer as w, collision_scenarios as s, decision_followup as f
+
 from backend.routers.proposals import router
-from tests.test_watch_officer import data, NOW, PAIR
+from backend.services import collision_scenarios as s
+from backend.services import decision_followup as f
+from backend.services import watch_officer as w
+from tests.test_watch_officer import NOW, PAIR, data
 
 
 @pytest.fixture
@@ -53,7 +57,7 @@ def test_observations_deduplicate_and_never_treat_stale_as_safe(setup):
 
 
 def test_prediction_errors_use_each_reception_time_not_poll_time(setup):
-    store,risks,lookup,pid,run=setup
+    store,_risks,lookup,_pid,run=setup
     vs=copy.deepcopy(lookup(PAIR))
     for v in vs:
         predicted=run['scenarios']['baseline']['tracks'][str(v['mmsi'])]['points'][6]

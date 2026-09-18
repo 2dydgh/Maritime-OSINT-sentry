@@ -12,9 +12,9 @@ to keep in sync.
 """
 
 import json
+import logging
 import math
 import os
-import logging
 from typing import Any
 
 from backend.services import ais_stream, collision_analyzer
@@ -1128,5 +1128,5 @@ def execute_tool(name: str, arguments: dict) -> dict:
         logger.debug("Tool '%s' executed successfully", name)
         return result
     except Exception as exc:
-        logger.exception("Tool '%s' raised an exception: %s", name, exc)
+        logger.exception("Tool '%s' raised an exception", name)
         return {"error": f"도구 실행 오류 ({name}): {exc}"}

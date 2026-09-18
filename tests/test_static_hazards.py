@@ -1,5 +1,4 @@
 """정적 위험구역 GeoJSON 로딩 및 셀 교차 판정 테스트."""
-import os
 from shapely.geometry import box
 
 from backend.services import static_hazards

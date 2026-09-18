@@ -5,7 +5,7 @@ import os
 from functools import lru_cache
 from typing import Any
 
-from shapely.geometry import shape, Polygon
+from shapely.geometry import Polygon, shape
 
 logger = logging.getLogger(__name__)
 

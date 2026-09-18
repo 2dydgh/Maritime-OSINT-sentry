@@ -3,22 +3,23 @@ AIS Stream WebSocket client for real-time maritime vessel tracking.
 Connects to aisstream.io and maintains a live dictionary of global vessel positions.
 """
 
-import asyncio
 import json
 import logging
+import os
 import threading
 import time
-from datetime import datetime, timezone
-import os
+from datetime import UTC, datetime
 
-from . import history_writer
 from backend.data_platform.capture import capture_message, close_journal
 from backend.services.metrics import ais_messages_total, ais_vessels_active, alerts_fired_total
+
+from . import history_writer
 
 logger = logging.getLogger(__name__)
 
 AIS_WS_URL = "wss://stream.aisstream.io/v0/stream"
-from backend.config import AIS_API_KEY, AIS_DISABLED, AIS_BOUNDING_BOX
+from backend.config import AIS_API_KEY, AIS_BOUNDING_BOX, AIS_DISABLED
+
 API_KEY = AIS_API_KEY
 
 # AIS vessel type code classification
@@ -181,6 +182,7 @@ _ws_stop_event = threading.Event()
 # Anomaly Detection — alert queue for Live Feed
 # -----------------------------------------------------------------------
 import collections
+
 _alert_queue: collections.deque = collections.deque(maxlen=200)
 _alert_lock = threading.Lock()
 
@@ -219,7 +221,7 @@ def _maybe_alert(alert_type: str, mmsi: int, data: dict):
             "id": f"{alert_type}_{mmsi}_{int(now)}",
             "type": alert_type,
             "mmsi": mmsi,
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             **data,
         })
         alerts_fired_total.labels(alert_type=alert_type).inc()
@@ -298,13 +300,12 @@ def get_dark_vessels() -> list[dict]:
                 "lat": d["lat"],
                 "lng": d["lng"],
                 "vessel_type": d["vessel_type"],
-                "lost_at": datetime.fromtimestamp(d["lost_at"], tz=timezone.utc).isoformat(),
+                "lost_at": datetime.fromtimestamp(d["lost_at"], tz=UTC).isoformat(),
                 "minutes_dark": int(elapsed_s / 60),
                 "radius_nm": round(radius_nm, 1),
             })
     return result
 
-import os
 CACHE_FILE = os.path.join(os.path.dirname(__file__), "ais_cache.json")
 
 
@@ -323,7 +324,6 @@ def _save_cache():
 
 def _load_cache():
     """Load vessel data from disk on startup."""
-    global _vessels
     if not os.path.exists(CACHE_FILE):
         return
     try:
@@ -417,8 +417,8 @@ def get_ais_vessels() -> list[dict]:
 
 def _ais_stream_loop():
     """Main loop: spawn node proxy and process messages from stdout."""
-    import subprocess
     import os
+    import subprocess
 
     global _ws_process
     proxy_script = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ais_proxy.js")

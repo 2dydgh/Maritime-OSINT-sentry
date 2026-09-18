@@ -1,6 +1,4 @@
 import asyncio
-import copy
-import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -12,9 +10,11 @@ from pydantic_ai.models.function import FunctionModel
 
 from backend.ontology.evidence import Evidence, M, load
 from backend.routers import investigations, proposals
-from backend.services import investigation_agent as a, watch_officer as w, collision_scenarios as s
+from backend.services import collision_scenarios as s
+from backend.services import investigation_agent as a
+from backend.services import watch_officer as w
 from backend.services.investigation_store import Repository
-from tests.test_watch_officer import data, PAIR
+from tests.test_watch_officer import PAIR, data
 
 
 @pytest.fixture
@@ -75,7 +75,7 @@ def test_forged_or_missing_evidence_is_rejected(investigation, case):
     ('closed','operator_review','record_needs_review'),
 ])
 def test_state_changes_require_different_recommendations(investigation, case, action, reason):
-    ctx, risks, lookup = investigation
+    ctx, _risks, lookup = investigation
     if case=='stale':lookup(PAIR)[0]['_updated']-=120
     elif case=='missing':lookup(PAIR).clear()
     elif case=='changed':lookup(PAIR)[1]['cog']=90
@@ -342,7 +342,7 @@ async def test_confirmed_data_gap_leaves_only_final_output_tool(investigation):
 
 
 def test_actual_action_change_supplies_fresh_evidence_for_correction(investigation):
-    ctx, risks, lookup=investigation
+    ctx, _risks, lookup=investigation
     d=draft(ctx)
     lookup(PAIR)[0]['_updated']=time.time()-120
     with pytest.raises(ValueError,match='변경'):ctx.validate(d)

@@ -3,9 +3,11 @@ Route API — searoute-based shipping route calculation and port search.
 """
 
 import logging
-from fastapi import APIRouter, Query, HTTPException
-from cachetools import TTLCache
+
 import searoute as sr
+from cachetools import TTLCache
+from fastapi import APIRouter, HTTPException, Query
+
 from ..services.port_search import search_ports
 
 logger = logging.getLogger(__name__)

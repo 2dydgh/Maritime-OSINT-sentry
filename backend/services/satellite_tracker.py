@@ -9,11 +9,13 @@ Uses fetch_with_curl to bypass CDN blocks that affect plain Python HTTP.
 
 import logging
 import math
-import time
 import re
 import threading
+import time
 from datetime import datetime
+
 from cachetools import TTLCache
+
 from .network_utils import fetch_with_curl
 
 logger = logging.getLogger(__name__)
@@ -219,7 +221,8 @@ def _tle_to_gp(name, norad_id, line1, line2):
         return None
 
 
-import os, json as _json
+import json as _json
+import os
 
 _SAT_CACHE_FILE = os.path.join(os.path.dirname(__file__), "sat_gp_cache.json")
 
@@ -252,7 +255,7 @@ def fetch_intel_satellites():
 
     sats = []
     try:
-        from sgp4.api import Satrec, WGS72, jday
+        from sgp4.api import WGS72, Satrec, jday
 
         now_ts = time.time()
 
