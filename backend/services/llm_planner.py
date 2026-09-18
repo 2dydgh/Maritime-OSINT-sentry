@@ -44,16 +44,27 @@ _REF_RE = re.compile(r"^\{\{\s*(\d+)\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$")
 # sequencing connector is what benefits from an explicit plan; everything else
 # stays on the fast reactive path (no extra LLM call, no behavior change).
 _DOMAIN_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "route":   ("항로", "경로", "루트", "route"),
-    "hazard":  ("사고", "위험구역", "위험도", "hazard"),
-    "roll":    ("횡요각", "전복", "선회", "롤", "침몰", "capsize"),
-    "area":    ("해역", "근처", "부근", "주변", "앞바다", "반경"),
-    "fleet":   ("선박", "충돌", "국적", "함정"),
-    "nav":     ("이동", "가줘", "보여줘", "날아", "fly"),
+    "route": ("항로", "경로", "루트", "route"),
+    "hazard": ("사고", "위험구역", "위험도", "hazard"),
+    "roll": ("횡요각", "전복", "선회", "롤", "침몰", "capsize"),
+    "area": ("해역", "근처", "부근", "주변", "앞바다", "반경"),
+    "fleet": ("선박", "충돌", "국적", "함정"),
+    "nav": ("이동", "가줘", "보여줘", "날아", "fly"),
 }
 _CONNECTORS: tuple[str, ...] = (
-    "그리고", "그 다음", "그다음", "다음에", "이후", "한 뒤", "한뒤",
-    "한 다음", "하고 나서", "하고나서", "그러고", "그런 다음", "및 ",
+    "그리고",
+    "그 다음",
+    "그다음",
+    "다음에",
+    "이후",
+    "한 뒤",
+    "한뒤",
+    "한 다음",
+    "하고 나서",
+    "하고나서",
+    "그러고",
+    "그런 다음",
+    "및 ",
 )
 
 
@@ -241,9 +252,7 @@ async def build_plan(
     }
 
     try:
-        resp = await client.post(
-            f"{OLLAMA_BASE_URL}/api/chat", json=payload, timeout=OLLAMA_TIMEOUT
-        )
+        resp = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload, timeout=OLLAMA_TIMEOUT)
         resp.raise_for_status()
         content = resp.json().get("message", {}).get("content", "")
     except (httpx.HTTPError, ValueError) as exc:

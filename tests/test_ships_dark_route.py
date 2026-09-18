@@ -13,8 +13,12 @@ def test_dark_ships_route_returns_registered_entries():
     now = time.time()
     with ais_stream._vessels_lock:
         ais_stream._dark_vessels[mmsi] = {
-            "mmsi": mmsi, "name": "TEST-ROUTE", "lat": 35.0, "lng": 129.0,
-            "vessel_type": "cargo", "lost_at": now - 3600,
+            "mmsi": mmsi,
+            "name": "TEST-ROUTE",
+            "lat": 35.0,
+            "lng": 129.0,
+            "vessel_type": "cargo",
+            "lost_at": now - 3600,
         }
     try:
         resp = client.get("/api/v1/ships/dark")

@@ -6,10 +6,15 @@ client = TestClient(app)
 
 
 def test_route_busan_to_tokyo():
-    resp = client.get("/api/v1/route", params={
-        "from_lat": 35.1, "from_lng": 129.05,
-        "to_lat": 35.45, "to_lng": 139.77,
-    })
+    resp = client.get(
+        "/api/v1/route",
+        params={
+            "from_lat": 35.1,
+            "from_lng": 129.05,
+            "to_lat": 35.45,
+            "to_lng": 139.77,
+        },
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert "coordinates" in data
@@ -21,9 +26,9 @@ def test_route_busan_to_tokyo():
 
 def _km(a, b):
     import math
+
     r = math.radians
-    h = (math.sin(r(b[1] - a[1]) / 2) ** 2
-         + math.cos(r(a[1])) * math.cos(r(b[1])) * math.sin(r(b[0] - a[0]) / 2) ** 2)
+    h = math.sin(r(b[1] - a[1]) / 2) ** 2 + math.cos(r(a[1])) * math.cos(r(b[1])) * math.sin(r(b[0] - a[0]) / 2) ** 2
     return 2 * 6371 * math.asin(math.sqrt(h))
 
 
@@ -38,10 +43,15 @@ def test_route_returns_spline_control_points():
       어긋날 수 있다(프론트 _anchorRouteEnds() 가 보정). 다만 위경도를 뒤바꾸는 식의
       회귀는 수천 km 로 튀므로 넉넉한 한계로도 잡힌다."""
     origin, dest = (129.05, 35.1), (103.85, 1.29)
-    resp = client.get("/api/v1/route", params={
-        "from_lat": origin[1], "from_lng": origin[0],
-        "to_lat": dest[1], "to_lng": dest[0],
-    })
+    resp = client.get(
+        "/api/v1/route",
+        params={
+            "from_lat": origin[1],
+            "from_lng": origin[0],
+            "to_lat": dest[1],
+            "to_lng": dest[0],
+        },
+    )
     assert resp.status_code == 200
     data = resp.json()
     coords = data["coordinates"]
@@ -49,7 +59,8 @@ def test_route_returns_spline_control_points():
 
     path_km = sum(_km(coords[i], coords[i + 1]) for i in range(len(coords) - 1))
     assert abs(path_km - data["distance_km"]) / data["distance_km"] < 0.01, (
-        f"좌표 선분 합 {path_km:.1f}km 이 distance_km {data['distance_km']} 와 어긋난다")
+        f"좌표 선분 합 {path_km:.1f}km 이 distance_km {data['distance_km']} 와 어긋난다"
+    )
 
     assert _km(origin, coords[0]) < 100, "시작점이 요청 항구에서 너무 멀다(위경도 뒤바뀜?)"
     assert _km(dest, coords[-1]) < 100, "끝점이 요청 항구에서 너무 멀다(위경도 뒤바뀜?)"

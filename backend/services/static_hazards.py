@@ -1,4 +1,5 @@
 """Korean coastal static hazard zones loaded from GeoJSON."""
+
 import json
 import logging
 import os
@@ -9,9 +10,7 @@ from shapely.geometry import Polygon, shape
 
 logger = logging.getLogger(__name__)
 
-_GEOJSON_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "data", "static_hazards.geojson"
-)
+_GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "static_hazards.geojson")
 
 
 @lru_cache(maxsize=1)

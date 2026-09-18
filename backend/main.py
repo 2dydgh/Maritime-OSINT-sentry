@@ -86,9 +86,7 @@ async def _build_feed_text() -> str:
         snap = await ais_fallback.get_fallback_snapshot()
         snap_time_ms = ais_fallback.get_snapshot_time_ms()
 
-    status, _feed_low_streak = ais_fallback.select_feed_status(
-        len(live), len(snap), _feed_status, _feed_low_streak
-    )
+    status, _feed_low_streak = ais_fallback.select_feed_status(len(live), len(snap), _feed_status, _feed_low_streak)
     _feed_status = status
 
     if status == "fallback":
@@ -98,9 +96,8 @@ async def _build_feed_text() -> str:
     else:  # down
         ships, st = [], None
 
-    return await asyncio.to_thread(
-        ais_fallback.build_feed_payload, ships, status, st
-    )
+    return await asyncio.to_thread(ais_fallback.build_feed_payload, ships, status, st)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -125,9 +122,7 @@ async def lifespan(app: FastAPI):
 
     # Load land shapefile in background (non-blocking)
     # 서버는 즉시 시작되고, 로딩 완료 전까지 육지 필터링은 비활성 (안전한 기본값)
-    land_shapefile = os.path.join(
-        os.path.dirname(__file__), "data", "land", "ne_10m_land.shp"
-    )
+    land_shapefile = os.path.join(os.path.dirname(__file__), "data", "land", "ne_10m_land.shp")
     land_filter.start_land_index_loading(land_shapefile)
 
     # Pre-compute /hazard/korea response so the first request is instant.
@@ -138,6 +133,7 @@ async def lifespan(app: FastAPI):
     # Pre-warm searoute graph (~2s first call)
     try:
         import searoute as _sr
+
         _sr.searoute([129.0, 35.1], [103.8, 1.3])  # Busan→Singapore
         logger.info("searoute graph pre-loaded")
     except Exception as e:
@@ -155,6 +151,7 @@ async def lifespan(app: FastAPI):
     async def _probe_redis():
         try:
             import redis.asyncio as _redis
+
             client = _redis.from_url(config.REDIS_URL)
             try:
                 await asyncio.wait_for(client.ping(), timeout=2.0)
@@ -167,10 +164,9 @@ async def lifespan(app: FastAPI):
     async def _probe_llm():
         try:
             from .config_llm import OLLAMA_BASE_URL
+
             client = llm_agent._get_client()
-            resp = await asyncio.wait_for(
-                client.get(f"{OLLAMA_BASE_URL}/api/tags"), timeout=2.0
-            )
+            resp = await asyncio.wait_for(client.get(f"{OLLAMA_BASE_URL}/api/tags"), timeout=2.0)
             _readiness["llm"] = resp.status_code == 200
         except Exception as e:
             logger.info(f"LLM (Ollama) not ready (optional): {e}")
@@ -241,15 +237,17 @@ async def lifespan(app: FastAPI):
 
     collision_task = asyncio.create_task(collision_scanner())
     from .services.investigation_store import Repository as InvestigationRepository
+
     investigation_repo = InvestigationRepository()
     with investigation_repo.store.transaction() as db:
         investigation_repo.recover(db)
-    
+
     yield
-    
+
     # Shutdown logic
     logger.info("Shutting down OSINT 4D Backend...")
     from .services import investigation_agent
+
     await investigation_agent.shutdown()
     ais_stream.stop_ais_stream()
     aircraft_tracker.stop_aircraft_tracker()
@@ -271,9 +269,7 @@ async def lifespan(app: FastAPI):
 
     # Stop history writer and flush remaining buffer (bounded so we don't hang)
     try:
-        await asyncio.wait_for(
-            history_writer.stop_history_writer(), timeout=SHUTDOWN_TIMEOUT_SEC
-        )
+        await asyncio.wait_for(history_writer.stop_history_writer(), timeout=SHUTDOWN_TIMEOUT_SEC)
     except TimeoutError:
         logger.error("history writer stop timed out")
     except Exception as e:
@@ -288,6 +284,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error closing LLM client: {e}")
 
     await database.close_db()
+
 
 app = FastAPI(title="OSINT 4D Dashboard", lifespan=lifespan)
 
@@ -319,6 +316,7 @@ app.add_middleware(
 # Dev only (DEV_NO_CACHE=1): no-store on static assets so a plain browser refresh
 # always serves the latest CSS/JS — removes the need to bump ?v= after every edit.
 if config.DEV_NO_CACHE:
+
     @app.middleware("http")
     async def _no_cache_static(request, call_next):
         resp = await call_next(request)
@@ -326,7 +324,9 @@ if config.DEV_NO_CACHE:
         if path == "/" or path.endswith((".css", ".js", ".html")):
             resp.headers["Cache-Control"] = "no-store"
         return resp
+
     logging.getLogger(__name__).info("DEV_NO_CACHE on — static assets served no-store")
+
 
 # WebSocket Endpoint
 @app.websocket("/api/v1/ws/ships")
@@ -369,6 +369,7 @@ async def websocket_ships(ws: WebSocket):
     finally:
         websocket.manager.disconnect(ws)
 
+
 # Aircraft tracker control — the OpenSky poller is started on demand the first
 # time the user turns on the 항공 layer, rather than at server boot.
 @app.post("/api/v1/aircraft/start")
@@ -376,10 +377,12 @@ async def aircraft_start():
     aircraft_tracker.start_aircraft_tracker()
     return {"status": "started"}
 
+
 @app.post("/api/v1/aircraft/stop")
 async def aircraft_stop():
     aircraft_tracker.stop_aircraft_tracker()
     return {"status": "stopped"}
+
 
 # Include Routers
 app.include_router(ships.router, prefix="/api/v1")
@@ -415,4 +418,5 @@ app.mount("/", StaticFiles(directory=_static_dir, html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("backend.main:app", host="0.0.0.0", port=config.PORT, reload=True)

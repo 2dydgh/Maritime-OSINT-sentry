@@ -46,6 +46,7 @@ def search_sentinel2_scene(lat: float, lng: float) -> dict:
         # Try to sign item first for Azure blob URLs
         try:
             import planetary_computer
+
             item = planetary_computer.sign_item(item)
         except ImportError:
             pass  # planetary_computer not installed, try unsigned URLs

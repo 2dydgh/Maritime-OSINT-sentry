@@ -37,10 +37,7 @@ def _valid_coord(lat, lon) -> bool:
         lon = float(lon)
     except (TypeError, ValueError):
         return False
-    return (
-        math.isfinite(lat) and math.isfinite(lon)
-        and -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0
-    )
+    return math.isfinite(lat) and math.isfinite(lon) and -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0
 
 
 @router.post("/collision/land-check-batch")

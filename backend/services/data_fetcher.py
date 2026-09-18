@@ -69,7 +69,7 @@ def start_data_fetcher() -> None:
 
     # Start scheduler
     _scheduler = BackgroundScheduler()
-    _scheduler.add_job(fetch_ships, 'interval', seconds=60, id='fetch_ships')
+    _scheduler.add_job(fetch_ships, "interval", seconds=60, id="fetch_ships")
     _scheduler.start()
 
     logger.info("Data fetcher started (60s interval)")

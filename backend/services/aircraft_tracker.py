@@ -133,21 +133,25 @@ def get_aircraft() -> list[dict]:
                 no_pos_count += 1
                 continue
 
-            result.append({
-                "icao24": icao24,
-                "callsign": ac.get("callsign", ""),
-                "lat": ac.get("lat"),
-                "lng": ac.get("lng"),
-                "altitude": ac.get("altitude"),
-                "velocity": ac.get("velocity"),
-                "heading": ac.get("heading"),
-                "vertical_rate": ac.get("vertical_rate"),
-                "on_ground": ac.get("on_ground", False),
-                "category": ac.get("type", "other"),
-                "origin_country": ac.get("origin_country", ""),
-            })
+            result.append(
+                {
+                    "icao24": icao24,
+                    "callsign": ac.get("callsign", ""),
+                    "lat": ac.get("lat"),
+                    "lng": ac.get("lng"),
+                    "altitude": ac.get("altitude"),
+                    "velocity": ac.get("velocity"),
+                    "heading": ac.get("heading"),
+                    "vertical_rate": ac.get("vertical_rate"),
+                    "on_ground": ac.get("on_ground", False),
+                    "category": ac.get("type", "other"),
+                    "origin_country": ac.get("origin_country", ""),
+                }
+            )
 
-    logger.info(f"get_aircraft: total={total_before}, pruned={len(stale_keys)}, ground={ground_count}, no_pos={no_pos_count}, airborne={len(result)}")
+    logger.info(
+        f"get_aircraft: total={total_before}, pruned={len(stale_keys)}, ground={ground_count}, no_pos={no_pos_count}, airborne={len(result)}"
+    )
     return result
 
 

@@ -8,8 +8,11 @@ from backend.services import ais_stream
 def _set_vessel(mmsi, lat, lng, v_type, updated):
     with ais_stream._vessels_lock:
         ais_stream._vessels[mmsi] = {
-            "lat": lat, "lng": lng, "name": f"TEST-{mmsi}",
-            "type": v_type, "_updated": updated,
+            "lat": lat,
+            "lng": lng,
+            "name": f"TEST-{mmsi}",
+            "type": v_type,
+            "_updated": updated,
         }
 
 
@@ -57,8 +60,12 @@ def test_dark_vessel_expires_after_max_age():
     _set_vessel(mmsi, 1.0, 1.0, "cargo", stale)
     with ais_stream._vessels_lock:
         ais_stream._dark_vessels[mmsi] = {
-            "mmsi": mmsi, "name": "TEST", "lat": 1.0, "lng": 1.0,
-            "vessel_type": "cargo", "lost_at": stale,
+            "mmsi": mmsi,
+            "name": "TEST",
+            "lat": 1.0,
+            "lng": 1.0,
+            "vessel_type": "cargo",
+            "lost_at": stale,
         }
     try:
         ais_stream.check_signal_loss()
@@ -74,8 +81,12 @@ def test_radius_excludes_vessel_beyond_max_radius():
     # cargo 상한 24kn → 50nm 도달까지 50/24 ≈ 2.08h. 2.5h 지나면 초과.
     with ais_stream._vessels_lock:
         ais_stream._dark_vessels[mmsi] = {
-            "mmsi": mmsi, "name": "TEST", "lat": 1.0, "lng": 1.0,
-            "vessel_type": "cargo", "lost_at": now - 2.5 * 3600,
+            "mmsi": mmsi,
+            "name": "TEST",
+            "lat": 1.0,
+            "lng": 1.0,
+            "vessel_type": "cargo",
+            "lost_at": now - 2.5 * 3600,
         }
     try:
         assert mmsi not in {d["mmsi"] for d in ais_stream.get_dark_vessels()}
@@ -88,8 +99,12 @@ def test_radius_calculation_uses_type_speed_ceiling():
     now = time.time()
     with ais_stream._vessels_lock:
         ais_stream._dark_vessels[mmsi] = {
-            "mmsi": mmsi, "name": "TEST", "lat": 1.0, "lng": 1.0,
-            "vessel_type": "cargo", "lost_at": now - 3600,  # 정확히 1시간 전
+            "mmsi": mmsi,
+            "name": "TEST",
+            "lat": 1.0,
+            "lng": 1.0,
+            "vessel_type": "cargo",
+            "lost_at": now - 3600,  # 정확히 1시간 전
         }
     try:
         dark = {d["mmsi"]: d for d in ais_stream.get_dark_vessels()}
@@ -123,7 +138,12 @@ def _simulate_ingest_prune():
             v_type = v.get("type", "unknown")
             lat = v.get("lat")
             lng = v.get("lng")
-            if v_type in ais_stream._DARK_ELIGIBLE_TYPES and k not in ais_stream._dark_vessels and lat is not None and lng is not None:
+            if (
+                v_type in ais_stream._DARK_ELIGIBLE_TYPES
+                and k not in ais_stream._dark_vessels
+                and lat is not None
+                and lng is not None
+            ):
                 ais_stream._dark_vessels[k] = {
                     "mmsi": k,
                     "name": v.get("name", "UNKNOWN"),
@@ -171,8 +191,12 @@ def test_prune_does_not_overwrite_existing_dark_entry():
     original_lost_at = now - 5000
     with ais_stream._vessels_lock:
         ais_stream._dark_vessels[mmsi] = {
-            "mmsi": mmsi, "name": "ORIGINAL", "lat": 1.0, "lng": 1.0,
-            "vessel_type": "cargo", "lost_at": original_lost_at,
+            "mmsi": mmsi,
+            "name": "ORIGINAL",
+            "lat": 1.0,
+            "lng": 1.0,
+            "vessel_type": "cargo",
+            "lost_at": original_lost_at,
         }
     # Vessel reappears in _vessels stale (e.g. a late/duplicate message) — prune should
     # not reset lost_at for an mmsi that's already tracked as dark.

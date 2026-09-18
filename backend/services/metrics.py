@@ -6,34 +6,64 @@ so the rest of the codebase works without changes.
 
 try:
     from prometheus_client import Counter, Gauge, Histogram
+
     _HAS_PROMETHEUS = True
 except ImportError:
     _HAS_PROMETHEUS = False
 
     class _NoOp:
         """No-op metric stub when prometheus_client is not installed."""
-        def inc(self, amount=1): pass
-        def dec(self, amount=1): pass
-        def set(self, value): pass
-        def observe(self, value): pass
-        def labels(self, **kw): return self
+
+        def inc(self, amount=1):
+            pass
+
+        def dec(self, amount=1):
+            pass
+
+        def set(self, value):
+            pass
+
+        def observe(self, value):
+            pass
+
+        def labels(self, **kw):
+            return self
 
     class Counter:
-        def __init__(self, *a, **kw): self._noop = _NoOp()
-        def labels(self, **kw): return self._noop
-        def inc(self, amount=1): pass
+        def __init__(self, *a, **kw):
+            self._noop = _NoOp()
+
+        def labels(self, **kw):
+            return self._noop
+
+        def inc(self, amount=1):
+            pass
 
     class Gauge:
-        def __init__(self, *a, **kw): self._noop = _NoOp()
-        def labels(self, **kw): return self._noop
-        def set(self, value): pass
-        def inc(self, amount=1): pass
-        def dec(self, amount=1): pass
+        def __init__(self, *a, **kw):
+            self._noop = _NoOp()
+
+        def labels(self, **kw):
+            return self._noop
+
+        def set(self, value):
+            pass
+
+        def inc(self, amount=1):
+            pass
+
+        def dec(self, amount=1):
+            pass
 
     class Histogram:
-        def __init__(self, *a, **kw): self._noop = _NoOp()
-        def labels(self, **kw): return self._noop
-        def observe(self, value): pass
+        def __init__(self, *a, **kw):
+            self._noop = _NoOp()
+
+        def labels(self, **kw):
+            return self._noop
+
+        def observe(self, value):
+            pass
 
 
 # AIS 파이프라인

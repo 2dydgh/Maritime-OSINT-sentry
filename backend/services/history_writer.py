@@ -107,8 +107,8 @@ async def _flush_buffer() -> None:
                         r["object_id"],
                         r["object_type"],
                         r["record_time"],
-                        r["lng"],       # X (경도)
-                        r["lat"],       # Y (위도)
+                        r["lng"],  # X (경도)
+                        r["lat"],  # Y (위도)
                         r["altitude"],  # Z (고도)
                         r["altitude"],
                         r["velocity"],
@@ -116,7 +116,7 @@ async def _flush_buffer() -> None:
                         r["ship_type"],
                     )
                     for r in records_to_insert
-                ]
+                ],
             )
         logger.info(f"History writer: flushed {len(records_to_insert)} records to DB")
         duration = time.monotonic() - start_time
@@ -135,7 +135,7 @@ def record_position(
     heading: float,
     ship_type: str = "unknown",
     ship_name: str = "UNKNOWN",
-    timestamp: datetime | None = None
+    timestamp: datetime | None = None,
 ) -> None:
     """
     Record a vessel position for later batch insertion.
@@ -172,9 +172,7 @@ def record_position(
     # 배치 사이즈 도달 시 메인 루프에서 flush 스케줄링
     if buffer_size >= BATCH_SIZE and _main_loop and _running:
         try:
-            _main_loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(_flush_buffer())
-            )
+            _main_loop.call_soon_threadsafe(lambda: asyncio.create_task(_flush_buffer()))
         except RuntimeError:
             pass
 
@@ -203,7 +201,8 @@ def update_ship_type(mmsi: int, ship_type: str) -> None:
                       AND (ship_type IS NULL OR ship_type = 'unknown')
                       AND record_time > NOW() - INTERVAL '1 hour'
                     """,
-                    ship_type, mmsi_str
+                    ship_type,
+                    mmsi_str,
                 )
                 if result and result != "UPDATE 0":
                     logger.debug(f"Updated ship_type for MMSI {mmsi_str}: {result}")
@@ -211,9 +210,6 @@ def update_ship_type(mmsi: int, ship_type: str) -> None:
             logger.warning(f"Failed to update ship_type for MMSI {mmsi_str}: {e}")
 
     try:
-        _main_loop.call_soon_threadsafe(
-            lambda: asyncio.create_task(_do_update())
-        )
+        _main_loop.call_soon_threadsafe(lambda: asyncio.create_task(_do_update()))
     except RuntimeError:
         pass
-

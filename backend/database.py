@@ -9,10 +9,12 @@ db_pool = None
 
 try:
     import asyncpg
+
     _HAS_ASYNCPG = True
 except ImportError:
     _HAS_ASYNCPG = False
     logger.info("asyncpg not installed — running without database (lightweight mode)")
+
 
 async def init_db():
     global db_pool
@@ -35,10 +37,12 @@ async def init_db():
         logger.warning(f"Database not available — running without DB: {e}")
         db_pool = None
 
+
 async def close_db():
     if db_pool and _HAS_ASYNCPG:
         await db_pool.close()
         logger.info("Database connection pool closed.")
+
 
 def get_db_pool():
     return db_pool

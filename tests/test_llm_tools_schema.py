@@ -52,9 +52,7 @@ def golden() -> list[dict]:
 # 1. Schema contract
 # ---------------------------------------------------------------------------
 def test_tool_names_unchanged(golden):
-    assert {d["function"]["name"] for d in t.TOOL_DEFINITIONS} == {
-        d["function"]["name"] for d in golden
-    }
+    assert {d["function"]["name"] for d in t.TOOL_DEFINITIONS} == {d["function"]["name"] for d in golden}
 
 
 def test_tool_count_unchanged(golden):
@@ -139,9 +137,7 @@ def test_fly_to_known_port_payload():
 
 
 def test_fly_to_unknown_port_errors():
-    assert t.execute_tool("fly_to", {"port": "atlantis"}) == {
-        "error": "알 수 없는 항구: atlantis"
-    }
+    assert t.execute_tool("fly_to", {"port": "atlantis"}) == {"error": "알 수 없는 항구: atlantis"}
 
 
 def test_set_route_size_class_payload():

@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 # other client / the realtime tick — it gets evicted on timeout instead.
 BROADCAST_SEND_TIMEOUT_SEC = 5.0
 
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
@@ -33,9 +34,7 @@ class ConnectionManager:
         disconnected = []
         for connection in self.active_connections:
             try:
-                await asyncio.wait_for(
-                    connection.send_json(message), timeout=BROADCAST_SEND_TIMEOUT_SEC
-                )
+                await asyncio.wait_for(connection.send_json(message), timeout=BROADCAST_SEND_TIMEOUT_SEC)
             except (TimeoutError, Exception) as e:
                 logger.error(f"Error broadcasting to client: {e}")
                 disconnected.append(connection)
@@ -48,14 +47,13 @@ class ConnectionManager:
         disconnected = []
         for connection in self.active_connections:
             try:
-                await asyncio.wait_for(
-                    connection.send_text(text), timeout=BROADCAST_SEND_TIMEOUT_SEC
-                )
+                await asyncio.wait_for(connection.send_text(text), timeout=BROADCAST_SEND_TIMEOUT_SEC)
             except (TimeoutError, Exception) as e:
                 logger.error(f"Error broadcasting to client: {e}")
                 disconnected.append(connection)
 
         for conn in disconnected:
             self.disconnect(conn)
+
 
 manager = ConnectionManager()

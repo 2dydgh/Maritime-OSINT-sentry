@@ -6,6 +6,7 @@ GSHHG 또는 Natural Earth shapefile을 로드하여 Shapely STRtree로 교차 �
 이후 is_land_between()은 메모리 내 인덱스로 빠르게 판정.
 로딩 완료 전에는 False 반환 (필터링 안 함, 안전한 기본값).
 """
+
 import asyncio
 import logging
 import pickle
@@ -19,10 +20,10 @@ from shapely.validation import make_valid
 logger = logging.getLogger(__name__)
 
 # 모듈 레벨 상태
-_land_geom = None          # 개별 폴리곤 리스트
-_land_tree = None          # STRtree 공간 인덱스
+_land_geom = None  # 개별 폴리곤 리스트
+_land_tree = None  # STRtree 공간 인덱스
 _loaded = False
-_loading_task = None        # 백그라운드 로딩 태스크
+_loading_task = None  # 백그라운드 로딩 태스크
 
 
 def _get_cache_path(shapefile_path: str) -> Path:
@@ -51,10 +52,7 @@ def _load_land_index_sync(shapefile_path: str) -> None:
             _land_tree = STRtree(polygons)
             _loaded = True
             elapsed = time.monotonic() - start
-            logger.info(
-                f"Land index loaded from cache: {len(polygons)} polygons "
-                f"in {elapsed:.2f}s ({cache_path.name})"
-            )
+            logger.info(f"Land index loaded from cache: {len(polygons)} polygons in {elapsed:.2f}s ({cache_path.name})")
             return
         except Exception as e:
             logger.warning(f"Cache load failed, falling back to shapefile: {e}")
@@ -69,6 +67,7 @@ def _load_land_index_sync(shapefile_path: str) -> None:
     else:
         try:
             import shapefile as shp  # pyshp
+
             reader = shp.Reader(str(path))
             raw_polygons = [shape(sr.__geo_interface__) for sr in reader.shapes()]
         except ImportError:
@@ -95,10 +94,7 @@ def _load_land_index_sync(shapefile_path: str) -> None:
     _land_tree = STRtree(polygons)
     _loaded = True
     elapsed = time.monotonic() - start
-    logger.info(
-        f"Land index loaded: {len(polygons)} polygons from {path.name} "
-        f"in {elapsed:.2f}s"
-    )
+    logger.info(f"Land index loaded: {len(polygons)} polygons from {path.name} in {elapsed:.2f}s")
 
 
 def start_land_index_loading(shapefile_path: str) -> None:
@@ -146,6 +142,7 @@ def is_land_point(lat: float, lng: float) -> bool:
     if not _loaded or _land_tree is None:
         return False
     from shapely.geometry import Point
+
     p = Point(lng, lat)
     candidates = _land_tree.query(p)
     for idx in candidates:
@@ -160,5 +157,6 @@ def has_land_near(lat: float, lng: float, max_deg: float) -> bool:
     if not _loaded or _land_tree is None:
         return False
     from shapely.geometry import box
+
     bbox = box(lng - max_deg, lat - max_deg, lng + max_deg, lat + max_deg)
     return len(_land_tree.query(bbox)) > 0

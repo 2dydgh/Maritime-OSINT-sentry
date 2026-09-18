@@ -7,6 +7,7 @@ router = APIRouter()
 
 try:
     from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
     _HAS_PROMETHEUS = True
 except ImportError:
     _HAS_PROMETHEUS = False

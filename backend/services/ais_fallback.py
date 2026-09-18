@@ -44,9 +44,7 @@ _cache_ts: float = 0.0
 _snapshot_time_ms: int | None = None
 
 
-def select_feed_status(
-    live_count: int, fallback_count: int, prev_status: str, low_streak: int
-) -> tuple[str, int]:
+def select_feed_status(live_count: int, fallback_count: int, prev_status: str, low_streak: int) -> tuple[str, int]:
     """다음 feed_status 와 갱신된 low_streak 를 결정한다 (순수 함수).
 
     - live_count 가 임계치 이상이면 즉시 live, streak 리셋.
@@ -102,27 +100,29 @@ async def get_fallback_snapshot(pool=None) -> list[dict]:
             rt = r["record_time"]
             if max_ts is None or rt > max_ts:
                 max_ts = rt
-            ships.append({
-                "mmsi": mmsi,
-                "name": (meta.get(mmsi, {}).get("name") or "UNKNOWN"),
-                "type": r["ship_type"] or "unknown",
-                # PostGIS numeric 컬럼은 Decimal 로 와서 json.dumps 가 깨진다 → float 강제.
-                "lat": round(float(r["lat"]), 5),
-                "lng": round(float(r["lng"]), 5),
-                "heading": float(r["heading"] or 0),
-                "sog": round(float(r["velocity"] or 0), 1),
-                "cog": 0,  # trajectories 테이블에 COG 컬럼 없음
-                "callsign": "",
-                "destination": "UNKNOWN",
-                "imo": 0,
-                "country": ais_stream.get_country_from_mmsi(mmsi),
-                "length": 0,
-                "beam": 0,
-                "draught": 0,
-                "eta": "",
-                "ais_class": "A",
-                "status": "",
-            })
+            ships.append(
+                {
+                    "mmsi": mmsi,
+                    "name": (meta.get(mmsi, {}).get("name") or "UNKNOWN"),
+                    "type": r["ship_type"] or "unknown",
+                    # PostGIS numeric 컬럼은 Decimal 로 와서 json.dumps 가 깨진다 → float 강제.
+                    "lat": round(float(r["lat"]), 5),
+                    "lng": round(float(r["lng"]), 5),
+                    "heading": float(r["heading"] or 0),
+                    "sog": round(float(r["velocity"] or 0), 1),
+                    "cog": 0,  # trajectories 테이블에 COG 컬럼 없음
+                    "callsign": "",
+                    "destination": "UNKNOWN",
+                    "imo": 0,
+                    "country": ais_stream.get_country_from_mmsi(mmsi),
+                    "length": 0,
+                    "beam": 0,
+                    "draught": 0,
+                    "eta": "",
+                    "ais_class": "A",
+                    "status": "",
+                }
+            )
 
         _cache = ships
         _cache_ts = now

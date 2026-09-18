@@ -1,13 +1,14 @@
 """Manual event-scoped investigation; no agent-facing approval endpoint."""
+
 from fastapi import APIRouter, HTTPException
 
 from backend.services import investigation_agent as agent
 from backend.services.investigation_store import Repository
 
-router = APIRouter(prefix='/investigations', tags=['decision-support'])
+router = APIRouter(prefix="/investigations", tags=["decision-support"])
 
 
-@router.post('/proposals/{pid}', status_code=202)
+@router.post("/proposals/{pid}", status_code=202)
 async def start(pid: str):
     repo = Repository()
     try:
@@ -16,33 +17,35 @@ async def start(pid: str):
             agent.launch(repo, record)
         return repo.view(record)
     except KeyError:
-        raise HTTPException(404, '제안 기록을 찾을 수 없습니다.')
+        raise HTTPException(404, "제안 기록을 찾을 수 없습니다.")
     except ValueError as exc:
         raise HTTPException(409, str(exc))
 
 
-@router.get('/proposals/{pid}')
+@router.get("/proposals/{pid}")
 def recent(pid: str):
     try:
         repo = Repository()
-        return {'investigations':[repo.view(r) for r in repo.recent(pid)]}
+        return {"investigations": [repo.view(r) for r in repo.recent(pid)]}
     except KeyError:
-        raise HTTPException(404, '제안 기록을 찾을 수 없습니다.')
+        raise HTTPException(404, "제안 기록을 찾을 수 없습니다.")
 
 
-@router.get('/{rid}')
+@router.get("/{rid}")
 def get(rid: str):
     try:
         repo = Repository()
         return repo.view(repo.get(rid))
     except KeyError:
-        raise HTTPException(404, '조사 기록을 찾을 수 없습니다.')
+        raise HTTPException(404, "조사 기록을 찾을 수 없습니다.")
 
 
-@router.post('/{rid}/cancel')
+@router.post("/{rid}/cancel")
 def cancel(rid: str):
     try:
         repo = Repository()
-        return repo.view(repo.update(rid, status='cancelled', cancel_requested=True, message='운용자가 조사를 취소했습니다.'))
+        return repo.view(
+            repo.update(rid, status="cancelled", cancel_requested=True, message="운용자가 조사를 취소했습니다.")
+        )
     except KeyError:
-        raise HTTPException(404, '조사 기록을 찾을 수 없습니다.')
+        raise HTTPException(404, "조사 기록을 찾을 수 없습니다.")

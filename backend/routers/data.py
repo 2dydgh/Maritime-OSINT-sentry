@@ -4,6 +4,7 @@ from .. import config
 
 router = APIRouter(tags=["data"])
 
+
 @router.get("/config")
 async def get_config():
     """Return public configuration for the frontend.

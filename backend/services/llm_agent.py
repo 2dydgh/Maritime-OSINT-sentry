@@ -54,6 +54,7 @@ async def close_client() -> None:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _build_context_message(context: dict | None) -> str | None:
     """Render the frontend state snapshot as a short Korean system reminder.
 
@@ -83,12 +84,7 @@ def _build_context_message(context: dict | None) -> str | None:
         return " ".join(extra) if extra else None
     name = rv.get("name") or "UNKNOWN"
     mmsi = rv.get("mmsi", "?")
-    parts = [
-        (
-            f"[현재 화면 상태] 횡요각 시뮬레이션 화면이 열려 있고, 표시 중인 선박은 "
-            f"'{name}' (MMSI {mmsi}) 입니다."
-        )
-    ]
+    parts = [(f"[현재 화면 상태] 횡요각 시뮬레이션 화면이 열려 있고, 표시 중인 선박은 '{name}' (MMSI {mmsi}) 입니다.")]
     if rv.get("is_capsizing"):
         parts.append("현재 전복 시뮬레이션이 진행 중입니다.")
     if rv.get("is_turning"):
@@ -153,6 +149,7 @@ async def _call_ollama(client: httpx.AsyncClient, messages: list[dict]) -> dict:
 # Public interface
 # ---------------------------------------------------------------------------
 
+
 async def _run_reactive(
     client: httpx.AsyncClient,
     messages: list[dict],
@@ -172,17 +169,13 @@ async def _run_reactive(
                 try:
                     response_data = await _call_ollama(client, messages)
                 except httpx.TimeoutException:
-                    logger.error(
-                        "Ollama request timed out after %s seconds", OLLAMA_TIMEOUT
-                    )
+                    logger.error("Ollama request timed out after %s seconds", OLLAMA_TIMEOUT)
                     return {
                         "text": "요청 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
                         "actions": actions,
                     }
                 except httpx.HTTPStatusError as exc:
-                    logger.error(
-                        "Ollama HTTP error %s: %s", exc.response.status_code, exc
-                    )
+                    logger.error("Ollama HTTP error %s: %s", exc.response.status_code, exc)
                     return {
                         "text": f"AI 서비스 오류가 발생했습니다 (HTTP {exc.response.status_code}).",
                         "actions": actions,
@@ -204,9 +197,7 @@ async def _run_reactive(
                 # --- No tool calls → final answer ---
                 if not tool_calls:
                     final_text: str = assistant_message.get("content", "")
-                    logger.debug(
-                        "Agent finished after %d tool call(s)", tool_call_count
-                    )
+                    logger.debug("Agent finished after %d tool call(s)", tool_call_count)
                     return {"text": final_text, "actions": actions}
 
                 # --- Guard against runaway loops ---
@@ -217,10 +208,7 @@ async def _run_reactive(
                     )
                     partial_text: str = assistant_message.get("content", "")
                     if not partial_text:
-                        partial_text = (
-                            "도구 호출 한도에 도달했습니다. "
-                            "지금까지 수집된 정보를 바탕으로 답변드립니다."
-                        )
+                        partial_text = "도구 호출 한도에 도달했습니다. 지금까지 수집된 정보를 바탕으로 답변드립니다."
                     return {"text": partial_text, "actions": actions}
 
                 # --- Execute each tool call ---
@@ -254,15 +242,15 @@ async def _run_reactive(
                     # Collect frontend actions
                     if "action" in result:
                         actions.append(result)
-                        logger.debug(
-                            "Action collected: type=%r", result["action"]
-                        )
+                        logger.debug("Action collected: type=%r", result["action"])
 
                     # Append tool result to conversation
-                    messages.append({
-                        "role": "tool",
-                        "content": json.dumps(result, ensure_ascii=False),
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "content": json.dumps(result, ensure_ascii=False),
+                        }
+                    )
 
                 # Loop back to call Ollama with the tool results appended
 
@@ -281,21 +269,14 @@ def _plan_public(plan: dict) -> dict:
     """Trim a plan to the fields worth surfacing to the frontend."""
     return {
         "goal": plan.get("goal", ""),
-        "steps": [
-            {"n": s["n"], "tool": s["tool"], "why": s.get("why", "")}
-            for s in plan.get("steps", [])
-        ],
+        "steps": [{"n": s["n"], "tool": s["tool"], "why": s.get("why", "")} for s in plan.get("steps", [])],
     }
 
 
 def _fallback_summary(executed: list[dict]) -> str:
     """Deterministic answer assembled from action labels when the summary LLM
     call is unavailable."""
-    labels = [
-        e["result"]["label"]
-        for e in executed
-        if isinstance(e.get("result"), dict) and e["result"].get("label")
-    ]
+    labels = [e["result"]["label"] for e in executed if isinstance(e.get("result"), dict) and e["result"].get("label")]
     if labels:
         return "요청을 처리했습니다: " + " · ".join(labels)
     return "요청하신 작업을 수행했습니다."
@@ -314,14 +295,16 @@ async def _summarize(
     if context_msg:
         messages.append({"role": "system", "content": context_msg})
     messages.append({"role": "user", "content": user_message})
-    messages.append({
-        "role": "system",
-        "content": (
-            "아래는 사용자 요청을 처리하며 실행한 단계와 그 결과(JSON)입니다. "
-            "이 결과만 근거로 한국어로 간결하게 최종 답변을 작성하세요. 도구를 더 호출하지 말고, "
-            "지도/화면 조작은 이미 수행됐다고 전제하세요.\n" + digest
-        ),
-    })
+    messages.append(
+        {
+            "role": "system",
+            "content": (
+                "아래는 사용자 요청을 처리하며 실행한 단계와 그 결과(JSON)입니다. "
+                "이 결과만 근거로 한국어로 간결하게 최종 답변을 작성하세요. 도구를 더 호출하지 말고, "
+                "지도/화면 조작은 이미 수행됐다고 전제하세요.\n" + digest
+            ),
+        }
+    )
 
     payload = {
         "model": OLLAMA_MODEL,
@@ -331,9 +314,7 @@ async def _summarize(
         "options": {"num_predict": MAX_RESPONSE_TOKENS},
     }
     try:
-        response = await client.post(
-            f"{OLLAMA_BASE_URL}/api/chat", json=payload, timeout=OLLAMA_TIMEOUT
-        )
+        response = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload, timeout=OLLAMA_TIMEOUT)
         response.raise_for_status()
         text = response.json().get("message", {}).get("content", "")
         return text or _fallback_summary(executed)
@@ -397,12 +378,14 @@ async def _execute_plan(
             result = await _reactive_step(client, step, results, context, actions)
 
         results[step["n"]] = result
-        executed.append({
-            "n": step["n"],
-            "tool": step["tool"],
-            "why": step.get("why", ""),
-            "result": result,
-        })
+        executed.append(
+            {
+                "n": step["n"],
+                "tool": step["tool"],
+                "why": step.get("why", ""),
+                "result": result,
+            }
+        )
 
     text = await _summarize(client, user_message, executed, context_msg)
     return {"text": text, "actions": actions, "plan": _plan_public(plan)}

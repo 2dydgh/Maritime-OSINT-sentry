@@ -50,9 +50,7 @@ class TimeRange(BaseModel):
 
 
 @router.get("/ships", response_model=list[ShipPosition])
-async def get_ships_at_time(
-    time: datetime = Query(..., description="ISO 8601 timestamp (e.g., 2025-03-13T14:30:00Z)")
-):
+async def get_ships_at_time(time: datetime = Query(..., description="ISO 8601 timestamp (e.g., 2025-03-13T14:30:00Z)")):
     """
     Retrieve all ship positions at a specific point in time.
 
@@ -99,17 +97,19 @@ async def get_ships_at_time(
                 db_ship_type = row.get("ship_type") or ""
                 ship_type = db_ship_type if db_ship_type and db_ship_type != "unknown" else meta.get("type", "unknown")
 
-                ships.append(ShipPosition(
-                    mmsi=mmsi_str,
-                    name=meta.get("name", "UNKNOWN"),
-                    type=ship_type or "unknown",
-                    lat=row["lat"],
-                    lng=row["lng"],
-                    sog=float(row["sog"]) if row["sog"] is not None else None,
-                    heading=float(row["heading"]) if row["heading"] is not None else None,
-                    country=meta.get("country") or get_country_from_mmsi(mmsi_int),
-                    record_time=row["record_time"]
-                ))
+                ships.append(
+                    ShipPosition(
+                        mmsi=mmsi_str,
+                        name=meta.get("name", "UNKNOWN"),
+                        type=ship_type or "unknown",
+                        lat=row["lat"],
+                        lng=row["lng"],
+                        sog=float(row["sog"]) if row["sog"] is not None else None,
+                        heading=float(row["heading"]) if row["heading"] is not None else None,
+                        country=meta.get("country") or get_country_from_mmsi(mmsi_int),
+                        record_time=row["record_time"],
+                    )
+                )
 
             logger.info(f"History: Retrieved {len(ships)} ships at time {time}")
             return ships
@@ -126,7 +126,7 @@ async def get_ships_at_time(
 async def get_ship_trajectory(
     mmsi: str,
     start: datetime = Query(..., description="Start time (ISO 8601)"),
-    end: datetime = Query(..., description="End time (ISO 8601)")
+    end: datetime = Query(..., description="End time (ISO 8601)"),
 ):
     """
     Retrieve trajectory (position history) for a specific ship.
@@ -143,10 +143,7 @@ async def get_ship_trajectory(
 
     # Validate time range
     if start >= end:
-        raise HTTPException(
-            status_code=400,
-            detail="Start time must be before end time"
-        )
+        raise HTTPException(status_code=400, detail="Start time must be before end time")
 
     query = """
         SELECT
@@ -169,13 +166,15 @@ async def get_ship_trajectory(
 
             trajectory = []
             for row in rows:
-                trajectory.append(TrajectoryPoint(
-                    lat=row["lat"],
-                    lng=row["lng"],
-                    sog=float(row["sog"]) if row["sog"] is not None else None,
-                    heading=float(row["heading"]) if row["heading"] is not None else None,
-                    record_time=row["record_time"]
-                ))
+                trajectory.append(
+                    TrajectoryPoint(
+                        lat=row["lat"],
+                        lng=row["lng"],
+                        sog=float(row["sog"]) if row["sog"] is not None else None,
+                        heading=float(row["heading"]) if row["heading"] is not None else None,
+                        record_time=row["record_time"],
+                    )
+                )
 
             logger.info(f"History: Retrieved {len(trajectory)} trajectory points for MMSI {mmsi}")
             return trajectory
@@ -303,16 +302,18 @@ async def get_bulk_trajectories(
                         "name": meta.get("name", "UNKNOWN"),
                         "type": row["ship_type"] or meta.get("type", "unknown"),
                         "country": meta.get("country", "UNKNOWN"),
-                        "points": []
+                        "points": [],
                     }
 
-                ships[mmsi]["points"].append({
-                    "time": row["record_time"].isoformat(),
-                    "lat": row["lat"],
-                    "lng": row["lng"],
-                    "sog": float(row["sog"]) if row["sog"] is not None else None,
-                    "heading": float(row["heading"]) if row["heading"] is not None else None
-                })
+                ships[mmsi]["points"].append(
+                    {
+                        "time": row["record_time"].isoformat(),
+                        "lat": row["lat"],
+                        "lng": row["lng"],
+                        "sog": float(row["sog"]) if row["sog"] is not None else None,
+                        "heading": float(row["heading"]) if row["heading"] is not None else None,
+                    }
+                )
 
             logger.info(f"History: Retrieved trajectories for {len(ships)} ships ({len(rows)} total points)")
             return {"ships": ships}
@@ -352,12 +353,12 @@ async def get_data_time_range():
                 row = await conn.fetchrow(query)
 
             result = TimeRange(
-                min_time=row["min_time"],
-                max_time=row["max_time"],
-                total_records=row["total_records"] or 0
+                min_time=row["min_time"], max_time=row["max_time"], total_records=row["total_records"] or 0
             )
 
-            logger.info(f"History: Data range from {result.min_time} to {result.max_time}, {result.total_records} records")
+            logger.info(
+                f"History: Data range from {result.min_time} to {result.max_time}, {result.total_records} records"
+            )
             return result
 
     except TimeoutError:

@@ -73,18 +73,18 @@ WATCH_SCANNER_LEASE_SEC = float(os.getenv("WATCH_SCANNER_LEASE_SEC", "120"))
 
 
 def _parse_box(raw, name):
-    """"minLat,minLng,maxLat,maxLng" → 튜플, 'off' → None(필터 없음).
+    """ "minLat,minLng,maxLat,maxLng" → 튜플, 'off' → None(필터 없음).
     값이 틀리면 None 으로 — 넓히는 쪽으로 실패한다. 오타로 담당 해역이 조용히 좁아지면
     위험을 놓치지만, 넓어지면 사건이 더 보일 뿐이다."""
-    if raw.strip().lower() in ('off', 'none', 'all'):
+    if raw.strip().lower() in ("off", "none", "all"):
         return None
     try:
-        min_lat, min_lng, max_lat, max_lng = (float(x) for x in raw.split(','))
+        min_lat, min_lng, max_lat, max_lng = (float(x) for x in raw.split(","))
         ok = -90 <= min_lat < max_lat <= 90 and -180 <= min_lng < max_lng <= 180
     except ValueError:
         ok = False
     if not ok:
-        logging.getLogger(__name__).error('%s 형식이 잘못돼 무시합니다(담당 해역 필터 없음): %r', name, raw)
+        logging.getLogger(__name__).error("%s 형식이 잘못돼 무시합니다(담당 해역 필터 없음): %r", name, raw)
         return None
     return (min_lat, min_lng, max_lat, max_lng)
 

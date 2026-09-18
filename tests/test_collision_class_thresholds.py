@@ -1,4 +1,5 @@
 """collision_analyzer의 Class A/B 차등 임계값 테스트."""
+
 from unittest.mock import patch
 
 from backend.services import collision_analyzer, land_filter
@@ -38,11 +39,18 @@ def test_thresholds_aa_stricter_than_bb():
 
 # --- Task 3: Class 기반 TCPA 필터 테스트 ---
 
+
 def _make_vessel(mmsi, lat, lng, sog=10.0, cog=90.0, ais_class="A"):
     return {
-        "mmsi": mmsi, "lat": lat, "lng": lng,
-        "sog": sog, "cog": cog, "ais_class": ais_class,
-        "name": f"SHIP-{mmsi}", "type": "cargo", "country": "KR",
+        "mmsi": mmsi,
+        "lat": lat,
+        "lng": lng,
+        "sog": sog,
+        "cog": cog,
+        "ais_class": ais_class,
+        "name": f"SHIP-{mmsi}",
+        "type": "cargo",
+        "country": "KR",
     }
 
 
@@ -68,6 +76,7 @@ def test_bb_pair_filtered_by_shorter_tcpa_max():
 
 
 # --- Task 4: Class 기반 DCPA 임계값 테스트 ---
+
 
 def test_analyze_distance_risks_class_ab_thresholds():
     """A-B 쌍은 A-B 임계값(dcpa_warning=0.7nm)을 적용한다."""

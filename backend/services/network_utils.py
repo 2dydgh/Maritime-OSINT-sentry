@@ -25,12 +25,14 @@ _BASH_PATH = shutil.which("bash") or "bash"
 _domain_fail_cache: dict[str, float] = {}
 _DOMAIN_FAIL_TTL = 300  # 5 minutes
 
+
 class _DummyResponse:
     """Minimal response object matching the requests/httpx response interface."""
+
     def __init__(self, status_code, text):
         self.status_code = status_code
         self.text = text
-        self.content = text.encode('utf-8', errors='replace')
+        self.content = text.encode("utf-8", errors="replace")
 
     def json(self):
         return json.loads(self.text)
@@ -53,15 +55,18 @@ def _run_curl_fallback(url, method, json_data, timeout, default_headers):
     for k, v in default_headers.items():
         cmd += ["-H", f"{k}: {v}"]
     if method == "POST" and json_data:
-        cmd += ["-X", "POST", "-H", "Content-Type: application/json",
-                "--data-binary", "@-"]
+        cmd += ["-X", "POST", "-H", "Content-Type: application/json", "--data-binary", "@-"]
     cmd.append(url)
 
     stdin_data = json.dumps(json_data) if (method == "POST" and json_data) else None
     try:
         res = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout + 5,
-            input=stdin_data, check=False,  # 반환 코드는 아래에서 직접 판정한다
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+            input=stdin_data,
+            check=False,  # 반환 코드는 아래에서 직접 판정한다
         )
     except subprocess.TimeoutExpired:
         logger.error(f"bash curl fallback timed out after {timeout + 5}s for {url}")
@@ -123,6 +128,4 @@ async def fetch_with_curl_async(url, method="GET", json_data=None, timeout=15, h
     asyncio.to_thread so the event loop is never blocked by network or
     subprocess I/O. Returns the same response object as fetch_with_curl.
     """
-    return await asyncio.to_thread(
-        fetch_with_curl, url, method, json_data, timeout, headers
-    )
+    return await asyncio.to_thread(fetch_with_curl, url, method, json_data, timeout, headers)

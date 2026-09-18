@@ -8,6 +8,7 @@ around six fixed coastal hot-spots (Busan, Yeosu, Mokpo, Boryeong, Jeju
 strait, Dokdo) and run them through the normal compute_cells pipeline so the
 scoring, top-cause, and subscores are still consistent with the algorithm.
 """
+
 import asyncio
 import json
 import logging
@@ -40,8 +41,8 @@ _HOT_SPOTS = [
     (33.85, 126.55),  # 제주 해협 (제주 북측)
     (37.55, 131.10),  # 독도 북동 해상
 ]
-_HOTSPOT_RADIUS_DEG = 0.9   # falloff radius — beyond this no boost is applied
-_VESSELS_PER_HOTSPOT = 22   # fake vessel cluster density
+_HOTSPOT_RADIUS_DEG = 0.9  # falloff radius — beyond this no boost is applied
+_VESSELS_PER_HOTSPOT = 22  # fake vessel cluster density
 
 
 def _hotspot_boost(lat: float, lng: float) -> float:
@@ -64,16 +65,18 @@ def _synth_weather() -> dict:
         wave = 0.4 + 6.5 * boost + jitter * boost
         wind = 7.0 + 50.0 * boost + jitter * 5
         vis = 20000 - 19000 * boost - jitter * 800
-        cells.append({
-            "lat": lat,
-            "lng": lng,
-            "wave_height": round(max(0.0, wave), 2),
-            "wave_direction": 180,
-            "wave_period": 5.0 + 2.0 * boost,
-            "wind_speed": round(max(0.0, wind), 1),
-            "wind_direction": 180,
-            "visibility": round(max(500.0, vis), 0),
-        })
+        cells.append(
+            {
+                "lat": lat,
+                "lng": lng,
+                "wave_height": round(max(0.0, wave), 2),
+                "wave_direction": 180,
+                "wave_period": 5.0 + 2.0 * boost,
+                "wind_speed": round(max(0.0, wind), 1),
+                "wind_direction": 180,
+                "visibility": round(max(500.0, vis), 0),
+            }
+        )
     return {"cells": cells, "timestamp": int(time.time())}
 
 
@@ -85,10 +88,12 @@ def _synth_vessels() -> list[dict]:
         for _ in range(_VESSELS_PER_HOTSPOT):
             r = rng.uniform(0.05, 0.45)
             theta = rng.uniform(0.0, 2 * math.pi)
-            out.append({
-                "lat": hs_lat + r * math.cos(theta),
-                "lng": hs_lng + r * math.sin(theta),
-            })
+            out.append(
+                {
+                    "lat": hs_lat + r * math.cos(theta),
+                    "lng": hs_lng + r * math.sin(theta),
+                }
+            )
     return out
 
 
@@ -103,9 +108,7 @@ def _compute_cells_sync() -> list[dict]:
 # Synth cells are deterministic, so the result survives restarts. Persisting
 # them removes the ~40s cold-compute window right after every server restart
 # (the compute itself is slow because the global AIS ingest thread hogs the GIL).
-_CELLS_DISK_CACHE = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), "services", "hazard_cells_cache.json"
-)
+_CELLS_DISK_CACHE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "services", "hazard_cells_cache.json")
 
 
 def _load_cells_from_disk() -> list[dict] | None:
