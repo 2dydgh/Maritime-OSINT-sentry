@@ -1,4 +1,4 @@
-@import url('theme.css?v=5');
+@import url('theme.css?v=6');
 
 /* 키보드 포커스 링 — 전역 */
 :focus-visible {
@@ -8,10 +8,9 @@
 }
 
 /* 스크롤바 — 전역 기본.
-   지금까지는 선택자마다 개별로 20여 곳에 걸어서 새로 만든 스크롤 영역
-   (#proposalSection, 근거·조사·시나리오 다이얼로그 등)은 매번 빠졌고 브라우저
-   기본 밝은 막대가 어두운 패널 위에 떴다. 값은 기존 블록들이 쓰던 것 그대로라
-   (4px · 흰 10% · 검정 10%) 보이는 변화 없이 누락만 메운다.
+   지금까지는 선택자마다 개별로 20여 곳에 걸어서 새로 만든 스크롤 영역은
+   매번 빠졌고 브라우저 기본 밝은 막대가 어두운 패널 위에 떴다. 값은 기존
+   블록들이 쓰던 것 그대로라 (4px · 흰 10% · 검정 10%) 보이는 변화 없이 누락만 메운다.
    scrollbar-color 는 상속되므로 :root 선언 하나가 전체를 덮는다. */
 :root {
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
@@ -367,33 +366,6 @@
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-main);
 }
-
-/* 패널 범위 보조 액션 (예: 저장한 비교) — 특정 탭 소속이 아니라 패널 전체에
-   걸리는 동작이라 헤더에 둔다. 닫기 버튼과 같은 조용한 고스트 문법을 쓰되
-   글자가 있으므로 살짝 더 크다. margin-left:auto 는 여기서 한 번만 —
-   뒤따르는 .right-panel-close 는 바로 옆에 붙는다. */
-.right-panel-action {
-    margin-left: auto;
-    background: none;
-    border: none;
-    color: var(--text-dim);
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 0.7rem;
-    letter-spacing: 0.04em;
-    padding: 3px 7px;
-    border-radius: var(--radius-tag);
-    white-space: nowrap;
-}
-
-.right-panel-action:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-main);
-}
-
-/* auto 마진이 둘이면 flex 가 남은 공간을 둘로 나눠 준다 — 액션이 가운데로
-   밀리므로 닫기 버튼의 auto 를 끈다. 밀어내기는 .right-panel-action 한 곳에서만. */
-.right-panel-action + .right-panel-close { margin-left: 0; }
 
 .right-panel-back {
     background: none;
@@ -3721,31 +3693,6 @@ body {
     font-size: 0.68rem;
     color: var(--text-sub);
     letter-spacing: 0.03em;
-}
-
-/* 시나리오 비교 — 드릴다운 동작이므로 훑어보는 동안에는 숨긴다.
-   모든 행에 띄우면 조밀한 분류 목록(padding 9px)이 행마다 부풀고, 행 자체가
-   이미 클릭 대상이라 그 히트 영역 안에 두 번째 액션이 겹친다.
-   행을 눌러 .selected 가 된 뒤에만 나타난다 — 선택은 _selectedPair 가
-   실시간 재렌더를 넘어 유지시킨다. */
-.collision-row .cr-compare { display: none; }
-.collision-row.selected .cr-compare {
-    display: inline-block;
-    flex-shrink: 0;
-    padding: 2px 7px;
-    background: var(--btn-surface);
-    color: var(--text-sub);
-    border: 1px solid var(--btn-border);
-    border-radius: var(--radius-tag);
-    font-family: inherit;
-    font-size: 0.66rem;
-    line-height: 1.5;
-    cursor: pointer;
-}
-.collision-row.selected .cr-compare:hover {
-    background: var(--btn-surface-hover);
-    border-color: var(--btn-border-hover);
-    color: var(--text-main);
 }
 
 /* Table header no longer applies to the card layout */
@@ -9485,154 +9432,3 @@ button, .btn, [class*="-btn"] {
     border-radius: 6px;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.025);
 }
-
-/* Operator decision support, using the existing dashboard palette. */
-#proposalSection { padding: 12px; overflow-y: auto; min-height: 0; }
-#proposalSection[hidden], #collisionSection[hidden] { display: none !important; }
-.proposal-card { padding: 12px; margin-bottom: 10px; border: 1px solid var(--panel-border); border-radius: 7px; background: var(--panel-bg); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
-.proposal-card p { margin: 6px 0; }
-.proposal-card summary { cursor: pointer; color: var(--text-sub); }
-.proposal-card ol { padding-left: 20px; }
-.pc-status { color: var(--caution); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-/* 관측 지연 — 위험이 사라진 게 아니라 자료가 잠시 끊긴 상태다. 사건을 닫지 않고
-   이 배지로 알리며, 그동안 승인 버튼만 잠긴다. danger 가 아니라 caution 단계. */
-.pc-stale {
-    padding: 1px 6px;
-    border: 1px solid var(--sev-caution);
-    border-radius: var(--radius-tag);
-    color: var(--sev-caution);
-    font-size: 10px;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
-}
-.pc-stale-note { color: var(--text-sub); font-size: 11px; }
-
-/* ── 제안 탭 도구줄: 당직 인계 · 알림 ── */
-.proposal-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
-.proposal-tools button {
-    background: var(--btn-surface); color: var(--text-main);
-    border: 1px solid var(--btn-border); border-radius: var(--radius-pill);
-    padding: 5px 10px; font-size: 11px; cursor: pointer; transition: var(--btn-transition);
-}
-.proposal-tools button:hover:not(:disabled) { background: var(--btn-surface-hover); border-color: var(--btn-border-hover); }
-.proposal-tools button:disabled { opacity: .45; cursor: default; }
-/* 켜진 알림은 눌린 상태로 — 켜져 있는지 문구를 읽지 않고도 보이게 */
-.proposal-tools button[aria-pressed="true"] { background: var(--primary-muted); border-color: var(--primary); }
-.proposal-tools .pc-note { flex-basis: 100%; }
-.proposal-tools .pc-note:empty { display: none; }
-/* 담당 해역 — 제안이 어느 범위에서 나오는지. 조용한 계기 표기(수치는 mono). */
-.pc-aor { flex-basis: 100%; color: var(--text-dim); font-family: var(--font-data); font-size: 10px; letter-spacing: .02em; }
-.pc-aor:empty { display: none; }
-
-/* ── 당직 인계 다이얼로그 ──
-   교대자가 "지난 인계 이후 무엇이 있었고 지금 무엇을 넘겨받는가" 를 한 화면에서 확인하고
-   이어받는다. 열린 사건은 위험 순서(서버 rank_key)로 온다. 다른 다이얼로그와 같은 표면 토큰. */
-.handoff-dialog {
-    box-sizing: border-box; width: min(720px, 95vw); max-height: 92vh; overflow: auto; padding: 24px;
-    background: var(--panel-bg); color: var(--text-main);
-    border: 1px solid var(--panel-border); border-radius: var(--radius-group); box-shadow: var(--shadow-panel);
-    font-family: var(--font-body); font-size: 13px; line-height: 1.65;
-}
-.handoff-dialog::backdrop { background: var(--dialog-backdrop); }
-.handoff-dialog header { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
-.handoff-dialog header button { white-space: nowrap; flex-shrink: 0; }
-.handoff-dialog h2 { margin: 0; font-family: var(--font-display); font-size: 22px; }
-.handoff-dialog h3 { margin: 22px 0 8px; font-family: var(--font-display); font-size: 15px; }
-.handoff-dialog h3 span { margin-left: 6px; color: var(--secondary); font-family: var(--font-data); font-size: 12px; font-weight: 400; }
-.handoff-last { margin: 4px 0 0; color: var(--secondary); font-size: 12px; }
-.handoff-intro { margin: 10px 0 0; max-width: 62ch; color: var(--secondary); }
-.handoff-dialog button {
-    font: inherit; font-size: 12px; color: var(--text-main); background: var(--btn-surface);
-    border: 1px solid var(--btn-border); border-radius: var(--radius-pill); padding: 6px 11px; cursor: pointer;
-    transition: var(--btn-transition);
-}
-.handoff-dialog button:hover:not(:disabled) { background: var(--btn-surface-hover); border-color: var(--btn-border-hover); }
-.handoff-dialog button:disabled { opacity: .45; cursor: default; }
-.handoff-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--divider); }
-.handoff-list li {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 9px 0; border-bottom: 1px solid var(--divider);
-}
-.handoff-list li > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
-.handoff-list strong { font-weight: 600; overflow-wrap: anywhere; }
-.handoff-list small { flex-basis: 100%; color: var(--secondary); font-family: var(--font-data); font-variant-numeric: tabular-nums; }
-.handoff-list .handoff-empty { color: var(--text-dim); justify-content: flex-start; }
-.handoff-form { display: grid; gap: 10px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--divider); }
-.handoff-form label { display: grid; gap: 5px; font-size: 12px; color: var(--secondary); }
-.handoff-form small { color: var(--text-dim); }
-.handoff-form input, .handoff-form textarea {
-    box-sizing: border-box; width: 100%; font: inherit; color: var(--text-main);
-    background: var(--control-bg); border: 1px solid var(--panel-border); border-radius: var(--radius-pill); padding: 8px;
-}
-.handoff-form textarea { min-height: 64px; resize: vertical; }
-.handoff-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.handoff-actions p { margin: 0; color: var(--secondary); font-size: 12px; }
-.handoff-dialog .handoff-submit { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
-.handoff-dialog .handoff-submit:hover:not(:disabled) { background: var(--accent-glow); border-color: var(--accent-glow); }
-@media (max-width: 600px) {
-    .handoff-dialog { padding: 16px; }
-    .handoff-list li { align-items: flex-start; flex-direction: column; }
-}
-.proposal-card button { background: var(--btn-surface); color: var(--text-main); border: 1px solid var(--btn-border); border-radius: 5px; padding: 7px 10px; cursor: pointer; }
-.proposal-card button:disabled { opacity: .5; cursor: wait; }
-
-/* ── 제안 카드 버튼 위계 ──────────────────────────────────────────
-   1단 .pc-actions  판단 그 자체 (승인·기각·추적 종료). 승인만 채운 primary.
-   2단 .pc-tools    다이얼로그를 여는 조사 도구. 기본 버튼 무게.
-   3단 .pc-knowledge 같은 근거 화면의 질문별 바로가기. 조용한 텍스트 링크.
-   세 단이 전부 같은 무게였을 때는 카드에 버튼 8개가 평평하게 깔려
-   무엇이 주 동작인지 읽히지 않았다. */
-.pc-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.proposal-card [data-act="approve"] {
-    background: var(--primary);
-    border-color: var(--primary);
-    color: #fff;
-    font-weight: 600;
-}
-.proposal-card [data-act="approve"]:hover:not(:disabled) { background: var(--accent-glow); border-color: var(--accent-glow); }
-/* 추적 종료는 되돌리기 어려운 동작이라 danger 로 테두리만 — 채우면 승인과 경합한다. */
-.proposal-card [data-act="stop"] { border-color: var(--sev-danger); color: var(--sev-danger); }
-
-.pc-tools { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-.pc-tools button { font-size: 11px; padding: 5px 9px; }
-
-.pc-knowledge {
-    display: flex;
-    align-items: baseline;
-    gap: 4px 10px;
-    margin-top: 10px;
-    padding-top: 9px;
-    border-top: 1px solid var(--panel-border);
-    flex-wrap: wrap;
-}
-.pc-knowledge > span {
-    color: var(--text-dim);
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-.proposal-card .pc-knowledge button {
-    background: none;
-    border: none;
-    padding: 2px 0;
-    font-size: 11px;
-    color: var(--text-sub);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    text-decoration-color: var(--panel-border);
-}
-.proposal-card .pc-knowledge button:hover { color: var(--primary); text-decoration-color: var(--primary); }
-.proposal-card input { box-sizing: border-box; width: 100%; background: var(--bg-color); color: var(--text-main); border: 1px solid var(--panel-border); padding: 6px; }
-.pc-note, #proposalMessage { color: var(--text-sub); font-size: 12px; }
-#proposalTabBadge { margin-left: 4px; }
-.decision-steps { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 12px 0 16px; padding: 0; list-style: none; counter-reset: decision-step; font-size: 12px; color: var(--secondary); }
-.decision-steps li { counter-increment: decision-step; }
-.decision-steps li::before { content: counter(decision-step) '. '; font-family: var(--font-data); }
-.decision-steps [aria-current="step"] { color: var(--text-main); font-weight: 700; border-bottom: 2px solid var(--primary); padding-bottom: 4px; }
-.proposal-guide { margin-bottom: 16px; }
-.proposal-guide strong { font-family: var(--font-display); font-size: 14px; }
-.proposal-guide .decision-steps { gap: 8px 12px; margin: 10px 0; }
-.pc-next { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--divider); }
-.proposal-card .pc-primary { width: 100%; margin-top: 6px; padding: 10px 12px; background: var(--primary); border-color: var(--primary); color: var(--text-main); font-weight: 700; }
-.proposal-card .pc-primary:hover { background: var(--accent-glow); }
-.pc-manual { margin-top: 14px; }

@@ -971,9 +971,3 @@ def stop_ais_stream():
 
     _save_cache()  # Save on shutdown
     logger.info("AIS Stream stopping...")
-
-
-def get_watch_vessels(pair):
-    """Copy only the requested live vessels, including local reception times."""
-    with _vessels_lock:
-        return [dict(_vessels[int(m)], mmsi=int(m)) for m in pair if int(m) in _vessels]

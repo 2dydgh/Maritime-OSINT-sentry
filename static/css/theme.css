@@ -121,25 +121,6 @@
     --knob-bg: radial-gradient(circle at 35% 30%, #26354f, #0a0e16 72%);
     --knob-shadow: 0 0 6px rgba(47, 111, 237, 0.45), 0 1px 2px rgba(0, 0, 0, 0.55);
 
-    /* ── 모달 다이얼로그 표면 — 근거/조사/시나리오 전면 창 공용 ──
-       패널 위에 한 단계 더 얹히는 창이라 자체 배경·경계가 필요하다.
-       inset  = 패널 위로 솟은 근거 박스, sunken = 원본 JSON처럼 파인 면. */
-    --dialog-backdrop: rgba(3, 9, 20, 0.80);
-    --surface-inset:   #17283d;
-    --surface-sunken:  #0b1421;
-    --divider:         rgba(120, 150, 200, 0.20);
-
-    /* ── 폼 컨트롤 ──
-       .proposal-card input 과 같은 언어 — 패널보다 어두운 "우물" 면.
-       반드시 불투명일 것: <select> 의 펼침 목록이 이 배경을 그대로 쓰기 때문에
-       rgba 를 주면 페이지 위에 반투명 팝업이 그려져 글자가 읽히지 않는다.
-       --btn-surface(반투명 흰색)는 버튼 전용이며 입력류에 쓰면 안 된다. */
-    --control-bg:       var(--bg-color);
-    --control-bg-hover: #0e141f;
-    /* select 화살표 — appearance:none 으로 OS 위젯을 걷어낸 뒤 이걸 얹는다.
-       data URI 안에서는 var() 가 안 되므로 색은 --secondary(#94a3b8) 와 같은 값을 박는다. */
-    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-
     /* ── 스크롤바 ──
        값은 main.css 가 이미 20여 곳에 개별로 쓰던 것과 동일하다. 토큰으로 올려
        전역 규칙 한 벌에서 쓰고, 새 스크롤 영역이 매번 누락되는 일을 끝낸다. */

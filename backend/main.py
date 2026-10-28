@@ -16,17 +16,13 @@ from .routers import (
     alerts,
     chat,
     collision,
-    collision_scenarios,
     data,
     datasets,
     events,
     hazard,
     health,
     history,
-    investigations,
-    knowledge,
     metrics,
-    proposals,
     route,
     satellites,
     sentinel,
@@ -43,7 +39,6 @@ from .services import (
     history_writer,
     land_filter,
     llm_agent,
-    watch_officer,
 )
 
 # Set up logging
@@ -231,24 +226,15 @@ async def lifespan(app: FastAPI):
                 # Off-loop: global snapshot is ~30k vessels under a contended lock
                 vessels = await asyncio.to_thread(ais_stream.get_ais_vessels)
                 await collision_analyzer.update_collision_cache(vessels)
-                await asyncio.to_thread(watch_officer.on_collision_update)
             except Exception as e:
                 logger.error(f"Collision analysis error: {e}")
 
     collision_task = asyncio.create_task(collision_scanner())
-    from .services.investigation_store import Repository as InvestigationRepository
-
-    investigation_repo = InvestigationRepository()
-    with investigation_repo.store.transaction() as db:
-        investigation_repo.recover(db)
 
     yield
 
     # Shutdown logic
     logger.info("Shutting down OSINT 4D Backend...")
-    from .services import investigation_agent
-
-    await investigation_agent.shutdown()
     ais_stream.stop_ais_stream()
     aircraft_tracker.stop_aircraft_tracker()
     data_fetcher.stop_data_fetcher()
@@ -401,10 +387,6 @@ app.include_router(aircraft.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(hazard.router, prefix="/api/v1")
 app.include_router(datasets.router, prefix="/api/v1")
-app.include_router(proposals.router, prefix="/api/v1")
-app.include_router(knowledge.router, prefix="/api/v1")
-app.include_router(investigations.router, prefix="/api/v1")
-app.include_router(collision_scenarios.router, prefix="/api/v1")
 
 # Static Files — resolve path for both normal and PyInstaller frozen mode
 import sys as _sys

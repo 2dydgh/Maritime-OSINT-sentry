@@ -62,8 +62,6 @@ electron/            데스크톱 패키징
   이걸 루프에서 돌리면 hazard API·WS 핸드셰이크가 전부 굶는다.
 - **hazard 셀**은 디스크 캐시(`backend/services/hazard_cells_cache.json`)로 warm.
 
-- **당직사관:** 충돌 스캐너 → `watch_officer.on_collision_update()` → SQLite 제안 기록 → `/api/v1/proposals` → 제안 탭. 서버 승인 응답 이후에만 지도 추적을 시작하고 `/execution`에 브라우저 확인을 전송한다. 상세: `docs/features/watch-officer.md`.
-
 ## 컨벤션
 
 - **정적 자산 캐시:** dev 서버를 `DEV_NO_CACHE=1`로 띄우면 정적 파일에 `Cache-Control: no-store`가 붙어 **새로고침만으로 최신 CSS/JS가 반영**된다(`?v=` 수동 갱신 불필요). 플래그 없이 띄웠다면 종전대로 **JS/CSS 수정 후 `index.html`의 `?v=`를 올려야** 새로고침에 반영된다. 운영에선 캐시 유지를 위해 이 플래그를 끈다.
