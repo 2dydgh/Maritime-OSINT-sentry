@@ -551,23 +551,6 @@ def _load_cache():
         logger.error(f"Failed to load AIS cache: {e}")
 
 
-def get_vessel_metadata(mmsi: int) -> dict | None:
-    """Get metadata for a specific vessel by MMSI (name, type, country, etc.)."""
-    with _vessels_lock:
-        v = _vessels.get(mmsi)
-        if v:
-            return {
-                "mmsi": mmsi,
-                "name": v.get("name", "UNKNOWN"),
-                "type": v.get("type", "unknown"),
-                "country": get_country_from_mmsi(mmsi),
-                "callsign": v.get("callsign", ""),
-                "destination": v.get("destination", "") or "UNKNOWN",
-                "imo": v.get("imo", 0),
-            }
-    return None
-
-
 def get_all_vessel_metadata() -> dict[int, dict]:
     """Get metadata for all tracked vessels as a dict keyed by MMSI."""
     with _vessels_lock:

@@ -41,14 +41,6 @@
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
       "datasource": "Prometheus",
       "targets": [{"expr": "rate(alerts_fired_total[5m])", "legendFormat": "{{alert_type}}"}]
-    },
-    {
-      "id": 6,
-      "title": "Redis Stream Lag",
-      "type": "gauge",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
-      "datasource": "Prometheus",
-      "targets": [{"expr": "stream_lag_messages"}]
     }
   ],
   "time": {"from": "now-1h", "to": "now"},

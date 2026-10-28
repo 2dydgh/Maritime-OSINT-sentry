@@ -766,11 +766,6 @@ var RouteViewer = (function() {
         });
     }
 
-    function destroyGlobeClickHandler() {
-        // Leaflet click handler lives with routeMap; nothing to tear down here.
-        clickMode = null;
-    }
-
     // ── Route Search ──
     function updateSearchBtn() {
         var btn = document.getElementById('routeSearchBtn');

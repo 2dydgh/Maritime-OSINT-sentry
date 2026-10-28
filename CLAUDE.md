@@ -21,7 +21,7 @@ uv sync                                                      # 의존성 설치
 uv run uvicorn backend.main:app --host 0.0.0.0 --port 8001   # 정식 실행 (README 기준)
 ```
 
-- **활성 앱은 `backend.main:app`** 이다. 루트의 `main.py`는 구버전 모놀리식이며 새 작업은 여기서 하지 말 것.
+- **활성 앱은 `backend.main:app`** 이다.
 - 개발 서버는 보통 **포트 12081**로 띄워 확인한다. 서버를 멈출 때는 `kill -9`.
 - 모니터링 포함 전체 스택: `docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d`
   - App `:8001` · Prometheus `:9090` · Grafana `:3001` (admin/admin) · Redis `:6379`
@@ -43,7 +43,7 @@ backend/
   data_platform/     AIS 원본 저널·정제·내보내기·복원 CLI (docs/data-platform/README.md)
   config.py          환경변수 (DB_*, AIS_API_KEY, OPENSKY_*, PORT, REDIS_URL)
   routers/           ships · collision · hazard · route · satellites · aircraft · weather · chat · events · alerts · history · metrics · health · data · sentinel
-  services/          ais_stream · collision_analyzer · land_filter · korea_hex_grid · hazard(static_hazards) · llm_agent/llm_tools · satellite_tracker · aircraft_tracker · history_writer · port_search · stream_producer/consumer
+  services/          ais_stream · collision_analyzer · land_filter · korea_hex_grid · hazard(static_hazards) · llm_agent/llm_tools · satellite_tracker · aircraft_tracker · history_writer · port_search
   cache/, data/      디스크 캐시 · 정적 데이터
 collision_model_new/da10-service/   별도 XGBoost 충돌 예측 서비스 (REST). git submodule 형태.
 static/

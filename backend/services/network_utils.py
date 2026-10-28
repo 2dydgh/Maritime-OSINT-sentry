@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import shutil
@@ -119,13 +118,3 @@ def fetch_with_curl(url, method="GET", json_data=None, timeout=15, headers=None)
             _domain_fail_cache[domain] = time.time()
 
     return _run_curl_fallback(url, method, json_data, timeout, default_headers)
-
-
-async def fetch_with_curl_async(url, method="GET", json_data=None, timeout=15, headers=None):
-    """Async-safe variant of fetch_with_curl.
-
-    Runs the blocking httpx/subprocess fetch in a worker thread via
-    asyncio.to_thread so the event loop is never blocked by network or
-    subprocess I/O. Returns the same response object as fetch_with_curl.
-    """
-    return await asyncio.to_thread(fetch_with_curl, url, method, json_data, timeout, headers)
