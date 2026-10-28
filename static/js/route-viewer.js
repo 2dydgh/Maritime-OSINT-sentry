@@ -729,7 +729,7 @@ var RouteViewer = (function() {
         if (routeMap.zoomControl) routeMap.zoomControl.setPosition('bottomright');
 
         // Satellite basemap — same look/tone as the home 2D map (ArcGIS World
-        // Imagery + CARTO dark labels). The `basemap-satellite` class applies the
+        // Imagery + Esri dark labels). The `basemap-satellite` class applies the
         // shared dark tile-pane filter (main.css) for tonal consistency.
         mapEl.classList.add('basemap-satellite');
         L.tileLayer(
@@ -737,8 +737,8 @@ var RouteViewer = (function() {
             { maxZoom: 19, errorTileUrl: ROUTE_BLANK_TILE }
         ).addTo(routeMap);
         L.tileLayer(
-            'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
-            { maxZoom: 19, subdomains: 'abcd', pane: 'overlayPane', errorTileUrl: ROUTE_BLANK_TILE }
+            'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+            { maxZoom: 19, pane: 'overlayPane', errorTileUrl: ROUTE_BLANK_TILE }
         ).addTo(routeMap);
 
         setupRouteMapClick();
