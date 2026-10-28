@@ -79,12 +79,9 @@ var HAZARD_LABEL_MIN_ZOOM = 7;     // hide callouts when zoomed out past this
 var _hazardLabelZoomHooked = false;
 var _harFlyHighlight = null;       // transient ring shown after a list-row flyTo
 
-// Basemap layer references — swapped between satellite (default) and nautical chart (hazard mode)
+// Basemap layer references
 var _satBaseLayer = null;
 var _satLabelLayer = null;
-var _chartBaseLayer = null;
-var _chartLabelLayer = null;
-var _chartSeamarkLayer = null;
 
 // Web-Mercator world extent. noWrap 타일 레이어가 저줌에서 가장자리 밖 타일(x=2^z 등)을
 // 요청하면 CARTO가 400 을 던지므로, bounds 로 유효 범위 밖 요청 자체를 막는다.
@@ -138,16 +135,11 @@ function initLeaflet() {
 // ── Basemap swap helpers ──
 function _useSatelliteBasemap() {
     if (!leafletMap) return;
-    // Remove chart layers if present
-    if (_chartBaseLayer)    { leafletMap.removeLayer(_chartBaseLayer);    _chartBaseLayer = null; }
-    if (_chartLabelLayer)   { leafletMap.removeLayer(_chartLabelLayer);   _chartLabelLayer = null; }
-    if (_chartSeamarkLayer) { leafletMap.removeLayer(_chartSeamarkLayer); _chartSeamarkLayer = null; }
     if (_satBaseLayer && _satLabelLayer) return;  // already on satellite
 
     // Apply dark filter to the tile-pane as a whole (not per-tile) to prevent
     // seam lines caused by per-tile CSS filter compositing.
     var container = leafletMap.getContainer();
-    container.classList.remove('basemap-nautical');
     container.classList.add('basemap-satellite');
 
     // Satellite imagery — matches 3D Cesium globe tone.
@@ -161,36 +153,6 @@ function _useSatelliteBasemap() {
         'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
         { maxZoom: 19, pane: 'overlayPane', noWrap: true, bounds: WORLD_TILE_BOUNDS }
     ).addTo(leafletMap);
-}
-
-function _useChartBasemap() {
-    if (!leafletMap) return;
-    if (_satBaseLayer) { leafletMap.removeLayer(_satBaseLayer); _satBaseLayer = null; }
-    if (_satLabelLayer) { leafletMap.removeLayer(_satLabelLayer); _satLabelLayer = null; }
-    if (_chartBaseLayer && _chartSeamarkLayer) return;  // already on chart
-
-    // Apply nautical filter at the container level (not per-tile) to avoid seam lines.
-    var container = leafletMap.getContainer();
-    container.classList.remove('basemap-satellite');
-    container.classList.add('basemap-nautical');
-
-    var BLANK_TILE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-
-    // Base: CARTO Positron — clean light-gray cartographic basemap matching the
-    // accident.png reference (quiet light chart, minimal color noise) so the
-    // orange/red risk hexes read clearly. Distinct from normal mode's satellite
-    // imagery. Light by design → no dark tile filter.
-    _chartBaseLayer = L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        { maxZoom: 19, subdomains: 'abcd', errorTileUrl: BLANK_TILE, attribution: '© OpenStreetMap, © CARTO', noWrap: true, bounds: WORLD_TILE_BOUNDS }
-    ).addTo(leafletMap);
-
-    // Nautical detail: OpenSeaMap seamarks (buoys, lights, depth contours)
-    _chartSeamarkLayer = L.tileLayer(
-        'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
-        { maxZoom: 18, opacity: 0.85, pane: 'overlayPane', errorTileUrl: BLANK_TILE, noWrap: true, bounds: WORLD_TILE_BOUNDS }
-    ).addTo(leafletMap);
-    _chartLabelLayer = null;  // Positron already includes labels
 }
 
 // ── Build and inject the nautical hazard legend panel ──
@@ -1007,10 +969,6 @@ function clearLeafletLayers() {
     leafletSatFootprints = {};
 }
 
-function altitudeToZoom(altitude) {
-    return Math.max(2, Math.min(18, Math.round(Math.log2(40000000 / altitude) + 1)));
-}
-
 function zoomToAltitude(zoom) {
     return 40000000 / Math.pow(2, zoom - 1);
 }
@@ -1035,36 +993,7 @@ function _hexPolygon(lat, lng, radiusDeg) {
     return pts;
 }
 
-// ── Named sea areas for hazard labels ──
-var SEA_AREAS = [
-    { name: '말라카 해협', lat: 3.5,  lng: 102.5 },
-    { name: '남중국해',    lat: 14.0, lng: 114.0 },
-    { name: '동중국해',    lat: 28.0, lng: 125.0 },
-    { name: '황해',        lat: 36.0, lng: 123.0 },
-    { name: '대한해협',    lat: 34.5, lng: 129.0 },
-    { name: '아덴만',      lat: 12.5, lng: 47.0  },
-    { name: '오만만',      lat: 23.0, lng: 60.0  },
-    { name: '페르시아만',  lat: 27.0, lng: 52.0  },
-    { name: '홍해',        lat: 21.0, lng: 38.0  },
-    { name: '인도양',      lat: -5.0, lng: 73.0  },
-    { name: '지중해',      lat: 36.0, lng: 16.0  },
-    { name: '수에즈 운하', lat: 30.5, lng: 32.5  },
-    { name: '기니만',      lat: 3.0,  lng: 3.0   },
-    { name: '호르무즈 해협',lat: 26.5, lng: 56.5  },
-    { name: '대서양',      lat: 20.0, lng: -25.0 }
-];
-
 var HAZARD_CAUSES = ['조류 강도 높음', '과거 사고 다발', '조류 변동성 큼', '협수로', '안개 잦음', '항로 교차 빈번'];
-
-function _nearestSeaArea(lat, lng) {
-    var best = null, bestDist = Infinity;
-    for (var i = 0; i < SEA_AREAS.length; i++) {
-        var a = SEA_AREAS[i];
-        var d = Math.sqrt(Math.pow(a.lat - lat, 2) + Math.pow(a.lng - lng, 2));
-        if (d < bestDist) { bestDist = d; best = a; }
-    }
-    return best && bestDist < 20 ? best.name : null;
-}
 
 // ── Korean demo-mode lifecycle ───────────────────────────────────
 // Toggled by the left-rail demo button (Task 16). Backend's mock vessels

@@ -68,14 +68,6 @@ function getSeaAreaName(lat, lng) {
     return Math.abs(lat).toFixed(0) + '\u00b0' + ns + ' ' + Math.abs(lng).toFixed(0) + '\u00b0' + ew + ' 해역';
 }
 
-function collisionLocationHtml(latA, lngA, latB, lngB) {
-    var midLat = (latA + latB) / 2;
-    var midLng = (lngA + lngB) / 2;
-    var area = getSeaAreaName(midLat, midLng);
-    var coord = midLat.toFixed(2) + ', ' + midLng.toFixed(2);
-    return '<div class="collision-location"><i class="fa-solid fa-location-dot"></i> ' + area + ' <span class="loc-coord">(' + coord + ')</span></div>';
-}
-
 function switchCollisionTab(tab) {
     collisionActiveTab = tab;
     document.querySelectorAll('.collision-tab-btn').forEach(function(b) {
@@ -90,25 +82,6 @@ var tabDist = document.getElementById('collisionTabDistance');
 var tabMl = document.getElementById('collisionTabMl');
 if (tabDist) tabDist.addEventListener('click', function() { switchCollisionTab('distance'); });
 if (tabMl) tabMl.addEventListener('click', function() { switchCollisionTab('ml'); });
-
-function collisionSeverityBadge(severity) {
-    // Dot carries the colour; text stays calm light grey so the row doesn't read
-    // as gaudy coloured text. Only danger lights its text up (the one loud step).
-    var dots = { danger: SEV.danger, caution: '#ec7a2c', warning: '#d9a441' };
-    var textc = { danger: SEV.danger, caution: 'var(--text-sub)', warning: 'var(--text-sub)' };
-    var labels = { danger: '위험', caution: '경고', warning: '주의' };
-    var d = dots[severity] || '#d9a441';
-    var t = textc[severity] || 'var(--text-sub)';
-    var lbl = labels[severity] || severity;
-    return '<span class="collision-badge" style="color:' + t + '"><span class="collision-dot" style="background:' + d + '"></span>' + lbl + '</span>';
-}
-
-function mlRiskBadge(level, label) {
-    var dots = { 0: '#6ee7b7', 1: '#d9a441', 2: '#ec7a2c', 3: SEV.danger };
-    var textc = { 0: 'var(--text-sub)', 1: 'var(--text-sub)', 2: 'var(--text-sub)', 3: SEV.danger };
-    var icons = { 0: '\u24EA', 1: '\u2460', 2: '\u2461', 3: '\u2462' };
-    return '<span class="collision-badge" style="color:' + textc[level] + '"><span class="collision-dot" style="background:' + dots[level] + '"></span>' + icons[level] + ' ' + label + '</span>';
-}
 
 // \u2500\u2500 Contact-card helpers: severity drives the row's left edge bar + label.
 // Text stays calm; only the loudest step (danger / level 3) colours its label.

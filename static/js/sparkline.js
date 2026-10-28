@@ -328,33 +328,6 @@ var BottomBar = (function() {
             '<button class="detail-close"><i class="fa-solid fa-xmark"></i></button></div>';
     }
 
-    function _buildVesselDetail() {
-        var types = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'tug', 'other'];
-        var total = 0;
-        types.forEach(function(t) {
-            var v = vesselCounts[t] || 0;
-            if (t === 'other') v += (vesselCounts.yacht || 0);
-            total += v;
-        });
-
-        var html = _detailHeader('선종별 선박 — ' + total + '척');
-        html += '<div class="detail-grid">';
-        types.forEach(function(t) {
-            var v = vesselCounts[t] || 0;
-            if (t === 'other') v += (vesselCounts.yacht || 0);
-            var color = (typeof SHIP_COLORS !== 'undefined' && SHIP_COLORS[t]) || defaultColors[t];
-            var pct = total > 0 ? (v / total * 100).toFixed(1) : '0.0';
-            html += '<div class="detail-item">' +
-                '<div class="detail-color" style="background:' + color + ';"></div>' +
-                '<span class="detail-label">' + (typeLabelsLong[t] || t) + '</span>' +
-                '<span class="detail-value">' + v + '</span>' +
-                '<span class="detail-pct">' + pct + '%</span>' +
-                '</div>';
-        });
-        html += '</div>';
-        return html;
-    }
-
     function _buildRiskDetail() {
         var total = riskCounts.danger + riskCounts.warning + riskCounts.caution;
         var html = _detailHeader('해역별 위험 현황 — ' + total + '건');

@@ -109,19 +109,3 @@ alerts_fired_total = Counter(
     "Total anomaly alerts fired",
     ["alert_type"],  # speeding, signal_lost, dest_change
 )
-
-# Redis Streams (Task 3에서 사용)
-stream_publish_total = Counter(
-    "stream_publish_total",
-    "Total messages published to Redis Stream",
-)
-
-stream_consume_total = Counter(
-    "stream_consume_total",
-    "Total messages consumed from Redis Stream",
-)
-
-stream_lag_messages = Gauge(
-    "stream_lag_messages",
-    "Consumer lag in number of pending messages",
-)

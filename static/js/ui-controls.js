@@ -154,10 +154,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // 하위 상세 토글 → 칩(전체) 표시 동기화
     //  하위 종류가 하나라도 켜져 있으면 칩 active (켜지면 무조건 솔리드, partial 없음).
     //  위성은 마스터(layer-sats)가 on/off 기준.
-    function _anyChecked(sel) {
-        return Array.prototype.some.call(
-            document.querySelectorAll(sel), function(cb) { return cb.checked; });
-    }
     // Sync one layer's chip + master from its sub-filter states.
     //  chip.active = ANY sub on (layer visible).
     //  master: checked = ALL on, indeterminate = SOME on, unchecked = none.

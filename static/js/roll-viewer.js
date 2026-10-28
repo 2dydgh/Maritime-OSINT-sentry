@@ -1291,228 +1291,6 @@ var RollViewer = (function () {
         scene.add(wakePoints);
     }
 
-    function animateWake(elapsed) {
-        if (!wakePoints) return;
-        var pos = wakePoints.geometry.attributes.position;
-        for (var i = 0; i < WAKE_COUNT; i++) {
-            var p = wakeParticles[i];
-            var t = i / WAKE_COUNT;
-            // Gentle drift and bob
-            pos.array[i * 3] = p.baseX + Math.sin(elapsed * 0.5 + p.phase) * 0.3;
-            pos.array[i * 3 + 1] = 0.1 + Math.sin(elapsed * 1.5 + p.phase) * 0.05;
-            pos.array[i * 3 + 2] = p.baseZ + Math.sin(elapsed * 0.8 + p.phase) * 0.2;
-        }
-        pos.needsUpdate = true;
-        // Fade opacity with wave conditions
-        wakePoints.material.opacity = 0.15 + 0.1 * Math.sin(elapsed * 0.6);
-    }
-
-
-    // ── Wake trail — persistent foam path showing where ship has been ──
-    var wakeTrail = null;
-    var WAKE_TRAIL_MAX = 600;       // max trail points
-    var wakeTrailData = [];         // { x, z, age }
-    var wakeTrailTimer = 0;
-    var WAKE_TRAIL_INTERVAL = 0.04; // seconds between drops — denser for smooth trail
-    var WAKE_TRAIL_LIFETIME = 30;   // seconds before fade out
-
-    function buildWakeTrail() {
-        var THREE = window.THREE;
-
-        // Procedural foam splash texture — irregular, organic blobs (64px for detail)
-        var canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
-        var ctx = canvas.getContext('2d');
-        // Soft radial base
-        var grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-        grad.addColorStop(0, 'rgba(255,255,255,0.95)');
-        grad.addColorStop(0.25, 'rgba(230,240,255,0.7)');
-        grad.addColorStop(0.5, 'rgba(200,225,245,0.35)');
-        grad.addColorStop(0.8, 'rgba(180,210,235,0.1)');
-        grad.addColorStop(1, 'rgba(180,210,235,0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 64, 64);
-        // Overlay irregular foam blobs for organic look
-        for (var fb = 0; fb < 8; fb++) {
-            var angle = fb * Math.PI * 2 / 8 + 0.3;
-            var dist = 6 + (fb % 3) * 5;
-            var bx = 32 + Math.cos(angle) * dist;
-            var by = 32 + Math.sin(angle) * dist;
-            var br = 4 + (fb % 4) * 2.5;
-            var bg = ctx.createRadialGradient(bx, by, 0, bx, by, br);
-            bg.addColorStop(0, 'rgba(255,255,255,0.6)');
-            bg.addColorStop(1, 'rgba(255,255,255,0)');
-            ctx.fillStyle = bg;
-            ctx.beginPath();
-            ctx.arc(bx, by, br, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        var tex = new THREE.CanvasTexture(canvas);
-
-        var positions = new Float32Array(WAKE_TRAIL_MAX * 3);
-        var alphas = new Float32Array(WAKE_TRAIL_MAX);
-        var geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geo.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
-
-        // Custom shader: per-point alpha
-        var mat = new THREE.ShaderMaterial({
-            uniforms: {
-                uTexture: { value: tex },
-                uSize: { value: 50.0 * window.devicePixelRatio }
-            },
-            vertexShader: [
-                'attribute float alpha;',
-                'varying float vAlpha;',
-                'uniform float uSize;',
-                'void main() {',
-                '  vAlpha = alpha;',
-                '  vec4 mvPos = modelViewMatrix * vec4(position, 1.0);',
-                '  gl_PointSize = uSize / -mvPos.z;',
-                '  gl_Position = projectionMatrix * mvPos;',
-                '}'
-            ].join('\n'),
-            fragmentShader: [
-                'uniform sampler2D uTexture;',
-                'varying float vAlpha;',
-                'void main() {',
-                '  vec4 tex = texture2D(uTexture, gl_PointCoord);',
-                '  gl_FragColor = vec4(tex.rgb, tex.a * vAlpha);',
-                '}'
-            ].join('\n'),
-            transparent: true,
-            depthWrite: false
-        });
-
-        wakeTrail = new THREE.Points(geo, mat);
-        scene.add(wakeTrail);
-    }
-
-    function animateWakeTrail(dt, shipX, shipZ, headingRad, rudderAngle) {
-        if (!wakeTrail) return;
-
-        wakeTrailTimer += dt;
-        var isTurning = turnScenarioActive && typeof rudderAngle === 'number' && Math.abs(rudderAngle) > 1;
-        var turnIntensity = isTurning ? Math.min(Math.abs(rudderAngle) / 25, 1) : 0;
-        var turnOuter = rudderAngle > 0 ? -1 : 1;
-        var turnInner = -turnOuter;
-
-        // Drop interval: denser during turns for thick foam trail
-        var dropInterval = isTurning
-            ? WAKE_TRAIL_INTERVAL * (1 - turnIntensity * 0.5)
-            : WAKE_TRAIL_INTERVAL;
-
-        if (wakeTrailTimer >= dropInterval) {
-            wakeTrailTimer = 0;
-
-            var fwdX = Math.cos(headingRad);
-            var fwdZ = -Math.sin(headingRad);
-            var sideX = Math.sin(headingRad);
-            var sideZ = Math.cos(headingRad);
-            var baseSpread = 1.5;
-            var turnSpread = isTurning ? turnIntensity * 3.0 : 0;
-
-            // — Central stern foam strip (multiple particles across width) —
-            var stripCount = 3 + (isTurning ? Math.floor(turnIntensity * 4) : 0);
-            for (var sc = 0; sc < stripCount; sc++) {
-                var stripT = (sc / (stripCount - 1)) * 2 - 1; // -1..+1
-                var sternDist = 7 + Math.random() * 2;
-                var lateralSpread = baseSpread * 0.8;
-                var px = shipX - fwdX * sternDist + sideX * stripT * lateralSpread + (Math.random() - 0.5) * 0.6;
-                var pz = shipZ - fwdZ * sternDist + sideZ * stripT * lateralSpread + (Math.random() - 0.5) * 0.6;
-                wakeTrailData.push({
-                    x: px, z: pz, age: 0,
-                    // Each particle gets random size for organic variety
-                    sz: 0.6 + Math.random() * 0.8,
-                    // Slight drift velocity — foam disperses outward
-                    vx: sideX * stripT * 0.15 + (Math.random() - 0.5) * 0.1,
-                    vz: sideZ * stripT * 0.15 + (Math.random() - 0.5) * 0.1,
-                    bright: 0
-                });
-            }
-
-            // — V-wake arms: two lines spreading from stern —
-            for (var side = -1; side <= 1; side += 2) {
-                var isOuter = (side === turnOuter);
-                var spread = baseSpread + (isOuter ? turnSpread * 0.7 : turnSpread * 0.4);
-                for (var vi = 0; vi < 2; vi++) {
-                    var vDist = 8 + vi * 2 + Math.random() * 1.5;
-                    var vSpread = spread * (0.8 + Math.random() * 0.4);
-                    var vx = shipX - fwdX * vDist + sideX * side * vSpread + (Math.random() - 0.5) * 0.5;
-                    var vz = shipZ - fwdZ * vDist + sideZ * side * vSpread + (Math.random() - 0.5) * 0.5;
-                    wakeTrailData.push({
-                        x: vx, z: vz, age: 0,
-                        sz: 0.5 + Math.random() * 1.0,
-                        vx: sideX * side * (0.2 + Math.random() * 0.15),
-                        vz: sideZ * side * (0.2 + Math.random() * 0.15),
-                        bright: isTurning ? 1 : 0
-                    });
-                }
-            }
-
-            // — Extra turn foam: dense spray on outer + inner hull —
-            if (isTurning && turnIntensity > 0.2) {
-                var extraCount = Math.floor(turnIntensity * 6);
-                for (var e = 0; e < extraCount; e++) {
-                    var eSide = (e % 2 === 0) ? turnOuter : turnInner;
-                    var eDist = 2 + Math.random() * 7;
-                    var eSpread = baseSpread + turnSpread * (0.3 + Math.random() * 0.7);
-                    var ex = shipX - fwdX * eDist + sideX * eSide * eSpread + (Math.random() - 0.5) * 1.2;
-                    var ez = shipZ - fwdZ * eDist + sideZ * eSide * eSpread + (Math.random() - 0.5) * 1.2;
-                    wakeTrailData.push({
-                        x: ex, z: ez, age: 0,
-                        sz: 0.4 + Math.random() * 1.2,
-                        vx: sideX * eSide * (0.3 + Math.random() * 0.3),
-                        vz: sideZ * eSide * (0.3 + Math.random() * 0.3),
-                        bright: 1
-                    });
-                }
-            }
-
-            while (wakeTrailData.length > WAKE_TRAIL_MAX) {
-                wakeTrailData.shift();
-            }
-        }
-
-        // Update geometry — age particles, apply drift, fade
-        var pos = wakeTrail.geometry.attributes.position;
-        var alp = wakeTrail.geometry.attributes.alpha;
-
-        for (var i = 0; i < WAKE_TRAIL_MAX; i++) {
-            if (i < wakeTrailData.length) {
-                var p = wakeTrailData[i];
-                p.age += dt;
-
-                // Foam drifts outward + slows down over time
-                var driftDecay = Math.max(0, 1 - p.age * 0.3);
-                p.x += p.vx * dt * driftDecay;
-                p.z += p.vz * dt * driftDecay;
-
-                pos.array[i * 3] = p.x;
-                pos.array[i * 3 + 1] = 0.08;
-                pos.array[i * 3 + 2] = p.z;
-
-                // Alpha: quick appear, slow fade, cubic falloff
-                var life = Math.min(p.age / WAKE_TRAIL_LIFETIME, 1);
-                var fadeIn = Math.min(p.age * 8, 1);
-                var fadeOut = (1 - life);
-                var baseAlpha = fadeIn * fadeOut * fadeOut * 0.55;
-                alp.array[i] = p.bright ? baseAlpha * (1 + turnIntensity * 0.6) : baseAlpha;
-            } else {
-                pos.array[i * 3 + 1] = -10;
-                alp.array[i] = 0;
-            }
-        }
-
-        pos.needsUpdate = true;
-        alp.needsUpdate = true;
-        wakeTrail.geometry.setDrawRange(0, wakeTrailData.length);
-
-        while (wakeTrailData.length > 0 && wakeTrailData[0].age > WAKE_TRAIL_LIFETIME) {
-            wakeTrailData.shift();
-        }
-    }
 
     // ── Sea markers — floating foam/debris patches that stream past the ship ──
     var seaMarkers = [];
@@ -2380,10 +2158,6 @@ var RollViewer = (function () {
         _refreshWeatherDisplay();
     }
 
-    function toggleTurnScenario() {
-        setTurnScenario(!turnScenarioActive);
-    }
-
     // Returns { headingDelta, rollMultiplier, rudderAngle, phaseName }
     function computeTurnState(dt) {
         if (!turnScenarioActive) return { headingDelta: 0, rollMultiplier: 1, rudderAngle: 0, phaseName: '직진' };
@@ -2474,128 +2248,6 @@ var RollViewer = (function () {
             rudderAngle: rudder * dir,
             phaseName: phaseName
         };
-    }
-
-    // ── Turn splash particles — bow wave and side spray during turns ──
-    var turnSplashPoints = null;
-    var turnSplashData = [];
-    var TURN_SPLASH_COUNT = 120;
-
-    function buildTurnSplash() {
-        var THREE = window.THREE;
-        var geo = new THREE.BufferGeometry();
-        var positions = new Float32Array(TURN_SPLASH_COUNT * 3);
-        var alphas = new Float32Array(TURN_SPLASH_COUNT);
-        var sizes = new Float32Array(TURN_SPLASH_COUNT);
-        turnSplashData = [];
-        for (var i = 0; i < TURN_SPLASH_COUNT; i++) {
-            positions[i * 3] = 0;
-            positions[i * 3 + 1] = -10; // hidden below water
-            positions[i * 3 + 2] = 0;
-            alphas[i] = 0;
-            sizes[i] = 1;
-            turnSplashData.push({ x: 0, y: -10, z: 0, vx: 0, vy: 0, vz: 0, life: 999, maxLife: 1, active: false });
-        }
-        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geo.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
-        geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-
-        var mat = new THREE.PointsMaterial({
-            color: 0xddeeff,
-            size: 1.2,
-            transparent: true,
-            opacity: 0.6,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            sizeAttenuation: true
-        });
-        turnSplashPoints = new THREE.Points(geo, mat);
-        scene.add(turnSplashPoints);
-    }
-
-    function animateTurnSplash(dt, shipX, shipZ, headingRad, rudderAngle, isturning) {
-        if (!turnSplashPoints) return;
-        var pos = turnSplashPoints.geometry.attributes.position;
-        var alp = turnSplashPoints.geometry.attributes.alpha;
-        var siz = turnSplashPoints.geometry.attributes.size;
-
-        var intensity = Math.min(Math.abs(rudderAngle) / 25, 1);
-        var spawnRate = isturning ? 8 + intensity * 20 : 0;
-        var spawnAccum = spawnRate * dt;
-
-        // Ship directions
-        var fwdX = Math.cos(headingRad);
-        var fwdZ = -Math.sin(headingRad);
-        var sideX = -fwdZ; // perpendicular
-        var sideZ = fwdX;
-        var turnSide = rudderAngle > 0 ? 1 : -1; // outer side of turn
-
-        // Spawn new particles
-        for (var si = 0; si < TURN_SPLASH_COUNT && spawnAccum > 0; si++) {
-            var sd = turnSplashData[si];
-            if (sd.active) continue;
-            spawnAccum -= 1;
-
-            var isBow = Math.random() < 0.4;
-            if (isBow) {
-                // Bow splash — forward of ship
-                var bx = shipX + fwdX * (8 + Math.random() * 3) + sideX * (Math.random() - 0.5) * 4;
-                var bz = shipZ + fwdZ * (8 + Math.random() * 3) + sideZ * (Math.random() - 0.5) * 4;
-                sd.x = bx; sd.y = 0.2; sd.z = bz;
-                sd.vx = fwdX * (2 + Math.random() * 3) + (Math.random() - 0.5) * 1.5;
-                sd.vy = 1.5 + Math.random() * 3;
-                sd.vz = fwdZ * (2 + Math.random() * 3) + (Math.random() - 0.5) * 1.5;
-            } else {
-                // Side splash — outer side of turn, along hull
-                var along = -2 + Math.random() * 10;
-                var sx = shipX + fwdX * along + sideX * turnSide * (3 + Math.random() * 2);
-                var sz = shipZ + fwdZ * along + sideZ * turnSide * (3 + Math.random() * 2);
-                sd.x = sx; sd.y = 0.1; sd.z = sz;
-                sd.vx = sideX * turnSide * (1.5 + Math.random() * 3 * intensity);
-                sd.vy = 0.8 + Math.random() * 2.5 * intensity;
-                sd.vz = sideZ * turnSide * (1.5 + Math.random() * 3 * intensity);
-            }
-            sd.life = 0;
-            sd.maxLife = 0.8 + Math.random() * 1.2;
-            sd.active = true;
-        }
-
-        // Update particles
-        for (var i = 0; i < TURN_SPLASH_COUNT; i++) {
-            var p = turnSplashData[i];
-            if (!p.active) {
-                alp.setX(i, 0);
-                continue;
-            }
-            p.life += dt;
-            if (p.life >= p.maxLife) {
-                p.active = false;
-                pos.setXYZ(i, 0, -10, 0);
-                alp.setX(i, 0);
-                continue;
-            }
-            // Gravity
-            p.vy -= 6.0 * dt;
-            p.x += p.vx * dt;
-            p.y += p.vy * dt;
-            p.z += p.vz * dt;
-            // Water surface collision
-            if (p.y < 0) {
-                p.y = 0;
-                p.vy *= -0.2;
-                p.vx *= 0.7;
-                p.vz *= 0.7;
-            }
-            pos.setXYZ(i, p.x, p.y, p.z);
-            var t = p.life / p.maxLife;
-            alp.setX(i, (1 - t) * 0.7 * intensity);
-            siz.setX(i, 0.5 + t * 1.5);
-        }
-
-        pos.needsUpdate = true;
-        alp.needsUpdate = true;
-        siz.needsUpdate = true;
-        turnSplashPoints.material.opacity = 0.4 + intensity * 0.4;
     }
 
     // (bow wave removed — looked too artificial)
@@ -3000,68 +2652,6 @@ var RollViewer = (function () {
         return mats;
     }
 
-    // ── Accommodation-block facade — rows of real windows (dark glass) with an
-    // emissiveMap so some cabins light up warmly at dusk/night (auto-scaled by
-    // _applyMoodToShipEmissive → dark glass by day). Replaces the toy glowing bars. ──
-    var _facadeCache = {};
-    function createFacadeTexture(baseColor) {
-        if (_facadeCache[baseColor]) return _facadeCache[baseColor];
-        var THREE = window.THREE;
-        var W = 128, H = 128;
-        var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-        var ctx = cv.getContext('2d');
-        var ecv = document.createElement('canvas'); ecv.width = W; ecv.height = H;
-        var ectx = ecv.getContext('2d');
-
-        ctx.fillStyle = baseColor; ctx.fillRect(0, 0, W, H);
-        ectx.fillStyle = '#000000'; ectx.fillRect(0, 0, W, H);
-
-        // Faint vertical panel joints on the wall
-        ctx.globalAlpha = 0.05; ctx.fillStyle = '#000000';
-        for (var vx = 0; vx < W; vx += 16) ctx.fillRect(vx, 0, 1, H);
-        ctx.globalAlpha = 1;
-
-        // Window tiers (decks). Fractions of height.
-        var tiers = [{ y: 0.14, h: 0.15 }, { y: 0.42, h: 0.15 }, { y: 0.70, h: 0.13 }];
-        var cols = 6, glass = '#16222e', margin = W * 0.08, usable = W - margin * 2, gap = usable / cols, winW = gap * 0.62;
-        for (var ti = 0; ti < tiers.length; ti++) {
-            var ty = tiers[ti].y * H, th = tiers[ti].h * H;
-            for (var c = 0; c < cols; c++) {
-                var wx = margin + c * gap + (gap - winW) / 2;
-                ctx.fillStyle = glass; ctx.fillRect(wx, ty, winW, th);
-                ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fillRect(wx, ty, winW, th * 0.32);   // sheen
-                ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1; ctx.strokeRect(wx + 0.5, ty + 0.5, winW - 1, th - 1);
-                if (((c * 7 + ti * 13) % 5) < 2) { ectx.fillStyle = '#ffd6a0'; ectx.fillRect(wx, ty, winW, th); }   // ~40% lit
-            }
-            ctx.globalAlpha = 0.16; ctx.fillStyle = '#000000'; ctx.fillRect(0, ty + th, W, 1.5); ctx.globalAlpha = 1;   // sill shadow
-        }
-        var out = { map: new THREE.CanvasTexture(cv), emis: new THREE.CanvasTexture(ecv) };
-        _facadeCache[baseColor] = out;
-        return out;
-    }
-
-    // Per-face materials for a boxy deckhouse: windowed facade on the 4 walls,
-    // plain darker roof/floor. BoxGeometry face order: +x, -x, +y, -y, +z, -z.
-    var _deckhouseMatCache = {};
-    function deckhouseMat(baseColor) {
-        if (_deckhouseMatCache[baseColor]) return _deckhouseMatCache[baseColor];
-        var THREE = window.THREE;
-        var f = createFacadeTexture(baseColor);
-        var wall = new THREE.MeshStandardMaterial({
-            map: f.map, emissive: new THREE.Color(0xffffff), emissiveMap: f.emis,
-            emissiveIntensity: 1.0, roughness: 0.6, metalness: 0.12
-        });
-        var roof = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(baseColor).multiplyScalar(0.82), roughness: 0.78, metalness: 0.1
-        });
-        if (shipEnvMap) {
-            wall.envMap = shipEnvMap; wall.envMapIntensity = 0.25;
-            roof.envMap = shipEnvMap; roof.envMapIntensity = 0.2;
-        }
-        var mats = [wall, wall, roof, roof, wall, wall];
-        _deckhouseMatCache[baseColor] = mats;
-        return mats;
-    }
 
     // ── Hull identity decals — painted ship name (bow quarters + stern) and
     // draft marks, rendered as thin planes floating just off the hull plating ──
@@ -4840,8 +4430,6 @@ var RollViewer = (function () {
             // animateNavBuoys(elapsed);  // 부표 비활성화(위 buildNavBuoys 주석 참조)
 
             animateWater(elapsed);
-            // (old static wake removed — wakeTrail handles this now)
-            // (wakeTrail removed — water reflections provide sufficient visual cue)
 
             // Weather-dynamic fog & clouds (수중일 땐 수중 fog를 유지하므로 건너뜀)
             var wxDyn = getWeatherModifiers();
@@ -5373,62 +4961,7 @@ var RollViewer = (function () {
         var a = deg * Math.PI / 180;
         return [(_CLINO.cx + r * Math.sin(a)), (_CLINO.cy - r * Math.cos(a))];
     }
-    function _arc(d0, d1, r) {
-        var s = _cpt(d0, r), e = _cpt(d1, r);
-        return 'M ' + s[0].toFixed(2) + ' ' + s[1].toFixed(2) +
-            ' A ' + r + ' ' + r + ' 0 0 1 ' + e[0].toFixed(2) + ' ' + e[1].toFixed(2);
-    }
 
-    // 정적 계기면(등급 부채꼴 + 눈금 림 + 눈금선 + 라벨) + 동적 바늘 2 + 오차 부채꼴
-    function _clinoSvg() {
-        var C = _CLINO, R = C.R, band = R - 5;
-        // Etched severity sectors — calm recedes, danger is the only loud step.
-        var sectors =
-            '<path class="rv-clino-band rv-clino-band-safe" d="' + _arc(-C.caution, C.caution, band) + '"/>' +
-            '<path class="rv-clino-band rv-clino-band-caution" d="' + _arc(-C.danger, -C.caution, band) + '"/>' +
-            '<path class="rv-clino-band rv-clino-band-caution" d="' + _arc(C.caution, C.danger, band) + '"/>' +
-            '<path class="rv-clino-band rv-clino-band-danger" d="' + _arc(-C.range, -C.danger, band) + '"/>' +
-            '<path class="rv-clino-band rv-clino-band-danger" d="' + _arc(C.danger, C.range, band) + '"/>';
-        var rim = '<path class="rv-clino-rim" d="' + _arc(-C.range, C.range, R) + '"/>';
-        var ticks = '', labels = '';
-        for (var d = -C.range; d <= C.range; d += 5) {
-            var major = (d % 10 === 0);
-            var a = _cpt(d, R - (major ? 9 : 5)), b = _cpt(d, R + 1);
-            ticks += '<line class="rv-clino-tick' + (major ? ' rv-clino-tick-major' : '') + '" x1="' +
-                a[0].toFixed(2) + '" y1="' + a[1].toFixed(2) + '" x2="' + b[0].toFixed(2) + '" y2="' + b[1].toFixed(2) + '"/>';
-            if (major && Math.abs(d) <= 30) {
-                var t = _cpt(d, R - 21);
-                labels += '<text class="rv-clino-num" x="' + t[0].toFixed(2) + '" y="' + (t[1] + 3).toFixed(2) + '">' + Math.abs(d) + '</text>';
-            }
-        }
-        // Danger-threshold ticks (±15°) emphasised — the heel angle that matters.
-        var thr = '';
-        [-C.danger, C.danger].forEach(function (dd) {
-            var a = _cpt(dd, R - 11), b = _cpt(dd, R + 3);
-            thr += '<line class="rv-clino-thr" x1="' + a[0].toFixed(2) + '" y1="' + a[1].toFixed(2) +
-                '" x2="' + b[0].toFixed(2) + '" y2="' + b[1].toFixed(2) + '"/>';
-        });
-        var plumbTop = _cpt(0, R - 2);
-        var plumb = '<line class="rv-clino-plumb" x1="' + C.cx + '" y1="' + C.cy + '" x2="' + C.cx + '" y2="' + plumbTop[1].toFixed(2) + '"/>';
-        // Needles are drawn pointing up at 0° and rotated about the pivot each frame.
-        var realNeedle =
-            '<g class="rv-clino-real" id="rv-clino-real" transform="rotate(0 ' + C.cx + ' ' + C.cy + ')">' +
-                '<line x1="' + C.cx + '" y1="' + C.cy + '" x2="' + C.cx + '" y2="' + (C.cy - C.Lr) + '"/>' +
-                '<circle cx="' + C.cx + '" cy="' + (C.cy - C.Lr) + '" r="4.5"/>' +
-            '</g>';
-        var predNeedle =
-            '<g class="rv-clino-pred" id="rv-clino-pred" transform="rotate(0 ' + C.cx + ' ' + C.cy + ')">' +
-                '<line x1="' + C.cx + '" y1="' + C.cy + '" x2="' + C.cx + '" y2="' + (C.cy - C.Lp) + '"/>' +
-                '<polygon points="' + C.cx + ',' + (C.cy - C.Lp - 7) + ' ' + (C.cx - 5) + ',' + (C.cy - C.Lp) +
-                    ' ' + C.cx + ',' + (C.cy - C.Lp + 7) + ' ' + (C.cx + 5) + ',' + (C.cy - C.Lp) + '"/>' +
-            '</g>';
-        return '<svg class="rv-clino" viewBox="0 0 320 178" preserveAspectRatio="xMidYMid meet">' +
-            sectors + rim + ticks + thr + labels + plumb +
-            '<polygon class="rv-clino-wedge" id="rv-clino-wedge" points="' + C.cx + ',' + C.cy + '"/>' +
-            predNeedle + realNeedle +
-            '<circle class="rv-clino-hub" cx="' + C.cx + '" cy="' + C.cy + '" r="6"/>' +
-            '</svg>';
-    }
 
     // 실측·예측 바늘을 동일 눈금 위에서 회전시키고, 두 바늘 사이를 오차 부채꼴로 채운다.
     function updateMetronomes(realDeg, predDeg) {
@@ -5467,21 +5000,6 @@ var RollViewer = (function () {
         if (barEl) { barEl.style.width = (Math.min(v / maxScale, 1) * 100).toFixed(0) + '%'; barEl.className = 'rv-pred-hud-bar-fill ' + lvl; }
     }
 
-    // 임의의 게이지 세트를 갱신. (gaugeId, fillId, valueId, absRoll)
-    function updateRollGaugeBy(gaugeId, fillId, valueId, absRoll) {
-        var gauge = document.getElementById(gaugeId);
-        var fill = document.getElementById(fillId);
-        var valueEl = document.getElementById(valueId);
-        if (!gauge || !fill || !valueEl) return;
-        fill.style.width = Math.min(absRoll / 30 * 100, 100) + '%';
-        valueEl.textContent = absRoll.toFixed(1) + '°';
-        var level;
-        if (absRoll < 5) level = 'safe';
-        else if (absRoll < 10) level = 'caution';
-        else if (absRoll < 15) level = 'warning';
-        else level = 'danger';
-        gauge.className = 'roll-gauge roll-gauge-' + level;
-    }
 
     // ── updateGauge(absRoll, signedRoll) ──
     function updateGauge(absRoll, signedRoll) {
@@ -5885,49 +5403,6 @@ var RollViewer = (function () {
         camera.updateProjectionMatrix();
     }
 
-    // ── 횡요 HUD 수평계(attitude ladder) ──
-    // 두꺼운 판 대신, 갑판 위 선폭(로컬 Z축)을 가로지르는 가느다란 발광 라인 + 눈금 +
-    // 가운데 ^자세 마커 + 끝단 핍으로 구성된 항공 HUD 스타일 인디케이터. 선박 롤을
-    // 그대로 물려받아 기운다. 실측=primary 파랑, 예측=하늘색. 두 사다리의 사이각이 오차.
-    function _addHeelPlane(group, hexColor, ghost) {
-        var THREE = window.THREE;
-        if (!group || !THREE) return null;
-        var beam = 17, half = beam / 2, deckY = 5.0, gap = 2.2;
-        var g = new THREE.Group();
-        g.userData._heelMast = true;   // 고스트 처리 제외 플래그
-        var mat = new THREE.LineBasicMaterial({
-            color: hexColor, transparent: true, opacity: ghost ? 0.85 : 1.0,
-            depthTest: false, depthWrite: false
-        });
-        var V = function (y, z) { return new THREE.Vector3(0, deckY + y, z); };
-        var P = [];
-        // 메인 바 — 가운데 갭을 둔 좌/우 두 날개
-        P.push(V(0, -half), V(0, -gap));
-        P.push(V(0, gap), V(0, half));
-        // 눈금 — 2.5 간격 아래 방향(끝단은 길게)
-        for (var z = -half; z <= half + 0.01; z += 2.5) {
-            if (Math.abs(z) < gap) continue;
-            var major = Math.abs(z) >= half - 0.01;
-            P.push(V(0, z), V(major ? -1.2 : -0.5, z));
-        }
-        // 가운데 자세 마커 — 위를 향한 ^ 셰브런 (롤 축 표시)
-        P.push(V(0, -1.0), V(0.95, 0));
-        P.push(V(0.95, 0), V(0, 1.0));
-        var seg = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(P), mat);
-        seg.userData._heelMast = true; seg.renderOrder = 999;
-        g.add(seg);
-        // 끝단 발광 핍 — 디지털 터미네이터
-        [-half, half].forEach(function (z) {
-            var pip = new THREE.Mesh(
-                new THREE.SphereGeometry(ghost ? 0.22 : 0.26, 10, 10),
-                new THREE.MeshBasicMaterial({ color: hexColor, transparent: true,
-                    opacity: ghost ? 0.9 : 1.0, depthTest: false, depthWrite: false }));
-            pip.position.set(0, deckY, z); pip.userData._heelMast = true; pip.renderOrder = 999;
-            g.add(pip);
-        });
-        group.add(g);
-        return g;
-    }
 
     // ── 수평(0°) 기준선 ──
     // 선박 위치만 따라가고 롤은 따라가지 않는 '항상 수평'인 기준선. 이 선 대비 두 사다리가
@@ -6125,9 +5600,6 @@ var RollViewer = (function () {
         _savedFog = null;
         wakePoints = null;
         wakeParticles = [];
-        wakeTrail = null;
-        wakeTrailData = [];
-        wakeTrailTimer = 0;
         sunMesh = null;
         skyGroup = null;
         skyMesh = null;

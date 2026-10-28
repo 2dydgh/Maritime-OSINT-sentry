@@ -35,7 +35,6 @@ from .services import (
     ais_fallback,
     ais_stream,
     collision_analyzer,
-    data_fetcher,
     history_writer,
     land_filter,
     llm_agent,
@@ -138,9 +137,6 @@ async def lifespan(app: FastAPI):
     ais_stream.start_ais_stream()
     _readiness["ais"] = True
 
-    # Optional: Start period data fetcher if needed for REST fallbacks
-    data_fetcher.start_data_fetcher()
-
     # Best-effort readiness probes for optional services. These never block the
     # real-time pipeline — a failure just leaves the flag False (graceful degrade).
     async def _probe_redis():
@@ -237,7 +233,6 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down OSINT 4D Backend...")
     ais_stream.stop_ais_stream()
     aircraft_tracker.stop_aircraft_tracker()
-    data_fetcher.stop_data_fetcher()
 
     async def _cancel(task, name):
         """Cancel a background task and bound the wait so shutdown can't hang."""
