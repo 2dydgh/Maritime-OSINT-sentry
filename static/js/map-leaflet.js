@@ -156,10 +156,10 @@ function _useSatelliteBasemap() {
         { maxZoom: 19, noWrap: true, bounds: WORLD_TILE_BOUNDS }
     ).addTo(leafletMap);
 
-    // Dark labels overlay (CARTO)
+    // Dark labels overlay (Esri) — CARTO 라벨은 키 없이 "API KEY REQUIRED" 타일을 준다.
     _satLabelLayer = L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
-        { maxZoom: 19, subdomains: 'abcd', pane: 'overlayPane', noWrap: true, bounds: WORLD_TILE_BOUNDS }
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+        { maxZoom: 19, pane: 'overlayPane', noWrap: true, bounds: WORLD_TILE_BOUNDS }
     ).addTo(leafletMap);
 }
 

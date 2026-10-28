@@ -81,9 +81,7 @@ function switchCollisionTab(tab) {
     document.querySelectorAll('.collision-tab-btn').forEach(function(b) {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
-    document.getElementById('collisionSection').hidden = tab === 'proposals';
-    document.getElementById('proposalSection').hidden = tab !== 'proposals';
-    if (tab !== 'proposals') renderCollisionList();
+    renderCollisionList();
 }
 window.switchCollisionTab = switchCollisionTab;
 
@@ -92,8 +90,6 @@ var tabDist = document.getElementById('collisionTabDistance');
 var tabMl = document.getElementById('collisionTabMl');
 if (tabDist) tabDist.addEventListener('click', function() { switchCollisionTab('distance'); });
 if (tabMl) tabMl.addEventListener('click', function() { switchCollisionTab('ml'); });
-var tabProposals = document.getElementById('collisionTabProposals');
-if (tabProposals) tabProposals.addEventListener('click', function() { switchCollisionTab('proposals'); });
 
 function collisionSeverityBadge(severity) {
     // Dot carries the colour; text stays calm light grey so the row doesn't read
@@ -137,7 +133,7 @@ function _collisionCard(r, sevHex, sevLabel, loud, area) {
         </div>\
         <div class="cr-row2">\
             <span class="cr-ship-b" title="' + r.ship_b.name + '"><small>\u2192</small> ' + r.ship_b.name + '</span>\
-            <span class="cr-area">' + area + '</span><button class="cr-compare" data-scenario-compare>시나리오 비교</button>\
+            <span class="cr-area">' + area + '</span>\
         </div>';
 }
 
@@ -174,7 +170,6 @@ function _ensureCollisionDelegation() {
     list.addEventListener('click', function(e) {
         var card = e.target.closest('.collision-row');
         if (!card) return;
-        if (e.target.closest('[data-scenario-compare]')) { e.stopPropagation(); CollisionScenarios.open(card.dataset.mmsiA, card.dataset.mmsiB); return; }
         _handleCollisionCardClick(card);
     });
 }
@@ -561,29 +556,3 @@ function _updateHeaderCollisionStats() {
 EventBus.on('proximity:cleared', function() {
     clearCollisionPair();
 });
-
-// Authorized map action. Direct calls expose exceptions to the execution receipt.
-window.focusApprovedCollisionPair = function(mmsiA, mmsiB) {
-    var a = shipDataMap[mmsiA], b = shipDataMap[mmsiB];
-    if (!a || !b) throw new Error('선박 위치가 현재 화면에 없습니다.');
-    if (currentMapMode === '3d' && (!viewer || viewer.isDestroyed())) throw new Error('3D 지도가 준비되지 않았습니다.');
-    if (currentMapMode === '2d' && !leafletMap) throw new Error('2D 지도가 준비되지 않았습니다.');
-    selectedProximityMmsi = null;
-    collisionTargetMmsi = mmsiB;
-    renderProximityLines(mmsiA, [{mmsi:mmsiB,lat:b.lat,lng:b.lng,
-        distance:haversineNm(a.lat,a.lng,b.lat,b.lng),mlRiskLevel:3,_selData:a}]);
-    if (currentMapMode === '2d') leafletMap.setView([(a.lat+b.lat)/2,(a.lng+b.lng)/2],12);
-    else viewer.camera.flyTo({destination:Cesium.Cartesian3.fromDegrees((a.lng+b.lng)/2,(a.lat+b.lat)/2,15000),duration:1});
-    highlightShip(mmsiA);
-    startCollisionTracking(mmsiA,mmsiB);
-    _collisionTrackingActive = true;
-    return window.isApprovedPairTracking(mmsiA,mmsiB);
-};
-window.isApprovedPairTracking = function(a,b) {
-    return !!_collisionTrackingTimer && _collisionPairMmsiA == a && _collisionPairMmsiB == b && !!shipDataMap[a] && !!shipDataMap[b];
-};
-
-window.stopApprovedPairTracking = function() {
-    stopCollisionTracking();
-    _collisionTrackingActive = false;
-};
